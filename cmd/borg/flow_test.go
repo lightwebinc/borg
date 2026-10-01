@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/lightwebinc/borg/internal/borgrec"
 	"github.com/lightwebinc/borg/internal/limits"
+	"github.com/lightwebinc/borg/internal/state"
 	"github.com/lightwebinc/borg/internal/testchain"
 )
 
@@ -847,19 +849,45 @@ func TestOrgDueListsAndApplies(t *testing.T) {
 	h := newHarness(t)
 	o := h.orgWithGroup()
 	dave := h.identity("dave", false)
-	h.must("org", "org", "add", dave, "-group", o.group, "-expiry", "3s")
-	r := h.must("org", "org", "due", "-within", "1h")
-	if !strings.Contains(r.stdout, "soon    group "+o.group+" engineering: "+dave+": its grant expires ") || strings.Contains(r.stdout, "due     ") {
-		t.Fatalf("org due before the expiry:\n%s\n%s", r.stdout, r.stderr)
+	h.must("org", "org", "add", dave, "-group", o.group, "-expiry", "20s")
+	// The listing, at chosen times: before the expiry inside and outside
+	// the window, and after it.
+	st, err := state.Load(filepath.Join(h.dir, "org"), o.key)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if r := h.must("org", "org", "due", "-within", "1s"); strings.Contains(r.stdout, dave) {
-		t.Fatalf("a grant outside the window is listed:\n%s", r.stdout)
+	exp, err := borgrec.ParseExpiry(st.Org.Grants[len(st.Org.Grants)-1].Expiry)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if r := h.must("org", "doctor"); !strings.Contains(r.stdout, "1 member(s) hold a grant that expires within") {
+	before := exp.Add(-10 * time.Second)
+	for _, c := range []struct {
+		now    time.Time
+		within time.Duration
+		n      int
+		due    bool
+	}{{before, time.Hour, 1, false}, {before, time.Second, 0, false}, {exp, 0, 1, true}, {exp.Add(time.Hour), time.Hour, 1, true}} {
+		items, err := dueOf(st.Org, st.Identity, c.now, c.within)
+		if err != nil || len(items) != c.n || (c.n == 1 && (items[0].member != dave || items[0].due != c.due || items[0].group.ID != o.group)) {
+			t.Fatalf("dueOf at %s within %s: %+v, %v", c.now, c.within, items, err)
+		}
+	}
+	var out bytes.Buffer
+	items, _ := dueOf(st.Org, st.Identity, before, time.Hour)
+	if n := printDue(&out, items, before); n != 0 || !strings.Contains(out.String(), "soon    group "+o.group+" engineering: "+dave+": its grant expires "+exp.UTC().Format(borgrec.ExpiryLayout)+", in 10s") {
+		t.Fatalf("the listing before the expiry: %d\n%s", n, out.String())
+	}
+	if r := h.run("org", "", "doctor"); !strings.Contains(r.stdout, "1 member(s) hold a grant that expires within") && !strings.Contains(r.stdout, "ROTATION DEBT: "+dave) {
 		t.Fatalf("doctor:\n%s", r.stdout)
 	}
-	time.Sleep(3100 * time.Millisecond)
-	r = h.run("org", "", "org", "due")
+	// The command, once the grant has expired.
+	var r result
+	for deadline := time.Now().Add(90 * time.Second); ; {
+		if r = h.run("org", "", "org", "due"); r.code == exitIncomplete || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 	h.want(r, exitIncomplete, "1 removal(s) due")
 	if !strings.Contains(r.stdout, "due     group "+o.group+" engineering: "+dave+": its grant expired ") {
 		t.Fatalf("org due after the expiry:\n%s\n%s", r.stdout, r.stderr)

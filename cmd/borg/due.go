@@ -91,7 +91,7 @@ func printDue(out io.Writer, items []dueItem, now time.Time) int {
 			continue
 		}
 		fmt.Fprintf(out, "soon    group %s %s: %s: its grant expires %s, in %s\n", it.group.ID, termsafe.Text(it.group.Name), who,
-			it.expiry.UTC().Format(borgrec.ExpiryLayout), it.expiry.Sub(now).Round(time.Minute))
+			it.expiry.UTC().Format(borgrec.ExpiryLayout), roundLeft(it.expiry.Sub(now)))
 	}
 	return n
 }
@@ -166,6 +166,15 @@ func (g *global) orgDue(ctx context.Context, within time.Duration, apply bool) e
 	}
 	fmt.Fprintf(g.stdout, "applied %d group(s) with removals due\n", len(order))
 	return nil
+}
+
+// roundLeft words a time left: to the second under an hour, else to the
+// minute.
+func roundLeft(d time.Duration) time.Duration {
+	if d < time.Hour {
+		return d.Round(time.Second)
+	}
+	return d.Round(time.Minute)
 }
 
 func countDue(items []dueItem) int {
