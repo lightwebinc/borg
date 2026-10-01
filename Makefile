@@ -118,9 +118,11 @@ e2e: ts-build
 # and the header source: an organisation, three members and a group with
 # wraps on a stand-in plane, every member opening the key, a removal and a
 # rotation the removed member cannot open, a revocation by sweep, both
-# hosts agreeing, a paid history question and the payee settling it, a
-# host restarted and restored, then unicast with a host down and the
-# persisted token published by the next command. Not part of verify: it
+# hosts agreeing, a paid history question and the payee settling it, one
+# coin paying three priced questions inside one block, a host restarted and
+# restored, unicast with a host down and the persisted token published by
+# the next command, then a second home of the organisation rebuilt from
+# the hosts (org signer, init -from, org sync), which rotates the group. Not part of verify: it
 # needs Docker (for MySQL) and a reference host directory holding its
 # compiled dist/index.js and its node_modules.
 #

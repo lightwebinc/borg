@@ -61,7 +61,7 @@ func dueOf(o *state.Org, orgHex string, now time.Time, within time.Duration) ([]
 			g, exp := latestGrant(o, h)
 			switch {
 			case g == nil:
-				it.due, it.why = true, "its grant is revoked, or it holds none in the roll"
+				it.due, it.why = true, "it holds no current grant (revoked, swept, or never in the roll)"
 			case !now.Before(exp):
 				it.due, it.why, it.expiry = true, "its grant expired "+exp.UTC().Format(borgrec.ExpiryLayout), exp
 			case exp.Sub(now) <= within:

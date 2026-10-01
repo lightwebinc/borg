@@ -74,7 +74,7 @@ func TestRemovalRotatesAndTheRemovedCannotOpen(t *testing.T) {
 	}
 }
 
-// Re-adding a removed key begins a new epoch (Q7), so the returning key
+// Re-adding a removed key begins a new epoch, so the returning key
 // reads from that epoch on and never the one written while it was away.
 func TestRejoinRotates(t *testing.T) {
 	t.Parallel()
@@ -102,7 +102,7 @@ func TestRejoinRotates(t *testing.T) {
 	}
 }
 
-// A member's key change removes the old key, so the epoch rotates (Q6).
+// A member's key change removes the old key, so the epoch rotates.
 func TestKeyChangeRotates(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

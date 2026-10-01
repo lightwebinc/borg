@@ -5,7 +5,8 @@
 # unicast mode with three grants; a group whose epoch key every member
 # opens; a removal that rotates the epoch, which the removed member cannot
 # open; the roll read and compared at both hosts; a grant revoked by sweep;
-# the priced history question paid, and the payee settling it.
+# the priced history question paid, and the payee settling it; the removal
+# the revoked member is owed, made; a fill that finds the two hosts agree.
 #
 #   scripts/quickstart-check.sh
 #
@@ -107,6 +108,15 @@ as bob history -chain "$GROUP" | tee history.txt
 grep -q '^paid 5 sat to ' history.txt && grep -q '^seq 1 ' history.txt || fail "history"
 as payee payee settle /var/lib/borg-a/payments.jsonl | tee settle.txt
 grep -q '^1 payment(s) settled, 5 sat' settle.txt || fail "payee settle"
+
+step "9. the removal owed, and the hosts agree"
+rc=0; as org org due >due.txt 2>&1 || rc=$?
+cat due.txt
+[ "$rc" = 3 ] && grep -q "^due     group $GROUP engineering: $CAROL" due.txt || fail "org due did not list carol, or exited $rc"
+as org org due -apply | tee apply.txt
+grep -q "^removed $CAROL: rotation debt" apply.txt && grep -q '^applied 1 group(s)' apply.txt || fail "org due -apply did not remove carol"
+as alice fill | tee fill.txt
+grep -q '^filled  0 object(s) at 0 host(s)' fill.txt || fail "fill found the hosts differ"
 
 echo
 echo "quickstart-check: ok"

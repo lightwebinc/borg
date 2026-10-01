@@ -17,10 +17,11 @@ the payments the host recorded.
   init ─▶ fund ─▶ org create ─▶ grant carriers ──────────▶ facade (plane) or each host (unicast)
                   │             org token seq 0, mined ─▶ facade and every host named
                   │  └─ chain, grant, record trees, mined first ─▶ settlement leg ─▶ chain
-                  ├─ group create, org add/remove/rekey, epoch rotate
+                  ├─ group create, org add/remove/rekey/due, epoch rotate
                   │       group token, mined ─▶ facade and every host named
                   │       wrap carriers (the epoch key to each member) ─▶ facade or each host
-                  └─ grant revoke ─▶ org token (roll) and sweep, mined ─▶ facade and every host
+                  ├─ grant revoke ─▶ org token (roll) and sweep, mined ─▶ facade and every host
+                  └─ org sync ◀── every host: chains, roll, the wraps to the signer key
   member home
   ───────────
   open <group> ◀── ls_borg answers of every host, compared, checked against header_url
@@ -34,6 +35,9 @@ the payments the host recorded.
   ────────────
   payee settle payments.jsonl ─▶ each payment: checked, broadcast, pooled
 ```
+
+[user-guide.md](user-guide.md) explains the concepts and the day-to-day
+use; this page is the reference.
 
 ## Build
 
@@ -53,7 +57,7 @@ variables.
 
 | Command | Needs a home | Needs | What it does |
 | --- | --- | --- | --- |
-| `init` | creates it | nothing | identity key and empty coin pool; prints the identity and the fund address |
+| `init [-from FILE]` | creates it | nothing | identity key and empty coin pool; prints the identity and the fund address. `-from` makes the home around another home's `identity.json`: an organisation's second home |
 | `fund -txid TXID` | yes | `asset`, `header_url` | imports a mined payment to the fund address, once its proof checks |
 | `fund [-blocks N]` | yes | `rpc`, `asset` | mines coinbase to the fund address through `generatetoaddress`: a chain you run. Refused on network `main` |
 | `hall new <name>` | optional | nothing | draws the 10-letter random suffix; prints the hall, its topic, and the host's `BORG_HALLS` line |
@@ -63,12 +67,16 @@ variables.
 | `org add <key>... -group G` | yes, the organisation's | a publisher's | grants each key that holds no current grant, admits them in one organisation token, and adds them to the group in one group token |
 | `org remove <key>... [-group G]` | yes, the organisation's | a publisher's | with `-group`, a removal from the group (a new epoch); without, offboarding: every grant revoked by the roll and by sweep, and a removal from every group that holds the keys |
 | `org rekey <old> <new>` | yes, the organisation's | a publisher's | a member's key change: a grant to the new key, the old key's grants revoked (roll and sweep), and in every group a transition that removes the old key and adds the new one (a new epoch) |
+| `org signer` | yes, the organisation's | a publisher's | grants the organisation's signer key and adds it to every group that lacks it, so a second home can open each epoch's key |
+| `org sync [-retire-trees]` | yes, funded to go on | a publisher's, `hall` | rebuilds the home's record of the organisation from the hosts: both kinds of chain, the roll, and each epoch key from the wrap to the signer key. Exit 3 when the current epoch's key of a group is not open here |
+| `org due [-within DUR] [-apply]` | yes, the organisation's | nothing; with `-apply` a publisher's | lists the removals due (group members whose grant is no longer current; exit 3 when there is one) and the grants of group members expiring within `-within` (default 720h); `-apply` makes the removals due now |
 | `grant issue <key>` | yes, the organisation's | a publisher's | issues a grant (`-role`, `-scope`, `-admin`, `-expiry`) and admits it to the roll |
 | `grant revoke <key\|txid>...` | yes, the organisation's | a publisher's | revokes by the roll and by sweep, or one of them (`-by roll`, `-by sweep`) |
 | `group create <name>` | yes, the organisation's | a publisher's | a group of `-member` keys (each with a current grant), epoch 0 wrapped to each; `-rotate-on-join`, `-rotate-every` |
 | `group list` | optional | nothing, or a reader's settings with `-org` | the organisation's groups: the home's own record, or another organisation's from the hosts |
 | `group show <group>` | optional | a reader's settings | the group's chain folded from seq 0, and its members enumerated from the current epoch's wraps; stray and incomplete wraps reported |
 | `epoch rotate <group>` | yes, the organisation's | a publisher's | a new epoch with the same members (rotation debt removed first) |
+| `kill -confirm KILL [-yes]` | yes, the organisation's | with `-yes` a publisher's | the kill switch: one sweep per grant tree and record tree the home holds. Every grant revoked, every grant and wrap retracted. Without `-yes` it lists the sweeps and sends nothing |
 | `open <group>` | yes | a reader's settings | opens every epoch key this home's key can open, keeps each, and says which it cannot and why; `-write` adds the writer's evidence; `-show-key` prints the current key |
 | `roll` | optional | a reader's settings | the roll from every host, every grant verified and judged, the root of each host's answer compared with the latest token's |
 | `member <key>` | optional | a reader's settings | whether the key is a current member, and its grants; for this home's own key, each grant is kept whole in the home and opened through its keyring |
@@ -78,7 +86,7 @@ variables.
 | `terms [URL]` | no | `history_host` or URL | prints a host's terms document |
 | `payee key -out FILE` | yes | nothing | writes `BORG_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
 | `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `asset`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
-| `doctor` | optional | nothing | the home's state (trees, organisation, transition in flight, outbox, rotation debt, rotations due) and whether the node, headers, hosts and priced host answer; reads only |
+| `doctor` | optional | nothing | the home's state (trees, organisation, transition in flight, outbox, rotation debt, grants expiring, rotations due, an epoch key not held, unmined payments) and whether the node, headers, hosts and priced host answer; reads only |
 | `version` | no | nothing | prints the version |
 
 A reader's settings are `hosts`, `header_url`, `hall` and `org` (the
@@ -123,7 +131,7 @@ ignored.
 | `rpc` | none | the node's JSON-RPC URL (`fund`) |
 | `rpc_pass`, `rpc_user` | `bitcoin` | the node's basic auth, also for `settle = rpc:` |
 | `settle` | none | the settlement leg for what is mined (funding trees, tokens, sweeps, a payment a payee takes): `tcp:<host:port>`, `rpc:<url>` or `arcade:<url>` |
-| `signers` | `1` | how many instances of the organisation's tooling can sign transitions; above one, wraps wait one further block after their token (spec section 7.3) |
+| `signers` | `1` | how many homes of the organisation can sign transitions, 1 to 16. Above one: wraps wait one further block after their token, the signer key is kept a member of every group, and each command first catches up with what another home did (spec sections 7.3 and 7.4) |
 | `timeout` | `15s` | bounds each request; `1s` to `5m` |
 | `tree_count` | `32` | outputs of a new grant or record tree, 1 to 1000 |
 
@@ -168,9 +176,9 @@ history_host = https://terms.host-a.example.com
 | Code | Meaning |
 | --- | --- |
 | 0 | done, or everything asked verified (the hosts may still disagree about a chain a key was read from; that is reported) |
-| 1 | refused: a host answered something that does not verify (it is not used), a key this home cannot open (not a member of the current epoch), a grant that is not current, a transition another one beat to the chain, or a sweep or payment the network refuses |
+| 1 | refused: a host answered something that does not verify (it is not used), a key this home cannot open (not a member of the current epoch), a grant that is not current, a transition another one beat to the chain (`lost`), a catch-up that found a fork, or a sweep or payment the network refuses |
 | 2 | usage, configuration, local or transport error, a quorum not met, or a price over `-max-sats`; what was persisted is published by the next command |
-| 3 | incomplete: the hosts disagree, a host could not be asked, no host answered what was asked, a host answers an older state than this home verified, or no spend source could give positive evidence. It proves nothing either way |
+| 3 | incomplete: the hosts disagree, a host could not be asked, no host answered what was asked, a host answers an older state than this home verified, no spend source could give positive evidence, a removal is due (`org due`), or a catch-up could not reproduce the roll or open the current epoch's key. It proves nothing either way |
 
 ## A home
 
@@ -179,9 +187,10 @@ history_host = https://terms.host-a.example.com
 The state holds what must survive a crash: the three kinds of funding tree,
 the organisation's chain and grants and groups, every epoch key the
 organisation sampled, every object persisted and not yet confirmed
-published, the sweeps built, and, for a member, the epoch keys it opened,
-the grants to it it read (whole: the certificate, never a summary), and the
-latest token of each chain it verified. **The home holds secrets**: the
+published, the sweeps built, the payments made and not yet mined, and, for
+a member, the epoch keys it opened, the grants to it it read (whole: the
+certificate, never a summary), and the latest token of each chain it
+verified. **The home holds secrets**: the
 identity key and every epoch key. Back it up as one, and keep it at 0700.
 One command at a time uses a home; a second is refused (exit 2).
 
@@ -255,6 +264,78 @@ revocation outpoints (each grant-tree output its carrier spent), which
 every BRC-52 verifier sees as revoked and every host as retracted. One
 sweep per grant tree. A sweep is not erasure.
 
+**Removals due.** A grant that expires, or is revoked while its holder is
+still in a group, leaves a removal owed. `org due` lists them from the
+home's own record, with the grants of group members that expire within
+`-within`, and exits 3 when a removal is due now. `org due -apply` makes
+each: one transition per group that holds such a member, which removes
+them and begins a new epoch. Nothing is removed before its grant stops
+being current, so run it from a timer; a grant renewed in time (`grant
+issue` to the same key) is never due. `doctor` shows the same debt and
+counts the grants expiring within 30 days.
+
+## Several homes of one organisation
+
+An organisation is an identity key, and any home made around that key
+(`init -from <identity.json>`) can run it. What such a home lacks is at the
+hosts, and `org sync` reads it as a reader does (spec section 7.4):
+
+1. the organisation's chain and every group's, each token verified against
+   `header_url` and folded from seq 0. Tokens the home lacks are taken; a
+   token of the home's that the chain no longer holds (a reorganisation) is
+   dropped with what followed it; two mined tokens at one seq is a fork,
+   and nothing is merged (exit 1);
+2. the roll: every grant, from every host, until the root of the latest
+   token is reproduced. A roll no host answers whole is not taken in part
+   (exit 3), because a grant the home lacked would read as a member owed a
+   removal. An opaque grant's fields are opened through its keyring;
+3. each epoch key, from the wrap to the **signer key**, checked against the
+   epoch's commitment as a member checks it. The signer key is the BRC-42
+   child of the organisation's key under `[1, "borg organisation"]`, key id
+   `signer`, counterparty anyone: every home of the organisation derives
+   it, and anyone can tell from the organisation's key which member it is.
+   `org signer` grants it and adds it to every group; with `signers` above
+   one every group the home creates or changes includes it. An epoch it
+   was not a member of is printed as `missing`;
+4. the coins and the trees. A coin the node shows spent (another home held
+   it too) leaves the pool; the change of each token taken joins it. A
+   grant or record tree another home also spends is retired here, and
+   `-retire-trees` retires them all (for a home that was copied). The tree
+   of every grant and wrap the hosts answer is recorded, so this home can
+   sweep it.
+
+With `signers` above one a command does this by itself, before it builds
+anything, whenever the node shows one of the home's latest tokens spent or
+a host lists a group the home lacks, and after a transition of its own
+lost. A transition that loses (exit 1) released nothing: wraps follow
+their token by a block.
+
+Not recoverable from the hosts: the key of an epoch the signer key was not
+a member of; a grant issued and not yet admitted; another home's outbox,
+sweeps in flight and funding trees with outputs left. The epoch key of a
+transition that lost is discarded by the home that sampled it. Two homes
+must not spend one funding tree: of two carriers on one funding output a
+host answers one. A home made with `init -from` mints its own; a copied
+home shares them until `org sync -retire-trees`.
+
+## The kill switch
+
+`kill -confirm KILL` lists, and with `-yes` makes, one sweep per grant
+tree and per record tree the home holds, each spending every output of the
+tree, used or not (spec sections 9.4 and 9.5). Each is persisted, settled,
+waited for until it mines (one block a tree), and published after `delay`
+to the facade and to every host named. Once they mine, every grant those
+trees funded is revoked for every BRC-52 verifier, and every honest host
+retracts the grants and the wraps. The home's trees are then spent: a
+later grant mints a new one. A run that stops is finished by running it
+again.
+
+It does not end the chains: tokens are mined and stay, and readers go on
+reading them with every member lacking a current grant. It does not take
+back an epoch key a member opened, or a copy anyone kept. It reaches the
+carriers of another home only once this home knows their trees (`org
+sync`).
+
 ## Reading
 
 Every reading command asks every host in `hosts` and checks every answer
@@ -307,8 +388,8 @@ once the roll admits them, and tokens and sweeps always go to every host.
 ## The spend index
 
 A writer must key new content only under the epoch of the group's latest
-token, with positive evidence at most `freshness` old (spec section 6.5;
-ruling Q11). `open -write` gathers it from three places:
+token, with positive evidence at most `freshness` old (spec section 6.5).
+`open -write` gathers it from three places:
 
 1. **the home's own view.** The latest token this home verified for the
    group; a host set answering an older one is refused (above). When the
@@ -338,7 +419,18 @@ BRC-104 for every token of a chain (`-chain org` or a group id, `-after
 SEQ` for the next page). The host answers 402 with its price; the command
 pays it from the pool with a BRC-29 payment as output 0 (BRC-105, through
 the SDK's `AuthFetch`), unless the price is over `-max-sats` (default
-1000), and verifies every token answered. `terms` prints what a host
+1000), and verifies every token answered.
+
+The payment is this home's own transaction. The host records it and its
+payee broadcasts it when it settles; this home also hands it to `settle`
+once the host has accepted it, so it mines whenever the payee runs. Its
+change is spendable by this home's next payment at once: that payment
+spends the unmined change and carries the payment it came from in its
+BEEF, which the host verifies through. Up to 16 unmined payments may follow
+one another this way, so a home with one coin is not held to one priced
+question per block; for anything but a payment, the change is spendable
+once the payment mines. A coin is handed out once, and a payment the host
+did not accept gives it back: no coin is spent twice. `terms` prints what a host
 prices; a free class with a price is reported and never paid.
 
 ## A host's payee
@@ -349,13 +441,17 @@ payment the host recorded and this home has not settled: each checked to
 pay the key this identity derives for its remittance and payer, verified
 against the headers, broadcast through `settle`, and awaited; every
 payment is broadcast before any is waited for (at most `-in-flight`, default
-16), so a run takes about one block. A payment whose payer spent the inputs
+16), so a run takes about one block. A payment that spends the change of
+the payer's earlier unmined payment carries that payment, and it is
+broadcast first. A payment whose payer spent the inputs
 elsewhere is detected from the node's view of its inputs, reported once,
 recorded, and passed over afterwards.
 
 ## Doctor
 
 `doctor` reads only: the home, its trees, the organisation it runs, a
-transition in flight, the outbox, failed sweeps, each group's rotation debt
-and a rotation due by `rotateEvery`, and whether the node, the header
-source, every host and the priced host answer.
+transition in flight, the outbox, failed sweeps, each group's rotation
+debt, the members whose grant expires within 30 days, a rotation due by
+`rotateEvery`, a group whose current epoch key this home does not hold, the
+unmined payments whose change the next payment may spend, and whether the
+node, the header source, every host and the priced host answer.

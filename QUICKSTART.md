@@ -3,8 +3,9 @@
 In about five minutes, on one machine: run two overlay hosts that carry a
 hall, create an organisation with three members in unicast mode, give them
 a group whose key each of them opens, remove one member and watch the key
-change under them, revoke a grant by sweep, and pay a host's 402 for the
-priced history question. No coin is needed, because a local chain stands
+change under them, revoke a grant by sweep, pay a host's 402 for the
+priced history question, make the removal a revoked member is owed, and
+check that the two hosts hold the same. No coin is needed, because a local chain stands
 in for the network; the last section says what changes on the real one.
 
 You need [Docker](https://docs.docker.com/get-docker/) with Compose, and
@@ -190,7 +191,33 @@ free classes give the same tokens one at a time; the priced class sells
 the bulk walk. `payee settle` took the payment into the payee's wallet:
 checked, broadcast, mined, pooled.
 
-## 9. Clean up
+## 9. The removal owed, and do the hosts agree?
+
+```console
+$ as org org due
+due     group 5a0c4d…9d12 engineering: 02f1…3c5a: it holds no current grant (revoked, swept, or never in the roll)
+$ as org org due -apply
+group   5a0c4d…9d12 seq 2 61d0…e7b3 epoch 2 (a new epoch: a fresh key, wrapped to every member)
+removed 02f1…3c5a: rotation debt (no current grant)
+applied 1 group(s) with removals due
+$ as alice fill
+filled  0 object(s) at 0 host(s)
+```
+
+Carol's grant is revoked, so the organisation owes her a removal from the
+group: `org due` lists it (and exits 3), and `-apply` makes it, with a new
+epoch that only alice opens. It lists a grant that is about to expire the
+same way, before it does; run from a timer, `org due -apply` removes each
+member when their grant lapses.
+
+`fill` compared what the two hosts answer (the organisation's chain, the
+roll's grants, the group's chain and its wraps) and found nothing to copy.
+Had host-b been down while the organisation published, it would lack
+tokens and wraps, every reading command would say `DISAGREES`, and `fill`
+would replay each one to it from host-a's answers, verified first: anyone
+can run it, and it needs no coin.
+
+## 10. Clean up
 
 ```console
 $ docker compose --profile cli down -v
@@ -211,6 +238,10 @@ $ docker compose --profile cli down -v
   reference overlay host (docs/host.md).
 - **Members.** A member's home needs `hosts`, `header_url`, `hall`, `org`,
   and `asset` for revocation checks and writer evidence; no coin.
+- **A second home.** Run `borg org signer` once, and a home made on
+  another machine with `borg init -from identity.json` rebuilds the
+  organisation's state from the hosts with `borg org sync`
+  (docs/user-guide.md section 11).
 - **Next.** [docs/user-guide.md](docs/user-guide.md) explains the concepts
   and the day-to-day use; [docs/usage.md](docs/usage.md) every command and
   setting; [docs/limits.md](docs/limits.md) every default and cap.

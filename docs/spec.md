@@ -714,8 +714,8 @@ the instance holds); a grant issued and not yet admitted to the roll; and
 another instance's funding trees, unpublished objects and sweeps. The epoch
 key of a transition that lost is discarded by the instance that sampled it
 and is needed by nobody. Two instances MUST NOT fund carriers from one
-funding tree: two carriers on one funding output share one retraction, and
-two grants one revocation outpoint.
+funding tree: of two carriers on one funding output a host answers one
+(section 11.2), and one sweep retracts both.
 
 ## 8. What a removed member can and cannot read
 

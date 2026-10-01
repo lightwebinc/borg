@@ -26,6 +26,10 @@ whose key the removed member never receives.
 - **Two ways to reach the hosts.** On the multicast plane a publisher submits
   each object once and every subscribed host receives it; without it, the
   publisher submits to each host itself.
+- **Everything is at the hosts.** A host that missed something is filled
+  from the others by anyone (`borg fill`), and a second home of the
+  organisation rebuilds its state from them (`borg org sync`), opening each
+  epoch key from a wrap like any member.
 
 ## Documentation
 

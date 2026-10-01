@@ -601,7 +601,7 @@ type ChangeResult struct {
 // GroupChange mints a group's next token (spec sections 4.2 and 7.1). Every
 // transition first removes the group's rotation debt. A removal, a
 // predecessor's rotateOnJoin with an addition, a key an earlier token
-// removed coming back (Q7), or Rotate begins a new epoch with a freshly
+// removed coming back, or Rotate begins a new epoch with a freshly
 // sampled key; the transition is checked against the host's rules and the
 // index's fold before it is built, and refused if it would trip either.
 func (e *Engine) GroupChange(ctx context.Context, gid string, c Change) (*ChangeResult, error) {

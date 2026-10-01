@@ -33,7 +33,8 @@ or left are public to everyone who reads the hall (spec section 16).
 Build `bin/borg` with `make borg` (Go 1.27.1 or later), or run the image
 `ghcr.io/lightwebinc/borg` with a volume at `/home/nonroot/.borg`. A host is
 the `borg-host` image or the module on a reference overlay host
-([host.md](host.md)).
+([host.md](host.md)). `borg doctor` shows the home and asks every
+configured endpoint whether it answers; it changes nothing.
 
 ## 3. Concepts
 
@@ -48,6 +49,9 @@ the `borg-host` image or the module on a reference overlay host
 | epoch | one generation of a group's key; every removal begins one |
 | wrap | an epoch key encrypted to one member, in a record of up to 16 |
 | rotation debt | a group member whose grant is no longer current; the group's next change removes them |
+| signer key | a key every home of the organisation derives from its identity key; as a member of a group it is wrapped each epoch's key, which is how a second home comes to hold it |
+| token, carrier | a token is a mined transaction (one per change of a chain); a carrier is an unmined one that holds a grant or a wrap and spends a funding output |
+| sweep | a mined spend of funding outputs: it revokes the grants and retracts the carriers they funded |
 
 ## 4. Configuration
 
@@ -67,7 +71,10 @@ header_url = https://headers.example.com
 asset      = http://192.0.2.10:8090
 ```
 
-## 5. Running the organisation
+No address has a default: a default would send an organisation's records,
+or a member's questions, to a server nobody chose.
+
+## 5. Running an organisation
 
 ```console
 $ borg init                     # once: the organisation's key
@@ -77,91 +84,343 @@ $ borg org create 'Example' -member <alice> -member <bob>
 $ borg group create engineering -member <alice> -member <bob>
 ```
 
-Add someone to a group (granting them first when they hold no current
-grant), remove them, or change their key:
+The home's identity key is the organisation: it signs every grant, every
+token and every wrap. Keep the home at mode 0700 and back it up as a
+secret; `borg org show` prints what it holds, and `borg doctor` what it
+still owes.
+
+Each change waits for its token to be mined, waits the propagation delay
+(60 s), publishes it, and makes the wraps it needs. A change therefore
+takes about a block and a minute, and each chain (the organisation's, each
+group's) moves once a block ([limits.md](limits.md)). If a command stops
+part way (a host down, the network slow, the machine switched off), what
+it built is kept in the home and the next command finishes it first.
+
+What it costs: each change is one mined transaction of about 2.5 KB, a
+few hundred satoshis at 1 satoshi a byte. Each grant and each batch of
+wraps rides a funding output of one satoshi and is never mined; the tree
+that holds 32 such outputs is one more mined transaction.
+
+## 6. Members
 
 ```console
-$ borg org add <carol> -group engineering
-$ borg org remove <bob> -group engineering      # a new epoch
-$ borg org rekey <alice> <alice's new key>      # a new epoch in every group
+$ borg grant issue <carol> -role engineer -expiry 8760h
+$ borg org add <carol> -group engineering     # grants her first if she holds no current grant
 ```
 
-Offboard someone entirely (every grant revoked by the roll and by sweep,
-and a removal from every group):
+A grant names a role (a label), a scope (`member` is what makes a
+membership) and an expiry (a year unless `-expiry` says). `-opaque` at
+`org create` publishes grants without their fields in the clear: readers
+then see that a key is a member, not its role.
 
-```console
-$ borg org remove <bob>
-```
-
-Each change waits for its token to be mined, then publishes it and the
-wraps it needs. If a command stops part way (a host down, the network
-slow), what it built is kept in the home and the next command finishes it
-first: run `borg doctor` to see what is pending.
-
-A key that was removed and comes back always gets a new epoch, so it never
-reads what was written while it was away. `-rotate-on-join` on a group
-makes every addition rotate. `borg epoch rotate <group>` rotates on a
-schedule or after a suspected leak; `doctor` says when a group's epoch is
-older than its `-rotate-every`.
-
-## 6. Being a member
+A member sets up a home and reads:
 
 ```console
 $ borg init
 $ borg member <your key>         # your grants, opened through your keyring
 $ borg open engineering          # every epoch key you can open
-$ borg member-of <your key>       # your groups
+$ borg member-of <your key>      # your groups
 ```
 
-`open` keeps every key it opens in your home, so later reads need no host,
-and says which epochs you cannot open and why. Before you key new content
-under a group's epoch, run `borg open <group> -write`: it checks, through
-your node, that the group's latest token is still the latest, and refuses
-(exit 3) when it cannot be sure. An application keys its own content under
-the epoch key; borg delivers the key.
+`open` keeps every key it opens in the member's home, so later reads need
+no host, and says which epochs it cannot open and why. Before keying new
+content under a group's epoch, run `borg open <group> -write`: it checks,
+through the member's node, that the group's latest token is still the
+latest, and refuses (exit 3) when it cannot be sure. An application keys
+its own content under the epoch key; borg delivers the key.
 
-## 7. Revocation
+**Expiry.** A grant that expires makes its holder rotation debt in every
+group. `borg org due` lists the removals owed and the grants of group
+members that expire within 30 days; renew one with `borg grant issue <key>`
+before it lapses. `borg org due -apply` makes the removals that are due
+now, each with a new epoch; run it from a timer and each removal follows
+its expiry by at most the timer's interval. Nothing is removed early.
 
-`borg grant revoke <key>` revokes two ways: the next organisation token
-leaves the grant out of the roll, and a mined sweep spends its revocation
-outpoint, so every BRC-52 verifier sees it revoked and every host retracts
-it. A revoked member still in a group is rotation debt until the group's
-next change removes them. Revocation is as fresh as the node you ask: a
-reader with no node cannot tell a revoked member from a current one, and
-borg then says so rather than guess.
+## 7. Groups and epochs
 
-## 8. Plane or unicast
+A group is a chain of tokens. Each token names who was added and removed
+and carries a root over the members; an epoch is the stretch of that chain
+under one key. The key of an epoch is sampled at random by the
+organisation, committed to in the token that begins the epoch before
+anyone holds it, and wrapped to each member.
 
-On the multicast plane (`mode = plane`, `facade`) each carrier is
-submitted once and every subscribed host receives it; tokens and sweeps
-also go to every host named. Without it (`mode = unicast`) every object
-goes to each host; a carrier counts once `quorum` hosts took it, and a
-token or sweep only once every host did. A host that was down misses what
-was sent meanwhile in unicast; the next change confirms its tokens and
-offers them again.
+```console
+$ borg group create engineering -member <alice> -member <bob>
+$ borg group list
+$ borg group show engineering     # as any reader: the chain folded, the members from the wraps
+```
 
-## 9. Priced questions and the payee
+- **Adding** someone keeps the epoch: the joiner is wrapped the current
+  key and reads what the epoch already holds, as joining a room means.
+  `-rotate-on-join` at `group create` makes every addition begin a new
+  epoch instead.
+- **A key that was removed and comes back** always gets a new epoch, so it
+  never reads what was written while it was away.
+- **Rotating** without a change of members is `borg epoch rotate <group>`:
+  on a schedule (`-rotate-every` records the one you intend, and `doctor`
+  says when it is overdue) or after a suspected leak of a key.
+
+## 8. Removal and rotation
+
+```console
+$ borg org remove <bob> -group engineering      # a new epoch
+$ borg org rekey <alice> <alice's new key>      # her key changed: a new epoch in every group
+$ borg org remove <bob>                         # offboard: every grant revoked, every group left
+```
+
+A removal begins a new epoch: hosts refuse a token that removes anyone
+without one. The new key is wrapped to the members who remain, and to
+nobody else. Every transition of a group also first removes its rotation
+debt, so a member whose grant was revoked or has expired leaves with the
+group's next change, whatever that change is.
+
+Removal takes effect when the removing token is mined and seen. Until then
+the member is still a member: the window is one block, the propagation
+delay, and each writer's freshness bound (60 s by default).
+
+### What a removed member can still read
+
+They **can** still read:
+
+- everything keyed under an epoch whose key they hold: the epoch they were
+  removed from and every earlier one they were in. Rotation is not
+  retroactive;
+- anything a writer keys under the old epoch before it sees the new one. A
+  writer that checks (`open -write`) does so for at most its freshness
+  bound after the removal mines; a writer that does not check keeps doing
+  it;
+- anything a current member shows them. Every member of an epoch holds the
+  same key, so a leak names nobody;
+- every public fact: the tokens, the grants and their revealed fields, who
+  the wraps are addressed to, and when each change happened.
+
+They **cannot** read anything keyed under the new epoch or a later one: the
+new key is independent of the old, and no wrap of it names them. They come
+back only by a mined transition everyone sees, which begins a new epoch.
+
+If what was written before must stop being readable by them, rotation does
+not do it: nothing can. Rotate promptly, and treat what the removed member
+could read as read.
+
+## 9. Revocation
+
+```console
+$ borg grant revoke <key>              # by the roll and by sweep
+$ borg grant revoke <key> -by sweep    # or one of the two
+```
+
+A grant is revoked two ways. The next organisation token leaves it out of
+the roll, which every reader of borg's records sees. And a mined sweep
+spends its revocation outpoint, which every BRC-52 verifier sees and which
+makes every host retract the grant. A revoked member still in a group is
+rotation debt until the group's next change removes them.
+
+Revocation is as fresh as the node you ask: a reader with no node cannot
+tell a revoked member from a current one, and borg then says so rather
+than guess. A sweep is not erasure: a copy of a grant anyone kept is still
+a copy, only no longer a valid certificate.
+
+**The kill switch.** `borg kill -confirm KILL` lists, and with `-yes`
+makes, one sweep per grant tree and per record tree the home holds. It
+revokes the whole roll and retracts every grant and wrap at every honest
+host, one block a tree, and cannot be undone. The chains stay (they are
+mined), every member is then without a current grant, and epoch keys
+members already opened stay opened. Use it when the organisation's key or
+home is lost to someone else, or to end the organisation.
+
+## 10. A host that missed something: `fill`
+
+A host that was down off the plane, or was left out of a unicast publish,
+lacks what the others hold, and nothing resends it. `roll`, `group show`
+and `open` say so (`DISAGREES`, exit 3). Anyone who reads the hall repairs
+it, with no coin and no key:
+
+```console
+$ borg fill                 # the organisation's chain, the roll, every group
+$ borg fill engineering     # or the groups named
+filled  group 5a0c… seq 5 ff7b385c2c81 at https://host-b.example.com
+filled  wrap 911458675ba8 at https://host-b.example.com
+filled  2 object(s) at 1 host(s)
+```
+
+`fill` replays to each host what another host answered and it lacks: each
+missing token with its parent, each grant of the roll, each wrap of every
+epoch a host still answers. Everything is verified against your headers
+before it is sent and confirmed by a lookup afterwards. Run it again:
+`filled  0 object(s)` means the hosts agree.
+
+## 11. A second home: `sync`
+
+An organisation is one identity key, and more than one home can hold it: a
+second device, a standby, or a new machine after the first was lost.
+Everything such a home needs is at the hosts, except the epoch keys, which
+reach it the way they reach any member: in a wrap, addressed to the
+organisation's **signer key**.
+
+Prepare, on the home that runs the organisation:
+
+```console
+$ borg org signer          # grant the signer key and add it to every group
+```
+
+With `signers = 2` (or more) in the configuration this happens by itself:
+every group the home creates or changes includes the signer key, and wraps
+wait one further block. The signer key shows as one more member of each
+group (`org show` and `group show` mark it).
+
+Then, on the other machine:
+
+```console
+$ borg init -from identity.json    # the first home's identity file, carried by hand
+$ borg fund -txid <txid>           # its own coin
+$ borg -hall <hall> org sync
+sync    took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)
+missing group 5a0c… epoch 0: the signer key was not a member of this epoch
+```
+
+`org sync` reads the organisation as any reader does (every token against
+your headers, the roll's root reproduced) and opens each epoch key from the
+wrap to the signer key. After it the home runs the organisation.
+
+With `signers` above one, two homes can both be in use. When both change
+the same chain at once, one transition is mined and the other is discarded
+(exit 1, `lost`), having released nothing; run the command again and it
+catches up by itself and makes the change on the new tip. Each command
+also catches up first whenever the node shows that another home moved a
+chain.
+
+**What `sync` cannot bring back:**
+
+- the key of an epoch the signer key was not a member of (it is named as
+  `missing`). Its members still hold it. If it is the current epoch, this
+  home wraps it to nobody until it opens it; `borg epoch rotate <group>`
+  begins an epoch this home holds;
+- a grant another home issued and no token admitted yet;
+- another home's unpublished work, funding trees and coin. Each home funds
+  itself and mints its own trees. The trees of every grant and wrap the
+  hosts answer are recorded, so this home can still revoke them by sweep;
+- the epoch key of a transition that lost a race. It was discarded, and
+  nobody needs it: nothing was released under it.
+
+Do not copy a whole home that is still in use: two copies hold the same
+coins and the same funding trees. If you did, run `borg org sync
+-retire-trees` on the copy before it changes anything.
+
+## 12. Plane or unicast
+
+| | Plane (`mode = plane`, `facade`) | Unicast (`mode = unicast`) |
+| --- | --- | --- |
+| A grant or a wrap | submitted once to the facade; every subscribed host receives it | submitted to each host; counts once `quorum` hosts took it |
+| A token or a sweep | to the facade and to every host named | to every host; needs all of them |
+| A host that was down | repaired by the plane within its window; a wrap is also looked for at each host and offered directly | misses what was sent meanwhile; `fill` repairs it |
+| Object size | kept small: at most 4 packets by default | one HTTP request an object, up to the record bounds |
+| Cost that grows with hosts | none | every object uploaded once per host |
+| Priced questions | not on the plane: the terms route is HTTP | the same |
+
+Either way a reader asks every host it names and compares the answers.
+
+## 13. Priced questions and the payee
 
 The free questions answer everything a member needs. A host may price the
 bulk walk of a chain: `borg history -chain <org|group id>` pays its 402
-from your home's coin (at most `-max-sats`). A host's operator settles
+from the home's coin (at most `-max-sats`). One coin is enough for several
+questions in a row: each payment spends the change of the one before, up
+to 16 unmined at once ([limits.md](limits.md)). A host's operator settles
 what it was paid with `borg payee settle <payments.jsonl>` from the payee's
 home, on a schedule.
 
-## 10. Troubleshooting
+## 14. Limits
 
-| You see | It means |
-| --- | --- |
-| exit 3, `DISAGREES` | a host lacks a token another answered: it is behind or withholding. The answer used the hosts that hold the chain |
-| exit 3, `an older state` | the hosts answer an older chain than your home verified: ask other hosts |
-| exit 1, `CANNOT OPEN ... removed at seq` | you are not a member of the current epoch |
-| exit 3, `no host answers a wrap` | the organisation has not published your wrap yet; ask again shortly |
-| exit 2, `quorum` | in unicast a host did not take an object; it is kept and the next command sends it |
-| exit 1, `lost` | two of the organisation's devices changed one group at once; the other change won, and this one was discarded without releasing anything. Run it again |
-| `ROTATION DEBT` in doctor | a member's grant is no longer current; `borg epoch rotate <group>` removes them now |
+The ones you meet first; the full table, with reasons, is
+[limits.md](limits.md).
 
-## 11. Where to go next
+| Setting | Default | Cap |
+| --- | --- | --- |
+| Members of a group | as needed | 1024; warns above 256 |
+| Wraps per record | 8 on the plane, 16 in unicast | 16 |
+| Grants in the roll | as needed | 65536 |
+| Changes per token | as needed | 64 each; plane warns above 16 |
+| Changes per chain | one a block, published 60 s after it mines | one a block |
+| Hosts | none | 16; unicast warns above 5 |
+| Quorum (unicast carriers) | all | the host count |
+| Price paid for one question | at most 1000 sat | `-max-sats` |
+| Payments in a row from one coin | each spends the last one's change | 16 unmined |
 
-[usage.md](usage.md) for every command, setting and exit code;
-[limits.md](limits.md) for every default and cap; [spec.md](spec.md) for
-the records; [host.md](host.md) to run a host.
+## 15. Troubleshooting
+
+Run `borg doctor` first: it shows the home, the pool, the trees, the
+organisation, anything persisted and not yet published, a sweep in flight
+or failed, each group's rotation debt, and whether every endpoint answers.
+
+| Exit | Meaning | What to do |
+| --- | --- | --- |
+| 0 | done; everything asked verified | nothing. A disagreement between hosts that did not affect the answer is still printed |
+| 1 | refused: the evidence contradicts what was asked | read the message: it names the host, the token or the reason |
+| 2 | usage, configuration, transport, a quorum not met, or a price over `-max-sats` | fix the named setting; what was persisted is published by the next command |
+| 3 | incomplete: it proves nothing either way | ask again, ask other hosts, or `fill` |
+
+Exit 1, by message:
+
+- `CANNOT OPEN ... removed at seq`: you are not a member of the current
+  epoch. You keep the epochs you held.
+- `lost: its predecessor is spent by`: another home of the organisation
+  changed the same chain first. Nothing was released. Run the command
+  again; with `signers` above one it catches up by itself, otherwise `borg
+  org sync` first.
+- `lost: its fee coin is spent by`: another home holds the same coin (a
+  copied home). `borg org sync`, then run it again.
+- `not current, revoked`: the grant's revocation outpoint is spent.
+- `REFUSED`: a host answered something that does not verify. It is not
+  used, and the host is named.
+- `catching up: ... a fork`: this home and the hosts hold different mined
+  tokens at one seq. Do not go on from this home; read the chain with
+  `group show` and `roll` and decide which home is right.
+
+Exit 2, by message:
+
+- `fee input: ... no spendable output`: fund the home (`borg fund`). If it
+  says coins are change not yet mined, wait for a block.
+- `1 of 2 host(s) took it and the quorum is 2`: a host did not take an
+  object. It is kept, and the next command publishes it first.
+- `the transition breaks the host's rules` or `would be reported`: the
+  tooling will not build what a host would refuse or an index would flag.
+  The message names the rule.
+
+Exit 3, by message:
+
+- `DISAGREES`: a host lacks a token another answered: it is behind, or
+  withholding. `borg fill`.
+- `an older state`: the hosts answer an older chain than your home
+  verified. Ask other hosts.
+- `no host answers a wrap`: the organisation has not published your wrap
+  yet (it follows the token by a block where several homes sign). Ask
+  again shortly.
+- `PENDING`: the same, seen by `group show`.
+- `a writer does not write`: no positive evidence that the group's latest
+  token is the latest. Check `asset`.
+- `removal(s) due`: `borg org due -apply`.
+- `the key of the current epoch ... is not open here`: after `org sync`,
+  the other home has not published its wraps yet, or the signer key is not
+  a member of the group. Ask again after a block, run `borg org signer` on
+  the home that holds the key, or rotate the group.
+- `the hosts answer N of the M grant(s) in the roll`: no host holds the
+  whole roll, so `org sync` took nothing. `borg fill`, then sync again.
+
+In `doctor`:
+
+- `ROTATION DEBT`: a member's grant is no longer current. `borg org due
+  -apply`, or any change of the group, removes them.
+- `KEY NOT HELD`: the group's epoch was begun by another home. `borg org
+  sync`.
+- `INCONSISTENT`: a token the index flags sits in the current epoch. `borg
+  epoch rotate <group>` begins a clean one.
+- `outbox`, `transition`, `sweep ... in flight`: work a previous command
+  persisted. The next command finishes it.
+
+## 16. Where to go next
+
+- [usage.md](usage.md): every command, setting and exit code.
+- [limits.md](limits.md): every default and cap, and why.
+- [host.md](host.md): run a host, price a question, settle, back up.
+- [spec.md](spec.md) and [frozen.md](frozen.md): the records, and what
+  cannot change once published.
