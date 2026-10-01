@@ -34,6 +34,7 @@ whose key the removed member never receives.
 | Implement a compatible organisation, member client or host | [docs/spec.md](docs/spec.md) (the specification) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
 | Know the defaults and caps, and why each is set where it is | [docs/limits.md](docs/limits.md) |
+| Run a host: the module, its configuration, its index and its terms route | [docs/host.md](docs/host.md) |
 
 ## Build and test
 
@@ -41,6 +42,8 @@ whose key the removed member never receives.
 $ (cd host && npm ci)   # once
 $ make verify           # gofmt, vet, dependency set, typecheck, vectors, tests
 $ make vectors          # regenerate both vector sets
+$ make module           # the host module, host/bundle/borg-module.js
+$ make e2e REFERENCE_HOST=/path/to/reference-host   # the module on a local reference host (Docker)
 ```
 
 Go 1.27.1 or later and Node 24; `NODE=/path/to/node` selects a Node 24
