@@ -1,0 +1,119 @@
+# The quickstart: all of borg on one machine, in minutes, with no coin. A
+# local chain stands in for the network; two overlay hosts run the borg
+# module over one MySQL, host-a with a terms route that prices history;
+# and the borg command runs beside them, in unicast mode, so every object
+# goes to both hosts. QUICKSTART.md walks through it.
+#
+# The chain (borg-devchain) has no proof of work and no peers, and nothing
+# it mines is money: it is for trying borg, never for a network. Every
+# password here is a throwaway meant to be seen.
+#
+# Optional: BORG_IMAGE, BORG_HOST_IMAGE and DEVCHAIN_IMAGE name the images
+# (default: the published ones, tag latest).
+
+name: borg-quickstart
+
+x-host: &host
+  image: ${BORG_HOST_IMAGE:-ghcr.io/lightwebinc/borg-host:latest}
+  depends_on:
+    db:
+      condition: service_healthy
+    chain:
+      condition: service_started
+  restart: unless-stopped
+
+services:
+  chain:
+    image: ${DEVCHAIN_IMAGE:-ghcr.io/lightwebinc/borg-devchain:latest}
+    volumes:
+      - chain:/var/lib/devchain
+    restart: unless-stopped
+
+  db:
+    image: mysql:9@sha256:30a0abfa7b502a496e12339b54cd07aaa70363396dc4b8e8a72a92804a505cd6
+    environment:
+      MYSQL_DATABASE: overlay_a
+      MYSQL_USER: overlay
+      MYSQL_PASSWORD: quickstart
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+    configs:
+      - source: second-database
+        target: /docker-entrypoint-initdb.d/second-database.sql
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uoverlay -pquickstart --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped
+
+  # host-a sells the history question on its terms route (port 8090), paid
+  # to BORG_PAYEE_KEY.
+  host-a:
+    <<: *host
+    environment:
+      BORG_HALLS: ${BORG_HALLS:-}
+      BORG_LISTEN: 0.0.0.0:8090
+      BORG_PRICES: history=5,history-after=5
+      BORG_PAYEE_KEY: ${BORG_PAYEE_KEY:-}
+      OVERLAY_KNEX_URL: mysql://overlay:quickstart@db:3306/overlay_a
+      OVERLAY_CHAIN_TRACKER_URL: http://chain:8080
+    volumes:
+      - state-a:/var/lib/borg
+    ports:
+      - "127.0.0.1:8281:8080"
+      - "127.0.0.1:8291:8090"
+
+  host-b:
+    <<: *host
+    environment:
+      BORG_HALLS: ${BORG_HALLS:-}
+      OVERLAY_KNEX_URL: mysql://overlay:quickstart@db:3306/overlay_b
+      OVERLAY_CHAIN_TRACKER_URL: http://chain:8080
+    volumes:
+      - state-b:/var/lib/borg
+    ports:
+      - "127.0.0.1:8282:8080"
+
+  # The command, run with `docker compose run --rm -T borg <command>`. Its
+  # homes (identities, coin pools, state, epoch keys) are in the named
+  # volume `home`, one directory each, named by BORG_HOME. It reads
+  # host-a's state directory, for the payee's settle.
+  borg:
+    image: ${BORG_IMAGE:-ghcr.io/lightwebinc/borg:latest}
+    profiles: [cli]
+    environment:
+      BORG_NETWORK: regtest
+      BORG_MODE: unicast
+      BORG_HOSTS: http://host-a:8080,http://host-b:8080
+      BORG_HISTORY_HOST: http://host-a:8090
+      BORG_HALL: ${BORG_HALLS:-}
+      BORG_ORG: ${BORG_ORG:-}
+      # The hosts read the same local chain's headers as the command, so a
+      # mined token needs no propagation delay here; on a network leave the
+      # default of 60s.
+      BORG_DELAY: 0s
+      BORG_HEADER_URL: http://chain:8080
+      BORG_ASSET: http://chain:8080
+      BORG_RPC: http://chain:8080/rpc
+      BORG_SETTLE: rpc:http://chain:8080/rpc
+    volumes:
+      - home:/home/nonroot/.borg
+      - state-a:/var/lib/borg-a:ro
+
+configs:
+  second-database:
+    content: |
+      CREATE DATABASE IF NOT EXISTS overlay_b;
+      GRANT ALL PRIVILEGES ON overlay_b.* TO 'overlay'@'%';
+
+volumes:
+  chain:
+  db:
+  home:
+  state-a:
+  state-b:
