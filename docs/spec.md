@@ -1491,8 +1491,14 @@ regenerates them and compares byte for byte, refuses a file nothing
 generates, and reads the hex, refusal and query files back without the
 generator. The generator fails when a check it makes stops holding: a
 member's wallet opens its wrap and its grant, another member's does not,
-every certificate verifies, BRC-369's own vector still reproduces, and the
-SDK still refuses a four-character protocol name.
+every certificate verifies, BRC-369's own vector still reproduces, the SDK
+still refuses a four-character protocol name, and every transaction case is
+admitted or refused by exactly the rule it names. The TypeScript codec in
+`host/` runs every one of them and reaches the same verdict on each, and
+writes `testdata/ts/ts-v1.json`, which the Go tests read: records, grants
+issued and wraps sealed by the TypeScript SDK, and carriers and tokens it
+built, each decoded, opened or admitted by the Go side (`make verify` runs
+both directions).
 
 | File | What it holds |
 | --- | --- |
@@ -1506,6 +1512,8 @@ SDK still refuses a four-character protocol name.
 | `refusal-v1.json` | byte strings each record's rules refuse, each with its reason (section 3.1), and the grant's content rules; a record with an unknown key, preserved |
 | `query-v1.json` | every class with its members, price and limit; questions, each with its class or refused |
 | `script-v1.json` | the classifier of section 11.1 over real locking scripts from bcommon's PushDrop, and scripts that claim nothing |
+| `transaction-v1.json` | transactions as BEEF, each with the previous coins it is admitted with, admitted or refused by the rules of section 11.1 in their order: grant and wrap carriers, organisation and group tokens (one mined in its parent's block, so its BEEF holds one merged path, and one as BEEF V2), a sweep, and a mined funding tree published alone; refusals of every carrier rule (shape, BEEF, record, hall, mineable, unlock, lock, signature, funding, grant content), every token rule (shape, BEEF, record, hall, lock, signature, unmined, token input, transitions), sweeps and transactions that are not borg's. Every input of every case passes the script interpreter, so each refusal is made by its rule alone; a few cases break two rules and are refused for the earlier. `stored` holds each admitted token as the engine stores it, read back without its parent, and the BEEF a replayer assembles from it (section 11.6), byte for byte the one first admitted |
+| `index-v1.json` | the index's rules of section 11.2: the chains of `transaction-v1.json` folded, chains whose fold breaks (`roll-mismatch`, `members-mismatch`, `commitment-reuse`, `rejoin-unrotated`), and funding-outpoint rows with each carrier's status |
 
 The vectors' hall is `example_hall_vkqzmtrwxp`; its suffix is a fixed example
 so that the vectors are reproducible. The test identities' private keys are 32
@@ -1513,7 +1521,7 @@ bytes of one value (`0x51` the organisation, `0x52` to `0x54` the members,
 `0x55` a second, opaque organisation, `0x56` a key that is never a member);
 they are public and never for real use. Every value a client draws at random
 (epoch keys, field revelation keys, IVs, serial numbers, the group id) is a
-fixed stand-in, `SHA-256("borg/vector/<label>")`. These vectors build records,
-not transactions: the commitments and txids of grant carriers and mined
-tokens are stand-ins of the same form, and the transaction rules of section
-11.1 have no vectors in this set. Signatures are deterministic (RFC 6979).
+fixed stand-in, `SHA-256("borg/vector/<label>")`. The record vectors use
+stand-ins of the same form for the commitments and txids of grant carriers
+and mined tokens; `transaction-v1.json` builds real ones on a test chain whose
+headers it lists. Signatures are deterministic (RFC 6979).
