@@ -195,6 +195,7 @@ func genRefusal(s *Scenario, files map[string][]byte) error {
 			setTextKey(asMap(mustEncode(getKey(asMap(grant), 6))), "role", bytes.Repeat([]byte{1}, 48))), "fields"},
 		{"grant", "a short field ciphertext and a keyring that is not a map", mutate(mutate(grant, 8, uint64(1)), 6,
 			setTextKey(asMap(mustEncode(getKey(asMap(grant), 6))), "role", bytes.Repeat([]byte{1}, 48))), "fields"},
+		{"grant", "no revocation outpoint", mutate(grant, 5, deleted{}), "missing"},
 		{"grant", "revocation of three elements", mutate(grant, 5, []cbor.Value{bytes.Repeat([]byte{2}, 32), uint64(0), uint64(0)}), "type"},
 		{"grant", "the organisation is the anyone key", mutate(grant, 2, borgrec.AnyoneKey()), "identity"},
 		{"org", "the organisation is the anyone key", mutate(org, 2, borgrec.AnyoneKey()), "identity"},
