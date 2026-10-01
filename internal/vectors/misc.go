@@ -60,9 +60,16 @@ func genScope(_ *Scenario, files map[string][]byte) error {
 		_, err := borgrec.ParseExpiry(e)
 		exp = append(exp, tv{e, err == nil})
 	}
-	var roles []tv
+	// A role is decrypted bytes, which need not be UTF-8; JSON cannot carry
+	// such bytes, so each role is also given as hex.
+	type rv struct {
+		Value string `json:"value"`
+		Hex   string `json:"hex"`
+		Ok    bool   `json:"ok"`
+	}
+	var roles []rv
 	for _, r := range []string{"engineer", "team lead", "", string(bytes.Repeat([]byte{'r'}, 65)), "\xff"} {
-		roles = append(roles, tv{r, borgrec.CheckRole(r) == nil})
+		roles = append(roles, rv{r, hx([]byte(r)), borgrec.CheckRole(r) == nil})
 	}
 	return put(files, "scope-v1.json", map[string]any{
 		"grammar": "BRC-169 section 9.2, with \"*\" refused; defined verbs: member, admin",

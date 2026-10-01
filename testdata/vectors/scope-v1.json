@@ -37,22 +37,27 @@
   "roles": [
     {
       "value": "engineer",
+      "hex": "656e67696e656572",
       "ok": true
     },
     {
       "value": "team lead",
+      "hex": "7465616d206c656164",
       "ok": true
     },
     {
       "value": "",
+      "hex": "",
       "ok": false
     },
     {
       "value": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "hex": "7272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272727272",
       "ok": false
     },
     {
       "value": "�",
+      "hex": "ff",
       "ok": false
     }
   ],
