@@ -900,6 +900,14 @@ func (g *global) groupShow(ctx context.Context, name string) error {
 	for _, s := range stray {
 		fmt.Fprintf(g.stdout, "stray   %s: a wrap names a key the chain never made a member\n", s)
 	}
+	if len(stray) == 0 && len(missing) > 0 {
+		// Wraps follow their token's block, one further block where several
+		// instances can sign (spec sections 7.2 and 13): within that window
+		// an incomplete release is pending, not inconsistent.
+		if tip, err := t.rd.Headers.CurrentHeight(ctx); err == nil && tip <= gv.Latest().Height+1 {
+			return incomplete("group %s: the wraps of epoch %d are PENDING: %d member(s) without a wrap while the latest token is at most one block deep; ask again after the next block", gid, tok.Epoch, len(missing))
+		}
+	}
 	if len(stray) > 0 || len(missing) > 0 {
 		return incomplete("group %s is inconsistent: %d stray wrap recipient(s), %d member(s) without a wrap", gid, len(stray), len(missing))
 	}

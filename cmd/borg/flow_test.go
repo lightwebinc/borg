@@ -316,6 +316,12 @@ func TestGroupShowEnumeratesByWraps(t *testing.T) {
 	}
 	r = h.run("alice", "", "group", "show", o.group)
 	h.want(r, exitIncomplete, "3 member(s) without a wrap")
+	// Two blocks past the token, missing wraps are no longer pending.
+	if _, err := h.chain.Generate(2, "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"); err != nil {
+		t.Fatal(err)
+	}
+	r = h.run("alice", "", "group", "show", o.group)
+	h.want(r, exitIncomplete, "is inconsistent: 0 stray wrap recipient(s), 3 member(s) without a wrap")
 	h.want(h.run("dave", "", "open", o.group), exitUsage, "run `borg init`")
 	h.want(h.run("carol", "", "open", o.group), exitIncomplete, "no host answers a wrap of epoch 0")
 }
@@ -328,6 +334,8 @@ func TestTwoSignersWrapAfterABlock(t *testing.T) {
 	h.env["BORG_SIGNERS"] = "2"
 	o := h.orgWithGroup()
 	h.want(h.run("alice", "", "open", o.group), exitIncomplete, "no host answers a wrap of epoch 0")
+	// A reader sees the release pending, not inconsistent, for that block.
+	h.want(h.run("alice", "", "group", "show", o.group), exitIncomplete, "PENDING")
 	dave := h.identity("dave", false)
 	r := h.must("org", "grant", "issue", dave)
 	if !strings.Contains(r.stdout, "admits it") {
