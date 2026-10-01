@@ -669,8 +669,8 @@ acceptance is not the network's, and a double spend can be accepted and then
 never mined), and not by its own txid alone (a copy of its transaction with
 re-encoded unlocking scripts has another txid and the same record, and is the
 same transition). The losing side discards the epoch key it sampled and
-anything it built on it, reads the new tip, and builds its change again on
-top of it, rotating again if its change removes anyone. Because wraps are
+anything it built on it, reads the new tip (section 7.4), and builds its
+change again on top of it, rotating again if its change removes anyone. Because wraps are
 published only after their token is mined (section 7.2), a losing transition
 has released nothing.
 
@@ -678,6 +678,44 @@ When more than one instance of the tooling can sign (two devices of one
 organisation), a transition mined and then displaced by a reorganisation in
 favour of the other instance's is possible; that is why wraps then wait one
 further block. A single instance never builds two transitions on one tip.
+
+### 7.4 More than one instance: the signer key and catching up
+
+Everything an instance of the tooling needs to go on from another
+instance's change is at the hosts, except the epoch key the other instance
+sampled. That key reaches a second instance the way it reaches any member:
+in a wrap.
+
+The **signer key** of an organisation is the BRC-42 child of its identity
+key under `[1, "borg organisation"]`, key id `signer`, counterparty anyone.
+Anyone derives the public key from the organisation's, so a reader can tell
+that a member is the organisation's own signer key; only a holder of the
+organisation's identity key derives the private key, and every instance of
+the tooling holds that. The signer key is not the organisation's key, so it
+may be a member and a wrap recipient (sections 4.3 and 6.3). It is granted
+and added to a group like any other key, and nothing about it is special to
+a host: admission, the index and a reader's checks see one more member.
+
+Where more than one instance can sign, the tooling SHOULD keep the signer
+key a member of every group it creates or changes, holding a current grant,
+so that each epoch's key is wrapped to it. An instance **catches up** by
+reading as any reader does (section 13): the organisation's chain and each
+group's from seq 0 against its own headers, every grant of the roll (whose
+root it MUST reproduce before it takes any, because a grant it lacked would
+read as a member owed a removal), and each epoch's key from the wrap to
+the signer key, checked against the epoch's commitment (section 6.4). It
+does so after losing a concurrent change (section 7.3), whenever its spend
+source shows one of its latest tokens spent, and once when it starts on a
+new machine.
+
+What catching up cannot bring back: the key of an epoch the signer key was
+not a member of (the members of that epoch hold it; a rotation begins one
+the instance holds); a grant issued and not yet admitted to the roll; and
+another instance's funding trees, unpublished objects and sweeps. The epoch
+key of a transition that lost is discarded by the instance that sampled it
+and is needed by nobody. Two instances MUST NOT fund carriers from one
+funding tree: two carriers on one funding output share one retraction, and
+two grants one revocation outpoint.
 
 ## 8. What a removed member can and cannot read
 

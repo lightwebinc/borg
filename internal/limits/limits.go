@@ -64,6 +64,9 @@ const (
 	PlaneChangesWarn = 16
 	// DefaultExpiry is how long a grant is current unless -expiry says.
 	DefaultExpiry = 365 * 24 * time.Hour
+	// SignerExpiry is how long the grant of the organisation's own signer
+	// key is current: it is renewed by the tooling, not by a person.
+	SignerExpiry = 10 * 365 * 24 * time.Hour
 	// ExpirySkew is the reader's allowance for clock skew (spec section
 	// 5.2; BRC-169 section 9.6).
 	ExpirySkew = 300 * time.Second

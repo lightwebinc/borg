@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -103,7 +104,7 @@ func (g *global) openOrg(ctx context.Context, need bool) (*orgRun, error) {
 			_ = eng.Close(context.WithoutCancel(ctx))
 		}
 		h.close()
-		return nil, err
+		return nil, lost(err)
 	}
 	return &orgRun{h: h, eng: eng, key: key}, nil
 }
@@ -148,6 +149,8 @@ const orgHelp = `usage: borg org create <name> [-opaque] [-member KEY]... [grant
        borg org add <key>... -group GROUP [grant flags]
        borg org remove <key>... [-group GROUP]
        borg org rekey <old> <new> [grant flags]
+       borg org signer
+       borg org sync [-retire-trees]
 
 The home's identity key is the organisation. Every change is a mined token
 of the organisation's chain or of a group's, built here, persisted with
@@ -175,6 +178,28 @@ rekey is a member's key change: a grant to the new key, the old key's
 grants revoked (roll and sweep), and in every group a transition that
 removes the old key and adds the new one, which begins a new epoch.
 
+signer grants the organisation's signer key and adds it to every group
+that lacks it. The signer key is derived from the organisation's identity
+key, so every home made around that key derives it; as a member, it is
+wrapped each epoch's key like any other, and that wrap is what org sync
+opens. With signers above one every group this home creates or changes
+includes it without being asked; org signer does it now, or for an
+organisation run from one machine that wants a second home to be able to
+catch up.
+
+sync rebuilds this home's record of the organisation from the hosts, as a
+reader reads it: the organisation's chain and each group's, verified
+against this home's headers and folded from seq 0; every grant of the
+roll, whose root must be reproduced; and each epoch key, opened from the
+wrap to the signer key and checked against the epoch's commitment. It is
+what a home runs after another instance of the tooling changed something
+(with signers above one a command does it by itself), and once on a new
+machine (borg init -from). It cannot bring back the key of an epoch the
+signer key was not a member of, a grant issued and not yet admitted, or
+another home's funding trees and unpublished work; each epoch it cannot
+open is named. -retire-trees stops this home spending its current grant
+and record trees: use it once on a home that was copied from another.
+
 Every group transition first removes the group's rotation debt (members
 whose grant is no longer current), and no transition is built that a host
 would refuse or an index would report.`
@@ -184,6 +209,7 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 	gf := addGrantFlags(fs)
 	opaque := fs.Bool("opaque", false, "create: publish grants without their fields in the clear")
 	group := fs.String("group", "", "add, remove: the group")
+	retire := fs.Bool("retire-trees", false, "sync: stop spending this home's current grant and record trees (a home copied from another)")
 	var members listFlag
 	fs.Var(&members, "member", "create: a first member's identity key; repeatable")
 	pos, err := parse(fs, args)
@@ -191,7 +217,7 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		return usage("org create <name> | org show | org add <key>... -group G | org remove <key>... [-group G] | org rekey <old> <new>")
+		return usage("org create <name> | org show | org add <key>... -group G | org remove <key>... [-group G] | org rekey <old> <new> | org signer | org sync")
 	}
 	switch pos[0] {
 	case "create":
@@ -216,8 +242,18 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 			return usage("org rekey <old> <new>")
 		}
 		return g.orgRekey(ctx, pos[1], pos[2], gf)
+	case "signer":
+		if len(pos) != 1 {
+			return usage("org signer")
+		}
+		return g.orgSigner(ctx)
+	case "sync":
+		if len(pos) != 1 {
+			return usage("org sync [-retire-trees]")
+		}
+		return g.orgSync(ctx, *retire)
 	}
-	return usage("org %q: create, show, add, remove or rekey", termsafe.Abbrev(pos[0]))
+	return usage("org %q: create, show, add, remove, rekey, signer or sync", termsafe.Abbrev(pos[0]))
 }
 
 func (g *global) orgCreate(ctx context.Context, name string, opaque bool, members []string, gf grantFlags) error {
@@ -292,6 +328,7 @@ func (g *global) orgShow() error {
 		fmt.Fprintf(g.stdout, "pending %s %s (the next command finishes it)\n", termsafe.Text(p.What), p.Txid)
 	}
 	now := time.Now()
+	signer := signerHex(st.Identity)
 	for _, gr := range o.Grants {
 		st := "issued"
 		switch {
@@ -314,21 +351,169 @@ func (g *global) orgShow() error {
 			return err
 		}
 		t := state.Latest(gr.Tokens)
-		seq, ep := uint64(0), uint32(0)
+		seq := uint64(0)
 		if t != nil {
 			seq = t.Seq
 		}
-		if n := len(gr.Epochs); n > 0 {
-			ep = gr.Epochs[n-1].Epoch
+		ep, held := currentEpoch(gr)
+		line := fmt.Sprintf("group   %s %s seq %d epoch %d, %d member(s)", gr.ID, termsafe.Text(gr.Name), seq, ep, len(members))
+		if !held {
+			line += "; KEY NOT HELD: the epoch was begun by another instance (borg org sync opens it)"
 		}
-		fmt.Fprintf(g.stdout, "group   %s %s seq %d epoch %d, %d member(s)\n", gr.ID, termsafe.Text(gr.Name), seq, ep, len(members))
+		fmt.Fprintln(g.stdout, line)
 		for _, m := range members {
 			mark := ""
+			if hex.EncodeToString(m) == signer {
+				mark = "  (the organisation's signer key)"
+			}
 			if currentAt(o, hex.EncodeToString(m), now) == nil {
-				mark = "  ROTATION DEBT: no current grant"
+				mark += "  ROTATION DEBT: no current grant"
 			}
 			fmt.Fprintf(g.stdout, "member  %s%s\n", hex.EncodeToString(m), mark)
 		}
+	}
+	return nil
+}
+
+// signerHex is the signer key of the organisation orgHex, hex, or "".
+func signerHex(orgHex string) string {
+	org, err := hex.DecodeString(orgHex)
+	if err != nil {
+		return ""
+	}
+	sk, err := borgrec.SignerKey(org)
+	if err != nil {
+		return ""
+	}
+	return hex.EncodeToString(sk)
+}
+
+// currentEpoch is the epoch a group's latest token is in, and whether this
+// home holds its key.
+func currentEpoch(gr *state.Group) (uint32, bool) {
+	recs, err := engine.GroupRecords(gr)
+	if err != nil || len(recs) == 0 {
+		return 0, false
+	}
+	ep := uint32(recs[len(recs)-1].Epoch) //nolint:gosec // at most 2^32 - 1
+	return ep, gr.EpochOf(ep) != nil
+}
+
+// syncFailed words a catch-up that could not be made, with its exit code.
+func syncFailed(err error) error {
+	var se *engine.SyncError
+	if errors.As(err, &se) {
+		if se.Incomplete {
+			return incomplete("catching up: %s", se.Msg)
+		}
+		return refused("catching up: %s", se.Msg)
+	}
+	return err
+}
+
+// reportSync prints what a catch-up did.
+func (g *global) reportSync(out io.Writer, rep *engine.SyncReport) {
+	for _, h := range rep.Unasked {
+		fmt.Fprintf(out, "sync    host %s could not be asked; the chain is read from the others\n", h)
+	}
+	if !rep.Changed() && len(rep.Missing) == 0 {
+		fmt.Fprintln(out, "sync    nothing to catch up: this home holds what the hosts answer")
+		return
+	}
+	if rep.Displaced > 0 {
+		fmt.Fprintf(out, "sync    %d token(s) of this home's are no longer in the chain and were dropped\n", rep.Displaced)
+	}
+	fmt.Fprintf(out, "sync    took %d organisation token(s), %d group token(s) (%d new group(s)), %d grant(s), %d epoch key(s)\n",
+		rep.OrgTokens, rep.GroupTokens, rep.Groups, rep.Grants, rep.Keys)
+	for _, m := range rep.Missing {
+		cur := ""
+		if m.Current {
+			cur = ", the CURRENT epoch: this home wraps it to nobody until it opens it or the group rotates"
+		}
+		fmt.Fprintf(out, "missing group %s epoch %d%s: %s\n", m.Group, m.Epoch, cur, termsafe.Text(m.Why))
+	}
+	if rep.Coins+rep.Spent > 0 {
+		fmt.Fprintf(out, "sync    pool: %d coin(s) added (change of the tokens taken), %d removed (spent by another instance)\n", rep.Coins, rep.Spent)
+	}
+	for _, t := range rep.Retired {
+		fmt.Fprintf(out, "sync    funding tree %s is no longer spent from this home: another instance may spend it too\n", t)
+	}
+}
+
+// orgSync catches the home up with the hosts.
+func (g *global) orgSync(ctx context.Context, retire bool) error {
+	h, err := g.openHome()
+	if err != nil {
+		return err
+	}
+	defer h.close()
+	if o := h.st.Org; o != nil {
+		if g.cfg.Hall != "" && g.cfg.Hall != o.Hall {
+			return usage("the organisation lives in hall %s, and hall is set to %s", o.Hall, g.cfg.Hall)
+		}
+		g.cfg.Hall = o.Hall
+	}
+	hall, err := g.hall()
+	if err != nil {
+		return err
+	}
+	eng, err := g.engine(ctx, h)
+	if eng != nil {
+		defer func() {
+			_ = eng.Close(context.WithoutCancel(ctx))
+			g.tallies(eng)
+		}()
+	}
+	var lostErr *engine.LostError
+	if errors.As(err, &lostErr) {
+		g.say("%v", err)
+	} else if err != nil {
+		return err
+	}
+	rep, err := eng.Sync(ctx, hall, engine.SyncOptions{RetireTrees: retire})
+	if err != nil {
+		return syncFailed(err)
+	}
+	g.reportSync(g.stdout, rep)
+	o := h.st.Org
+	fmt.Fprintf(g.stdout, "org     %s %s in %s: seq %d, %d grant(s), %d group(s)\n", h.st.Identity, termsafe.Text(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
+	for _, m := range rep.Missing {
+		if m.Current {
+			return incomplete("group %s: the key of the current epoch %d is not open here; ask again after the next block (another instance publishes its wraps one block after its token), run `borg org signer` where the key is held, or rotate the group", m.Group, m.Epoch)
+		}
+	}
+	return nil
+}
+
+// orgSigner grants the signer key and adds it to every group that lacks
+// it.
+func (g *global) orgSigner(ctx context.Context) error {
+	r, err := g.openOrg(ctx, true)
+	if err != nil {
+		return err
+	}
+	defer r.close(ctx, g)
+	sk, err := r.eng.EnsureSigner(ctx)
+	if err != nil {
+		return lost(err)
+	}
+	fmt.Fprintf(g.stdout, "signer  %s\n", hex.EncodeToString(sk))
+	o := r.h.st.Org
+	for i := range o.Groups {
+		gr := &o.Groups[i]
+		members, _, err := engine.Members(gr)
+		if err != nil {
+			return err
+		}
+		if slices.ContainsFunc(members, func(m []byte) bool { return string(m) == string(sk) }) {
+			fmt.Fprintf(g.stdout, "group   %s %s: a member already\n", gr.ID, termsafe.Text(gr.Name))
+			continue
+		}
+		res, err := r.eng.GroupChange(ctx, gr.ID, engine.Change{What: "group " + gr.ID + " (add the signer key)"})
+		if err != nil {
+			return lost(err)
+		}
+		g.printChange(gr, res)
 	}
 	return nil
 }
@@ -770,7 +955,11 @@ func cmdGroup(ctx context.Context, g *global, args []string) error {
 			return lost(err)
 		}
 		t := state.Latest(gr.Tokens)
-		fmt.Fprintf(g.stdout, "group   %s\nname    %s\nseq     0 %s epoch 0, %d member(s), wrapped to each\n", gr.ID, termsafe.Text(gr.Name), t.Txid, len(raw))
+		n := len(raw)
+		if members, _, err := engine.Members(gr); err == nil {
+			n = len(members)
+		}
+		fmt.Fprintf(g.stdout, "group   %s\nname    %s\nseq     0 %s epoch 0, %d member(s), wrapped to each\n", gr.ID, termsafe.Text(gr.Name), t.Txid, n)
 		return nil
 	case len(pos) == 1 && pos[0] == "list":
 		return g.groupList(ctx)

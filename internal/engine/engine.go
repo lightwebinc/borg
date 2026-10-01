@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/script"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
@@ -127,9 +128,12 @@ type Legs struct {
 type Engine struct {
 	St     *state.State
 	Signer *bwallet.Signer
-	Pool   *bwallet.Pool
-	Legs   Legs
-	Opts   Options
+	// Key is the organisation's identity private key. It derives the
+	// signer key (signer.go), which only Sync opens wraps with.
+	Key  *ec.PrivateKey
+	Pool *bwallet.Pool
+	Legs Legs
+	Opts Options
 	// Now is the clock records are stamped with; Sleep waits.
 	Now   func() time.Time
 	Sleep func(ctx context.Context, d time.Duration) error

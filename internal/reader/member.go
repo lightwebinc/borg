@@ -270,16 +270,17 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 	return op
 }
 
-// Recipients asks every host the wraps class for an epoch (all pages) and
-// returns every recipient of every wrap that verified against the epoch's
-// token, for the member enumeration of spec section 13.
-func (c *Client) Recipients(ctx context.Context, gv *GroupView, epoch uint32) (map[string]bool, []Refusal) {
+// Wraps asks every host the wraps class for an epoch (all pages) and
+// returns every wrap carrier that verified against the epoch's token, once
+// each.
+func (c *Client) Wraps(ctx context.Context, gv *GroupView, epoch uint32) ([]*Car, []Refusal) {
 	begin := gv.Begins[epoch]
-	out := map[string]bool{}
+	var out []*Car
 	var refused []Refusal
 	if begin == nil {
-		return out, nil
+		return nil, nil
 	}
+	seen := map[string]bool{}
 	q := Query{"hall": gv.Hall, "org": hex.EncodeToString(gv.Org), "group": gv.Chain, "epoch": fmt.Sprint(epoch)}
 	for _, h := range c.Hosts {
 		ho := c.Pages(ctx, h, q, true, func(o lookup.Output) string { return SubjectID(o.Beef) })
@@ -292,9 +293,24 @@ func (c *Client) Recipients(ctx context.Context, gv *GroupView, epoch uint32) (m
 				refused = append(refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
 				continue
 			}
-			for _, r := range car.Carrier.Wrap.Recipients() {
-				out[string(r)] = true
+			if !seen[car.Txid] {
+				seen[car.Txid] = true
+				out = append(out, car)
 			}
+		}
+	}
+	return out, refused
+}
+
+// Recipients asks every host the wraps class for an epoch (all pages) and
+// returns every recipient of every wrap that verified against the epoch's
+// token, for the member enumeration of spec section 13.
+func (c *Client) Recipients(ctx context.Context, gv *GroupView, epoch uint32) (map[string]bool, []Refusal) {
+	out := map[string]bool{}
+	cars, refused := c.Wraps(ctx, gv, epoch)
+	for _, car := range cars {
+		for _, r := range car.Carrier.Wrap.Recipients() {
+			out[string(r)] = true
 		}
 	}
 	return out, refused

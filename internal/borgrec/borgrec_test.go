@@ -230,3 +230,48 @@ func mapB64(m map[string][]byte) map[wallet.CertificateFieldNameUnder50Bytes]wal
 	}
 	return out
 }
+
+// The signer key anyone derives from the organisation's public key is the
+// public key of the private key only the organisation derives, and a wrap
+// to it opens under that private key.
+func TestSignerKey(t *testing.T) {
+	orgKey, err := ec.NewPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	org := orgKey.PubKey().Compressed()
+	pub, err := SignerKey(org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv, err := SignerPrivate(orgKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(priv.PubKey().Compressed(), pub) {
+		t.Fatal("the public and private derivations of the signer key disagree")
+	}
+	if bytes.Equal(pub, org) || IsAnyone(pub) {
+		t.Fatal("the signer key must be neither the organisation nor the anyone key")
+	}
+	k, err := SampleKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id [32]byte
+	id[0] = 7
+	ow, _ := wallet.NewCompletedProtoWallet(orgKey)
+	member, _ := ec.PublicKeyFromBytes(pub)
+	entry, err := Wrap(context.Background(), ow, org, member, id, 3, k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sw, _ := wallet.NewCompletedProtoWallet(priv)
+	got, err := Unwrap(context.Background(), sw, entry, orgKey.PubKey(), id, 3, Commitment(k))
+	if err != nil || got != k {
+		t.Fatalf("the signer key does not open its wrap: %v", err)
+	}
+	if _, err := SignerKey(AnyoneKey()); err == nil {
+		t.Fatal("the anyone key has no signer key")
+	}
+}

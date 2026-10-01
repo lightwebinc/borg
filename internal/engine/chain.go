@@ -38,9 +38,15 @@ type LostError struct {
 	What string
 	Txid string
 	By   string
+	// Fee is set when it was the fee coin, not the predecessor, that
+	// another transaction spent: no transition beat this one.
+	Fee bool
 }
 
 func (e *LostError) Error() string {
+	if e.Fee {
+		return fmt.Sprintf("%s %s lost: its fee coin is spent by %s, a transaction of another instance of the tooling that held the same coin; the epoch key it sampled is discarded and nothing was released; run the command again", e.What, Short(e.Txid), Short(e.By))
+	}
 	return fmt.Sprintf("%s %s lost: its predecessor is spent by %s, another transition; the epoch key it sampled is discarded and nothing was released; the command reads the new tip when run again", e.What, Short(e.Txid), Short(e.By))
 }
 
@@ -307,6 +313,13 @@ func (e *Engine) CreateOrg(ctx context.Context, orgKey *ec.PrivateKey, hall, nam
 	if o.Hall != hall || o.Name != name || o.Opaque != opaque {
 		return fmt.Errorf("an organisation %q in hall %s (opaque %v) was begun in this home; finish it with the same name, hall and setting", o.Name, o.Hall, o.Opaque)
 	}
+	if e.Opts.Signers > 1 && len(members) < borgrec.MaxDelta {
+		// Several instances sign: the signer key's grant is among the
+		// first, so no later token is needed to admit it.
+		if req, err := e.signerReq(); err == nil {
+			members = append(slices.Clone(members), req)
+		}
+	}
 	if len(members) > borgrec.MaxDelta {
 		return fmt.Errorf("%d members: one token admits at most %d grants; create with %d and grant the rest", len(members), borgrec.MaxDelta, borgrec.MaxDelta)
 	}
@@ -490,10 +503,19 @@ func (e *Engine) CreateGroup(ctx context.Context, name string, members [][]byte,
 	if len(o.Tokens) == 0 {
 		return nil, errors.New("the organisation has no token yet (borg org create)")
 	}
+	members = slices.Clone(members)
+	if e.signerActive() {
+		sk, err := e.EnsureSigner(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.ContainsFunc(members, func(m []byte) bool { return bytes.Equal(m, sk) }) {
+			members = append(members, sk)
+		}
+	}
 	if len(members) > borgrec.MaxDelta {
 		return nil, fmt.Errorf("one token adds at most %d members; create with %d and add the rest", borgrec.MaxDelta, borgrec.MaxDelta)
 	}
-	members = slices.Clone(members)
 	sortKeys(members)
 	for i, m := range members {
 		if i > 0 && bytes.Equal(m, members[i-1]) {
@@ -607,6 +629,21 @@ func (e *Engine) GroupChange(ctx context.Context, gid string, c Change) (*Change
 	isMember := map[string]bool{}
 	for _, m := range members {
 		isMember[string(m)] = true
+	}
+	if e.signerActive() {
+		// The signer key joins every group this home changes, so another
+		// instance opens the epoch keys this one samples (signer.go). Its
+		// grant is renewed first, so it is never rotation debt.
+		sk, err := e.EnsureSigner(ctx)
+		if err != nil {
+			return nil, err
+		}
+		named := func(set [][]byte) bool {
+			return slices.ContainsFunc(set, func(k []byte) bool { return bytes.Equal(k, sk) })
+		}
+		if !isMember[string(sk)] && !named(c.Add) && !named(c.Remove) {
+			c.Add = append(slices.Clone(c.Add), sk)
+		}
 	}
 	res := &ChangeResult{}
 	remove := map[string]bool{}
@@ -878,8 +915,21 @@ func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why strin
 			}
 		}
 	}
+	feeLost := false
 	if by == "" {
-		return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+		// The predecessor is unspent, so no transition beat this one. If
+		// its fee coin is spent by another transaction (another instance of
+		// the tooling held the same coin), these bytes can never mine: the
+		// transition is discarded like a lost one, and built again.
+		f := tr.Fee
+		if f == nil {
+			return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+		}
+		spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
+		if err != nil || spent == "" || spent == tr.Txid {
+			return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+		}
+		by, feeLost = spent, true
 	}
 	e.St.Org.Pending = nil
 	if f := tr.Fee; f != nil {
@@ -894,7 +944,8 @@ func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why strin
 	if err := e.St.Save(); err != nil {
 		return err
 	}
-	return &LostError{What: tr.What, Txid: tr.Txid, By: by}
+	e.pending = nil
+	return &LostError{What: tr.What, Txid: tr.Txid, By: by, Fee: feeLost}
 }
 
 // adopt joins a mined transition to its chain, keeps the epoch key it
@@ -1123,7 +1174,11 @@ func (e *Engine) wrapOwed(ctx context.Context, g *state.Group) error {
 	cur := recs[len(recs)-1]
 	ep := g.EpochOf(uint32(cur.Epoch)) //nolint:gosec // at most 2^32 - 1
 	if ep == nil {
-		return fmt.Errorf("group %s: this home holds no key for epoch %d (it was begun elsewhere)", g.ID, cur.Epoch)
+		// Another instance began the epoch and this home has not opened
+		// its key (Sync): it wraps to nobody, and the instance that holds
+		// the key does.
+		e.note("group %s: this home holds no key for epoch %d, begun by another instance: nothing is wrapped from here until `borg org sync` opens it, or the group rotates (borg epoch rotate %s)", g.ID, cur.Epoch, g.ID)
+		return nil
 	}
 	members, _, err := Members(g)
 	if err != nil {

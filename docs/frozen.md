@@ -5,11 +5,13 @@ host. Once one record using it is on a public host, readers verify against it
 for as long as anyone reads that record, so changing it afterwards is a new
 identifier or a new record version, never an edit.
 
-**Status: signed, every row.** The four rows of section 2 that waited for
-the transaction vectors (carrier shape, chain-token shape, script
+**Status: signed, every row but one.** Key id `signer` (section 1) is
+proposed: it was added with the catch-up of spec section 7.4 and changes no
+record, host rule or reader rule. The four rows of section 2 that waited
+for the transaction vectors (carrier shape, chain-token shape, script
 canonicality and sweep) and the carrier-input half of the signatures row
-were signed on 2026-10-01 against E4.1's 95 transaction vectors, with the
-wording of spec sections 11.1, 11.2 and 11.5 that the vectors settled. The registry rows of section 1
+were signed against the 95 transaction vectors, with the wording of spec
+sections 11.1, 11.2 and 11.5 that the vectors settled. The registry rows of section 1
 belong in bcommon's registry (`docs/registry.md`), where they are checked
 against every registered row; this repository does not edit that registry.
 
@@ -30,6 +32,7 @@ and no basket starts with `borg`.
 | Key id | `grant` | a grant carrier's record output and field signature, and the outputs of trees that fund grants | signed |
 | Key id | `chain` | the outputs of trees that pay for a chain's first token; never a carrier's | signed |
 | Key id | `fund` | the embedded wallet's funding key | signed |
+| Key id | `signer` | the organisation's signer key: a member key every instance of the organisation's tooling derives, which a wrap is addressed to like any member's (spec section 7.4). No host or reader rule reads it | proposed |
 | Tag prefix | `bo` (`62 6f`) | owned by borg | signed |
 | Tag | `bo` `0x01` | organisation token, first field | signed |
 | Tag | `bo` `0x02` | funding-tree output, its one field | signed |

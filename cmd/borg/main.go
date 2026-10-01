@@ -46,7 +46,8 @@ const (
 const usageText = `usage: borg [global flags] <command> [flags] [arguments]
 
 identity (a home):
-  init                          create the home: identity key and coin pool
+  init [-from FILE]             create the home: identity key and coin pool;
+                                -from: around another home's identity.json
   fund -txid TXID               import a mined payment to the fund address
   fund [-blocks N]              mine coinbase to the fund address (a chain you run)
   hall new <name>               create a hall: <name>_<random suffix>, its topic,
@@ -62,6 +63,10 @@ the organisation (this home's identity key is the organisation):
                                 remove from a group, a new epoch; without -group,
                                 offboard: revoke every grant and leave every group
   org rekey <old> <new>         a member's key change: every group rotates
+  org signer                    grant the organisation's signer key and add it to
+                                every group, so a second home can catch up
+  org sync                      rebuild this home's record of the organisation
+                                from the hosts: chains, roll, epoch keys
   grant issue <key>             issue a membership grant and admit it to the roll
   grant revoke <key|txid>...    revoke by the roll and by sweep (-by)
   group create <name>           a group with a fresh epoch key, wrapped to each member

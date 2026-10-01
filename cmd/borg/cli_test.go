@@ -179,7 +179,7 @@ func (h *harness) orgWithGroup() org {
 	o.carol = h.identity("carol", false)
 	h.newHall("org")
 	r := h.must("org", "org", "create", "Example Organisation", "-member", o.alice, "-member", o.bob, "-member", o.carol)
-	if !strings.Contains(r.stdout, "seq     0 ") || strings.Count(r.stdout, "grant   ") != 3 {
+	if !strings.Contains(r.stdout, "seq     0 ") || strings.Count(r.stdout, " member\n") != 3 {
 		h.t.Fatalf("org create:\n%s\n%s", r.stdout, r.stderr)
 	}
 	r = h.must("org", "group", "create", "engineering", "-member", o.alice, "-member", o.bob, "-member", o.carol)

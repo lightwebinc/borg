@@ -1,13 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/bcommon/guard"
 
@@ -453,5 +457,279 @@ func TestPlaneWrapAHostMissedIsOfferedDirectly(t *testing.T) {
 	r = h.must("alice", "fill")
 	if !strings.Contains(r.stdout, "filled  wrap ") || !h.b.Holds(wraps[0]) {
 		t.Fatalf("fill of an ended epoch's wrap:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// sorted is a listing's lines in order: two homes hold the same grants in
+// the order each came to hold them.
+func sorted(s string) string {
+	l := strings.Split(s, "\n")
+	sort.Strings(l)
+	return strings.Join(l, "\n")
+}
+
+// block mines one empty block.
+func (h *harness) block() {
+	h.t.Helper()
+	if _, err := h.chain.Generate(1, "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+// secondHome makes a home around the organisation's identity key, as on a
+// second machine, funds it, and catches it up from the hosts.
+func (h *harness) secondHome(name string) result {
+	h.t.Helper()
+	r := h.must(name, "init", "-from", filepath.Join(h.dir, "org", "identity.json"))
+	if !strings.Contains(r.stdout, "around the identity in") {
+		h.t.Fatalf("init -from:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.must(name, "fund", "-blocks", "102")
+	return h.run(name, "", "org", "sync")
+}
+
+// Two homes of one organisation race the same transition again and again.
+// Each round one is mined and the other loses; the loser catches up from
+// the hosts by itself (the chain, the roll, and the winner's epoch key
+// from the wrap to the signer key) and makes its change on the new tip.
+// Both homes stay usable, and every member opens every epoch.
+func TestTwoHomesRaceAndBothStayUsable(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.env["BORG_SIGNERS"] = "2"
+	o := h.orgWithGroup()
+	h.block()
+	r := h.secondHome("org2")
+	if r.code != 0 || !strings.Contains(r.stdout, "took 1 organisation token(s), 1 group token(s) (1 new group(s)), 4 grant(s), 0 epoch key(s)") {
+		// The first home has not released epoch 0 yet (signers 2: one
+		// block after the token, by its next command).
+		if r.code != exitIncomplete || !strings.Contains(r.stdout, "epoch 0, the CURRENT epoch") {
+			t.Fatalf("org sync on the second home:\n%s\n%s", r.stdout, r.stderr)
+		}
+	}
+	h.must("org", "org", "sync")
+	r = h.must("org2", "org", "sync")
+	if !strings.Contains(r.stdout, "1 epoch key(s)") {
+		t.Fatalf("the second home did not open epoch 0 from the wrap to the signer key:\n%s\n%s", r.stdout, r.stderr)
+	}
+	groupToken := func(tx *transaction.Transaction) bool {
+		tok, err := borgrec.ReadToken(tx)
+		return err == nil && tok.Group != nil
+	}
+	homes := []string{"org", "org2"}
+	for round := 0; round < 4; round++ {
+		winner, loser := homes[round%2], homes[(round+1)%2]
+		h.chain.SetHoldIf(groupToken)
+		done := make(chan result, 1)
+		go func() { done <- h.run(winner, "", "epoch", "rotate", o.group) }()
+		for deadline := time.Now().Add(20 * time.Second); h.chain.Waiting() == 0; {
+			if time.Now().After(deadline) {
+				t.Fatalf("round %d: %s sent no transition", round, winner)
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+		// The loser builds on the same tip while the winner's is unmined.
+		lr := h.run(loser, "", "epoch", "rotate", o.group)
+		h.want(lr, exitRefused, "lost: its predecessor is spent by")
+		h.chain.SetHoldIf(nil)
+		h.chain.Mine()
+		if wr := <-done; wr.code != 0 {
+			t.Fatalf("round %d: %s: exit %d\n%s\n%s", round, winner, wr.code, wr.stdout, wr.stderr)
+		}
+		h.block()
+		// The loser runs again: it catches up by itself and rotates on
+		// the winner's token.
+		lr = h.must(loser, "epoch", "rotate", o.group)
+		if !strings.Contains(lr.stderr, "sync    took 0 organisation token(s), 1 group token(s)") || !strings.Contains(lr.stdout, "(a new epoch") {
+			t.Fatalf("round %d: %s did not catch up and rotate:\n%s\n%s", round, loser, lr.stdout, lr.stderr)
+		}
+		h.block()
+	}
+	// Each home releases what it sampled and opens what the other did.
+	for range 2 {
+		for _, home := range homes {
+			h.run(home, "", "org", "sync")
+			h.block()
+		}
+	}
+	var shows []string
+	for _, home := range homes {
+		r := h.must(home, "org", "sync")
+		if strings.Contains(r.stdout, "missing ") {
+			t.Fatalf("%s still lacks an epoch key:\n%s\n%s", home, r.stdout, r.stderr)
+		}
+		s := h.must(home, "org", "show").stdout
+		if strings.Contains(s, "KEY NOT HELD") || !strings.Contains(s, "seq 8 epoch 8, 4 member(s)") || !strings.Contains(s, "(the organisation's signer key)") {
+			t.Fatalf("%s org show:\n%s", home, s)
+		}
+		shows = append(shows, s)
+	}
+	if sorted(shows[0]) != sorted(shows[1]) {
+		t.Fatalf("the two homes disagree:\n%s\n---\n%s", shows[0], shows[1])
+	}
+	// Both go on: one removes a member, the other adds one.
+	h.must("org", "org", "remove", o.bob, "-group", o.group)
+	h.block()
+	dave := h.identity("dave", false)
+	r = h.must("org2", "org", "add", dave, "-group", o.group)
+	if !strings.Contains(r.stderr, "sync    took") || !strings.Contains(r.stdout, "epoch 9\n") {
+		t.Fatalf("the second home after the first's removal:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.block()
+	h.must("org", "org", "sync")
+	h.block()
+	h.must("org2", "org", "sync")
+	r = h.must("alice", "open", o.group)
+	for e := 0; e <= 9; e++ {
+		if !strings.Contains(r.stdout, fmt.Sprintf("epoch   %d OPENED", e)) {
+			t.Fatalf("alice cannot open epoch %d:\n%s\n%s", e, r.stdout, r.stderr)
+		}
+	}
+	h.want(h.run("bob", "", "open", o.group), exitRefused, "removed at seq 9")
+	r = h.must("dave", "open", o.group)
+	if !strings.Contains(r.stdout, "epoch   9 OPENED") {
+		t.Fatalf("dave:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("alice", "group", "show", o.group)
+	if !strings.Contains(r.stderr, "name exactly the 4 member(s)") {
+		t.Fatalf("group show:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// A home copied from another holds the same coins and the same funding
+// trees. After the original moved on, the copy catches up: the coins the
+// original spent leave its pool, and it stops spending the trees the
+// original spends, so no two carriers share a funding output.
+func TestCopiedHomeCatchesUp(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.env["BORG_SIGNERS"] = "2"
+	o := h.orgWithGroup()
+	h.block()
+	h.must("org", "org", "sync")
+	if err := copyDir(filepath.Join(h.dir, "org"), filepath.Join(h.dir, "org2")); err != nil {
+		t.Fatal(err)
+	}
+	dave := h.identity("dave", false)
+	h.must("org", "org", "add", dave, "-group", o.group)
+	h.must("org", "org", "remove", o.bob, "-group", o.group)
+	h.block()
+	h.must("org", "org", "sync")
+	r := h.must("org2", "org", "remove", o.carol, "-group", o.group)
+	if !strings.Contains(r.stderr, "sync    took 1 organisation token(s), 2 group token(s) (0 new group(s)), 1 grant(s), 1 epoch key(s)") ||
+		strings.Count(r.stderr, "is no longer spent from this home") != 2 || !strings.Contains(r.stderr, "removed (spent by another instance)") ||
+		!strings.Contains(r.stdout, "epoch 2 (a new epoch") {
+		t.Fatalf("the copy:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.block()
+	h.must("org2", "org", "sync")
+	for _, m := range []string{"alice", "dave"} {
+		r := h.must(m, "open", o.group)
+		if !strings.Contains(r.stdout, "epoch   2 OPENED") {
+			t.Fatalf("%s:\n%s\n%s", m, r.stdout, r.stderr)
+		}
+	}
+	h.want(h.run("carol", "", "open", o.group), exitRefused, "removed at seq 3")
+	// The original catches up in turn and goes on.
+	r = h.must("org", "epoch", "rotate", o.group)
+	if !strings.Contains(r.stderr, "sync    took 0 organisation token(s), 1 group token(s)") || !strings.Contains(r.stdout, "epoch 3 (a new epoch") {
+		t.Fatalf("the original:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// An organisation run from one machine grants its signer key, and a home
+// made on a new machine around the same identity key rebuilds from the
+// hosts: the chains, the roll (an opaque grant's fields opened through its
+// keyring), and each epoch key the signer key was a member of. An epoch
+// begun before the signer key joined is named as not recoverable.
+func TestNewMachineRebuildsFromHosts(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	var o org
+	o.key = h.identity("org", true)
+	o.alice = h.identity("alice", false)
+	o.bob = h.identity("bob", false)
+	h.newHall("org")
+	h.env["BORG_ORG"] = o.key
+	h.must("org", "org", "create", "Example Organisation", "-opaque", "-member", o.alice, "-member", o.bob, "-role", "engineer")
+	r := h.must("org", "group", "create", "engineering", "-member", o.alice, "-member", o.bob)
+	o.group = groupLine.FindStringSubmatch(r.stdout)[1]
+	h.must("org", "epoch", "rotate", o.group)
+	r = h.must("org", "org", "signer")
+	if !strings.Contains(r.stdout, "signer  ") || !strings.Contains(r.stdout, "seq 2 ") {
+		t.Fatalf("org signer:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "org", "signer")
+	if !strings.Contains(r.stdout, "a member already") {
+		t.Fatalf("org signer again:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.must("org", "org", "remove", o.bob, "-group", o.group)
+	want := h.must("org", "org", "show").stdout
+	r = h.secondHome("org2")
+	if r.code != 0 || !strings.Contains(r.stdout, "took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)") ||
+		!strings.Contains(r.stdout, "missing group "+o.group+" epoch 0: the signer key was not a member of this epoch") {
+		t.Fatalf("org sync on a new machine:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if got := h.must("org2", "org", "show").stdout; sorted(got) != sorted(want) {
+		t.Fatalf("the rebuilt home differs:\n%s\n---\n%s", got, want)
+	}
+	if !strings.Contains(want, " engineer member until ") {
+		t.Fatalf("the opaque grants' fields were not read back:\n%s", want)
+	}
+	r = h.must("org2", "org", "sync")
+	if !strings.Contains(r.stdout, "took 0 organisation token(s), 0 group token(s) (0 new group(s)), 0 grant(s), 0 epoch key(s)") {
+		t.Fatalf("a second sync:\n%s", r.stdout)
+	}
+	// The rebuilt home runs the organisation: it adds a member, who is
+	// wrapped the current epoch's key, which only a home that holds it can
+	// do.
+	carol := h.identity("carol", false)
+	r = h.must("org2", "org", "add", carol, "-group", o.group)
+	if !strings.Contains(r.stdout, "epoch 2\n") {
+		t.Fatalf("add from the rebuilt home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("carol", "open", o.group)
+	if !strings.Contains(r.stdout, "epoch   2 OPENED") {
+		t.Fatalf("carol:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// A home that has an identity is not made again.
+	h.want(h.run("org2", "", "init", "-from", filepath.Join(h.dir, "org", "identity.json")), exitUsage, "has an identity already")
+}
+
+// A copied home holds the same coins. A transition whose fee coin the
+// other home spent can never mine although nothing beat it to its
+// predecessor: it is discarded, not sent again for ever, and after a
+// catch-up the home pays with a coin that is its own to spend.
+func TestTransitionWhoseFeeCoinIsSpentElsewhereIsDiscarded(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	r := h.must("org", "group", "create", "ops", "-member", o.alice)
+	ops := groupLine.FindStringSubmatch(r.stdout)[1]
+	if err := copyDir(filepath.Join(h.dir, "org"), filepath.Join(h.dir, "org2")); err != nil {
+		t.Fatal(err)
+	}
+	h.must("org", "epoch", "rotate", o.group)
+	r = h.run("org2", "", "epoch", "rotate", ops)
+	h.want(r, exitRefused, "lost: its fee coin is spent by")
+	r = h.must("org2", "doctor")
+	if strings.Contains(r.stdout, "transition  ") {
+		t.Fatalf("the transition that cannot mine is still pending:\n%s", r.stdout)
+	}
+	// No signer key in this organisation: the other home's epoch key is
+	// not at the hosts for this one, and the catch-up says so.
+	r = h.run("org2", "", "org", "sync")
+	h.want(r, exitIncomplete, "the key of the current epoch 1 is not open here")
+	if !strings.Contains(r.stdout, "took 0 organisation token(s), 1 group token(s)") ||
+		!strings.Contains(r.stdout, "epoch 1, the CURRENT epoch") || !strings.Contains(h.must("org2", "doctor").stdout, "KEY NOT HELD: epoch 1") {
+		t.Fatalf("org sync:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org2", "epoch", "rotate", ops)
+	if !strings.Contains(r.stdout, "epoch 1 (a new epoch") {
+		t.Fatalf("rotate after the catch-up:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("alice", "open", ops)
+	if !strings.Contains(r.stdout, "epoch   1 OPENED") {
+		t.Fatalf("alice:\n%s\n%s", r.stdout, r.stderr)
 	}
 }

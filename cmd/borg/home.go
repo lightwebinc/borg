@@ -265,10 +265,35 @@ func (g *global) engine(ctx context.Context, h *home) (*engine.Engine, error) {
 		return nil, err
 	}
 	eng.Note, eng.Verbose = g.say, g.verbose
-	if err := eng.Start(ctx); err != nil {
+	if eng.Key, err = g.orgKey(); err != nil {
 		return eng, err
 	}
-	return eng, nil
+	err = eng.Start(ctx)
+	var lostErr *engine.LostError
+	if err != nil && !errors.As(err, &lostErr) {
+		return eng, err
+	}
+	// Where more than one instance of the tooling can sign, a command
+	// first catches up with what another instance did (spec section 7.4):
+	// after losing a race, and whenever the node shows one of the home's
+	// latest tokens spent.
+	if g.cfg.Signers > 1 && h.st.Org != nil && (lostErr != nil || eng.Stale(ctx)) {
+		rep, serr := eng.Sync(ctx, h.st.Org.Hall, engine.SyncOptions{})
+		if serr != nil {
+			if err != nil {
+				g.say("%v", err)
+			}
+			return eng, syncFailed(serr)
+		}
+		g.reportSync(g.stderr, rep)
+		if lostErr != nil {
+			// The transition a previous command left was beaten to the
+			// chain. This command builds on the tip just read.
+			g.say("%v", lostErr)
+		}
+		err = eng.Owed(ctx)
+	}
+	return eng, err
 }
 
 // tallies prints, in mode unicast, each host's count of what it took and
@@ -286,26 +311,68 @@ func (g *global) tallies(eng *engine.Engine) {
 	}
 }
 
-const initHelp = `usage: borg init
+const initHelp = `usage: borg init [-from FILE]
 
 Create the home (mode 0700): an identity key and an empty coin pool. Print
 the identity key, which is a member's name in every grant and group, and an
 organisation's name when this home runs one, and the fund address for the
-configured network. A home that exists is left alone and printed.`
+configured network. A home that exists is left alone and printed.
+
+-from FILE makes the home around an identity key that exists already:
+FILE is another home's identity.json, carried here by hand. It is how an
+organisation's home is made on a second machine; borg org sync then
+rebuilds its state from the hosts. FILE is the organisation's key: carry it
+as the secret it is, and never copy a whole home that is still in use.`
+
+// adoptIdentity copies an identity file into a home that has none.
+func adoptIdentity(home, from string) error {
+	raw, err := os.ReadFile(from) //nolint:gosec // the operator's own path
+	if err != nil {
+		return err
+	}
+	var id struct {
+		WIF string `json:"wif"`
+	}
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return usage("-from %s is not an identity file: %v", from, err)
+	}
+	if _, err := ec.PrivateKeyFromWif(id.WIF); err != nil {
+		return usage("-from %s holds no identity key: %v", from, err)
+	}
+	dst := filepath.Join(home, "identity.json")
+	if _, err := os.Stat(dst); err == nil {
+		return usage("the home %s has an identity already; -from makes a new home", home)
+	}
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return err
+	}
+	return state.WriteAtomic(dst, raw, 0o600)
+}
 
 func cmdInit(_ context.Context, g *global, args []string) error {
 	fs := g.flagSet("init", initHelp)
+	from := fs.String("from", "", "another home's identity.json: make this home around that identity key")
 	if pos, err := parse(fs, args); err != nil {
 		return err
 	} else if len(pos) > 0 {
 		return usage("init takes no arguments")
+	}
+	if *from != "" {
+		if err := adoptIdentity(g.cfg.Home, *from); err != nil {
+			return err
+		}
+		fmt.Fprintln(g.stdout, "created", g.cfg.Home, "around the identity in", *from)
 	}
 	e, err := bwallet.Create(g.cfg.Home, engine.Profile)
 	if errors.Is(err, bwallet.ErrIdentityExists) {
 		if e, err = g.openWallet(); err != nil {
 			return err
 		}
-		g.say("the home %s exists; left as it is", g.cfg.Home)
+		if *from == "" {
+			g.say("the home %s exists; left as it is", g.cfg.Home)
+		} else if err := e.Pool.Save(); err != nil {
+			return err
+		}
 	} else if err != nil {
 		return err
 	} else {
@@ -695,13 +762,17 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 				}
 			}
 			line := fmt.Sprintf("group       %s %s: %d member(s), %d token(s)", gr.ID, termsafe.Text(gr.Name), len(members), len(gr.Tokens))
-			if n := len(gr.Epochs); n > 0 && gr.RotateEvery > 0 {
-				if recs, err := engine.GroupRecords(gr); err == nil {
+			if recs, err := engine.GroupRecords(gr); err == nil && len(recs) > 0 {
+				last := recs[len(recs)-1]
+				if gr.RotateEvery > 0 {
 					for _, r := range recs {
-						if r.Seq == gr.Epochs[n-1].Seq && now.Sub(time.Unix(int64(r.Created), 0)) > time.Duration(gr.RotateEvery)*time.Second { //nolint:gosec // a claim below 2^38
-							line += fmt.Sprintf("; ROTATION DUE: epoch %d is older than its rotateEvery of %ds (borg epoch rotate %s)", gr.Epochs[n-1].Epoch, gr.RotateEvery, gr.ID)
+						if r.Seq == last.EpochSeq && now.Sub(time.Unix(int64(r.Created), 0)) > time.Duration(gr.RotateEvery)*time.Second { //nolint:gosec // a claim below 2^38
+							line += fmt.Sprintf("; ROTATION DUE: epoch %d is older than its rotateEvery of %ds (borg epoch rotate %s)", last.Epoch, gr.RotateEvery, gr.ID)
 						}
 					}
+				}
+				if gr.EpochOf(uint32(last.Epoch)) == nil { //nolint:gosec // at most 2^32 - 1
+					line += fmt.Sprintf("; KEY NOT HELD: epoch %d was begun by another instance (borg org sync opens it)", last.Epoch)
 				}
 			}
 			if len(debt) > 0 {

@@ -142,6 +142,13 @@ func (c *Chain) SetHold(hold bool) {
 	c.Hold = hold
 }
 
+// SetHoldIf sets HoldIf while the chain serves.
+func (c *Chain) SetHoldIf(f func(tx *transaction.Transaction) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.HoldIf = f
+}
+
 // Waiting is how many accepted transactions are not yet mined.
 func (c *Chain) Waiting() int {
 	c.mu.Lock()

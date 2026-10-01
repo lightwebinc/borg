@@ -438,6 +438,23 @@ func (g *Grant) OpenFields(ctx context.Context, subject wallet.Interface) (map[s
 	if err != nil {
 		return nil, ErrIdentity
 	}
+	return g.openFields(ctx, subject, org)
+}
+
+// OpenFieldsAsOrg is the organisation's side of the same keyring: the
+// BRC-2 key a keyring entry is encrypted under is shared by the two ends,
+// so the organisation's wallet opens it with the subject as counterparty.
+// It is how the organisation reads back the fields of a grant it issued
+// when the grant carries no reveal.
+func (g *Grant) OpenFieldsAsOrg(ctx context.Context, org wallet.Interface) (map[string]string, error) {
+	subject, err := ec.PublicKeyFromBytes(g.Subject)
+	if err != nil {
+		return nil, ErrIdentity
+	}
+	return g.openFields(ctx, org, subject)
+}
+
+func (g *Grant) openFields(ctx context.Context, w wallet.Interface, other *ec.PublicKey) (map[string]string, error) {
 	ring := make(map[wallet.CertificateFieldNameUnder50Bytes]wallet.StringBase64, len(g.Keyring))
 	fields := make(map[wallet.CertificateFieldNameUnder50Bytes]wallet.StringBase64, len(g.Fields))
 	for n, c := range g.Keyring {
@@ -446,8 +463,8 @@ func (g *Grant) OpenFields(ctx context.Context, subject wallet.Interface) (map[s
 	for n, c := range g.Fields {
 		fields[wallet.CertificateFieldNameUnder50Bytes(n)] = wallet.StringBase64(base64.StdEncoding.EncodeToString(c))
 	}
-	out, err := certificates.DecryptFields(ctx, subject, ring, fields,
-		wallet.Counterparty{Type: wallet.CounterpartyTypeOther, Counterparty: org}, false, "")
+	out, err := certificates.DecryptFields(ctx, w, ring, fields,
+		wallet.Counterparty{Type: wallet.CounterpartyTypeOther, Counterparty: other}, false, "")
 	if err != nil {
 		return nil, err
 	}
