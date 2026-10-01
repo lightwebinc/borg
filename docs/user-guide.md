@@ -238,8 +238,8 @@ it, with no coin and no key:
 ```console
 $ borg fill                 # the organisation's chain, the roll, every group
 $ borg fill engineering     # or the groups named
-filled  group 5a0c… seq 5 ff7b385c2c81 at https://host-b.example.com
-filled  wrap 911458675ba8 at https://host-b.example.com
+filled  group 5a0c… seq 5 3f9ac4107d21 at https://host-b.example.com
+filled  wrap 9ade7f2e0b15 at https://host-b.example.com
 filled  2 object(s) at 1 host(s)
 ```
 
