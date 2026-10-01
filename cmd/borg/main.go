@@ -76,6 +76,8 @@ a member, or anyone reading:
   member-of <key>               the groups whose members include a key
   history                       a priced question: pay the host's 402, read a chain
   terms [URL]                   a host's terms document
+  fill [group...]               replay to each host what another host answered
+                                and it lacks: chains, roll grants, current wraps
 
 a host's payee:
   payee key -out FILE           write BORG_PAYEE_KEY for this home's identity
@@ -160,6 +162,7 @@ var commands map[string]command
 func init() {
 	commands = map[string]command{
 		"doctor":    cmdDoctor,
+		"fill":      cmdFill,
 		"epoch":     cmdEpoch,
 		"fund":      cmdFund,
 		"grant":     cmdGrant,

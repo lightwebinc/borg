@@ -74,6 +74,7 @@ variables.
 | `member <key>` | optional | a reader's settings | whether the key is a current member, and its grants; for this home's own key, each grant is kept whole in the home and opened through its keyring |
 | `member-of <key>` | optional | a reader's settings | the groups whose members include the key, each group's chain folded here |
 | `history` | yes, funded | a reader's settings, `history_host`, `asset`, `settle` | the priced question: pays the host's 402 from the pool and prints every token of a chain (`-chain org` or a group id) |
+| `fill [group...]` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the organisation's chain, the roll's grants, and each group's chain and current wraps (spec section 12); signs nothing |
 | `terms [URL]` | no | `history_host` or URL | prints a host's terms document |
 | `payee key -out FILE` | yes | nothing | writes `BORG_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
 | `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `asset`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
@@ -276,6 +277,20 @@ token (its inclusion path checked, else the roll folded here), a scope
 that grants `member`, not expired (300 s of skew allowed), revealed unless
 the organisation is opaque, and its revocation outpoint unspent per
 `asset`. Without a spend source a grant is never current (exit 3).
+
+## Filling a host
+
+A host that was down off the plane, or was left out of a unicast publish,
+lacks what the others hold, and nothing resends it: `roll`, `group show`
+and `open` report it (`DISAGREES`). `fill` repairs it from the other hosts'
+answers (spec sections 11.6 and 12). Each token a host lacks is replayed in
+the BEEF a host admits, assembled from the token and its parent (the token
+at `seq - 1`, or at `seq` 0 the chain tree, read from `asset` with its
+proof); each grant of the roll and each wrap of a group's current epoch is
+submitted as another host answered it. Everything is verified against
+`header_url` first, and each fill is confirmed by a lookup at the host it
+went to. Anyone who reads the hall can run it; it needs no coin. Wraps of
+ended epochs are not replayed: a member keeps the keys it opened.
 
 ## The spend index
 

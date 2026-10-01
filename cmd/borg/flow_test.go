@@ -374,3 +374,43 @@ func TestHostileNamesAreFiltered(t *testing.T) {
 		}
 	}
 }
+
+// A host that lost part of a chain, a grant and the current wraps is
+// filled from the other host's answers: each token replayed in the BEEF a
+// host admits (seq 0 with the chain tree read from the node), each carrier
+// as the other host answered it; afterwards the hosts agree.
+func TestFillReplaysWhatAHostLacks(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "org", "remove", o.bob, "-group", o.group)
+	lost := append(h.b.Txids("token"), h.b.Txids("grant")[0])
+	for _, id := range append(lost, h.b.Txids("wrap")...) {
+		h.b.Forget(id)
+	}
+	r := h.run("alice", "", "group", "show", o.group)
+	h.want(r, exitIncomplete, "DISAGREES")
+	r = h.must("alice", "fill")
+	if !strings.Contains(r.stdout, "organisation chain seq 0") || !strings.Contains(r.stdout, "group "+o.group+" seq 1") ||
+		!strings.Contains(r.stdout, "filled  grant ") || !strings.Contains(r.stdout, "filled  wrap ") {
+		t.Fatalf("fill:\n%s\n%s", r.stdout, r.stderr)
+	}
+	for _, id := range lost {
+		if !h.b.Holds(id) {
+			t.Fatalf("host b still lacks %s after the fill:\n%s", id, r.stdout)
+		}
+	}
+	// The current epoch's wraps are back: every member has one.
+	r = h.must("alice", "group", "show", o.group)
+	if strings.Contains(r.stderr, "DISAGREES") {
+		t.Fatalf("after the fill:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("alice", "roll")
+	if got := strings.Count(r.stderr, "reproduced"); got != 2 {
+		t.Fatalf("roll after the fill:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("alice", "fill")
+	if !strings.Contains(r.stdout, "filled  0 object(s)") {
+		t.Fatalf("a second fill:\n%s", r.stdout)
+	}
+}
