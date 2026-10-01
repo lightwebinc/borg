@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/bwallet"
@@ -474,7 +475,11 @@ func (e *Engine) syncTrees(ctx context.Context, grants map[[32]byte]*reader.Car,
 	retire := map[string]bool{}
 	see := func(car *reader.Car, foreign bool) {
 		t, kind, ok := e.St.TreeOf(car.Carrier.Funding.Txid.String())
-		if !ok || kind == state.TreeChain || t.Remaining() == 0 {
+		if !ok {
+			e.keepForeignTree(car)
+			return
+		}
+		if kind == state.TreeChain || t.Remaining() == 0 {
 			return
 		}
 		if foreign || car.Carrier.Funding.Index >= t.Next {
@@ -522,6 +527,38 @@ func (e *Engine) syncTrees(ctx context.Context, grants map[[32]byte]*reader.Car,
 		}
 		ts.Trees = producer.Index(ts.Trees, t)
 	}
+}
+
+// keepForeignTree records the funding tree of a carrier another instance
+// funded, as its BEEF carries it, with no output left to spend from here:
+// the tree's outputs are locked to keys this identity derives, so this home
+// can sweep it (a revocation, the kill switch) although it never minted it.
+func (e *Engine) keepForeignTree(car *reader.Car) {
+	kind := state.TreeRecord
+	if car.Kind == borgrec.TxGrant {
+		kind = state.TreeGrant
+	}
+	var tree *transaction.Transaction
+	for _, in := range car.Tx.Inputs {
+		if in.SourceTransaction != nil && in.SourceTXID != nil && *in.SourceTXID == car.Carrier.Funding.Txid {
+			tree = in.SourceTransaction
+		}
+	}
+	idx := int(car.Carrier.Funding.Index)
+	if tree == nil || tree.MerklePath == nil || idx >= len(tree.Outputs) {
+		return
+	}
+	lock := tree.Outputs[idx].LockingScript
+	count := uint32(0)
+	for _, o := range tree.Outputs {
+		if o.LockingScript != nil && bytes.Equal(*o.LockingScript, *lock) {
+			count++
+		}
+	}
+	ts := e.St.Set(kind)
+	ts.Trees = append(ts.Trees, funding.Tree{IdentityKeyHex: e.Signer.IdentityHex(), Txid: tree.TxID().String(), RawHex: tree.Hex(),
+		BumpHex: tree.MerklePath.Hex(), Height: tree.MerklePath.BlockHeight, Sats: tree.Outputs[idx].Satoshis, Count: count, Next: count,
+		Funder: "another instance"})
 }
 
 // syncPool makes the pool the home's unspent coins again: a coin the node

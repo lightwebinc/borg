@@ -693,6 +693,15 @@ func TestNewMachineRebuildsFromHosts(t *testing.T) {
 	if !strings.Contains(r.stdout, "epoch   2 OPENED") {
 		t.Fatalf("carol:\n%s\n%s", r.stdout, r.stderr)
 	}
+	// The rebuilt home holds the trees of what the hosts answered, so its
+	// kill switch reaches the grants and wraps the first home funded.
+	r = h.must("org2", "kill", "-confirm", "KILL", "-yes")
+	if strings.Count(r.stdout, "swept   grant tree") < 2 || !strings.Contains(r.stdout, "swept   record tree") {
+		t.Fatalf("kill from the rebuilt home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if rr := h.run("alice", "", "member", o.alice); rr.code == 0 {
+		t.Fatalf("alice is still a current member after the rebuilt home's kill:\n%s\n%s", rr.stdout, rr.stderr)
+	}
 	// A home that has an identity is not made again.
 	h.want(h.run("org2", "", "init", "-from", filepath.Join(h.dir, "org", "identity.json")), exitUsage, "has an identity already")
 }
@@ -828,5 +837,102 @@ func TestPayeeBroadcastsThePaymentsAPaymentSpends(t *testing.T) {
 		if !h.chain.Mined(p.Txid) {
 			t.Fatalf("payment %s is not mined", p.Txid)
 		}
+	}
+}
+
+// org due lists the members whose grant is about to stop being current,
+// then, once it has, the removal owed; -apply makes it, with a new epoch.
+func TestOrgDueListsAndApplies(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	dave := h.identity("dave", false)
+	h.must("org", "org", "add", dave, "-group", o.group, "-expiry", "3s")
+	r := h.must("org", "org", "due", "-within", "1h")
+	if !strings.Contains(r.stdout, "soon    group "+o.group+" engineering: "+dave+": its grant expires ") || strings.Contains(r.stdout, "due     ") {
+		t.Fatalf("org due before the expiry:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if r := h.must("org", "org", "due", "-within", "1s"); strings.Contains(r.stdout, dave) {
+		t.Fatalf("a grant outside the window is listed:\n%s", r.stdout)
+	}
+	if r := h.must("org", "doctor"); !strings.Contains(r.stdout, "1 member(s) hold a grant that expires within") {
+		t.Fatalf("doctor:\n%s", r.stdout)
+	}
+	time.Sleep(3100 * time.Millisecond)
+	r = h.run("org", "", "org", "due")
+	h.want(r, exitIncomplete, "1 removal(s) due")
+	if !strings.Contains(r.stdout, "due     group "+o.group+" engineering: "+dave+": its grant expired ") {
+		t.Fatalf("org due after the expiry:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "org", "due", "-apply")
+	if !strings.Contains(r.stdout, "removed "+dave+": rotation debt") || !strings.Contains(r.stdout, "epoch 1 (a new epoch") ||
+		!strings.Contains(r.stdout, "applied 1 group(s)") {
+		t.Fatalf("org due -apply:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "org", "due")
+	if strings.Contains(r.stdout, "due     ") {
+		t.Fatalf("org due after -apply:\n%s", r.stdout)
+	}
+	r = h.must("org", "org", "due", "-apply")
+	if !strings.Contains(r.stdout, "applied 0 group(s)") {
+		t.Fatalf("a second -apply:\n%s", r.stdout)
+	}
+	h.want(h.run("dave", "", "open", o.group), exitRefused, "removed at seq 2")
+	r = h.must("alice", "open", o.group)
+	if !strings.Contains(r.stdout, "epoch   1 OPENED") {
+		t.Fatalf("alice:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// The kill switch sweeps every grant and record tree of the home: every
+// grant is revoked for every verifier, and the hosts retract the grants
+// and the wraps. Without -yes nothing is sent.
+func TestKillSweepsEveryTree(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("alice", "open", o.group)
+	h.want(h.run("org", "", "kill"), exitUsage, "pass -confirm KILL")
+	r := h.must("org", "kill", "-confirm", "KILL")
+	if !strings.Contains(r.stdout, "would sweep grant tree") || !strings.Contains(r.stdout, "would sweep record tree") ||
+		!strings.Contains(r.stdout, "nothing was sent") || !strings.Contains(r.stdout, "3 grant(s) of this home's record on it") {
+		t.Fatalf("kill without -yes:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if len(h.a.Txids("grant")) != 3 || len(h.a.Txids("sweep")) != 0 {
+		t.Fatal("a dry run changed the hosts")
+	}
+	r = h.must("org", "kill", "-confirm", "KILL", "-yes")
+	if !strings.Contains(r.stdout, "swept   grant tree") || !strings.Contains(r.stdout, "swept   record tree") ||
+		!strings.Contains(r.stdout, "killed  ") || !strings.Contains(r.stderr, "not erasure") {
+		t.Fatalf("kill:\n%s\n%s", r.stdout, r.stderr)
+	}
+	for _, m := range []string{"alice", "bob", "carol"} {
+		key := map[string]string{"alice": o.alice, "bob": o.bob, "carol": o.carol}[m]
+		rr := h.run(m, "", "member", key)
+		if rr.code == 0 || !(strings.Contains(rr.stdout+rr.stderr, "revoked") || strings.Contains(rr.stdout+rr.stderr, "no host answers a grant")) {
+			t.Fatalf("%s is still a current member after the kill:\n%s\n%s", m, rr.stdout, rr.stderr)
+		}
+	}
+	for _, host := range []*testchain.Host{h.a, h.b} {
+		for _, id := range append(host.Txids("grant"), host.Txids("wrap")...) {
+			if st := host.Status(id); st != borgrec.StatusRetracted {
+				t.Fatalf("carrier %s is %s at a host after the kill", id, st)
+			}
+		}
+	}
+	// A member who had not opened the key finds no wrap; one who had
+	// keeps what it opened.
+	h.want(h.run("carol", "", "open", o.group), exitIncomplete, "no host answers a wrap of epoch 0")
+	r = h.must("alice", "open", o.group)
+	if !strings.Contains(r.stdout, "epoch   0 held") {
+		t.Fatalf("alice after the kill:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "kill", "-confirm", "KILL")
+	if !strings.Contains(r.stdout, "0 tree(s) to sweep") {
+		t.Fatalf("kill again:\n%s", r.stdout)
+	}
+	r = h.must("org", "doctor")
+	if strings.Contains(r.stdout, "sweep       ") {
+		t.Fatalf("doctor after the kill:\n%s", r.stdout)
 	}
 }

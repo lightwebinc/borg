@@ -151,6 +151,7 @@ const orgHelp = `usage: borg org create <name> [-opaque] [-member KEY]... [grant
        borg org rekey <old> <new> [grant flags]
        borg org signer
        borg org sync [-retire-trees]
+       borg org due [-within DUR] [-apply]
 
 The home's identity key is the organisation. Every change is a mined token
 of the organisation's chain or of a group's, built here, persisted with
@@ -200,6 +201,10 @@ another home's funding trees and unpublished work; each epoch it cannot
 open is named. -retire-trees stops this home spending its current grant
 and record trees: use it once on a home that was copied from another.
 
+due lists the removals owed (members of a group whose grant is no longer
+current) and the grants of group members that expire within -within;
+-apply makes the removals due now, each with a new epoch (borg org due -h).
+
 Every group transition first removes the group's rotation debt (members
 whose grant is no longer current), and no transition is built that a host
 would refuse or an index would report.`
@@ -209,6 +214,8 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 	gf := addGrantFlags(fs)
 	opaque := fs.Bool("opaque", false, "create: publish grants without their fields in the clear")
 	group := fs.String("group", "", "add, remove: the group")
+	within := fs.Duration("within", dueWindow, "due: also list group members whose grant expires within this long")
+	apply := fs.Bool("apply", false, "due: make the removals due now, each with a new epoch")
 	retire := fs.Bool("retire-trees", false, "sync: stop spending this home's current grant and record trees (a home copied from another)")
 	var members listFlag
 	fs.Var(&members, "member", "create: a first member's identity key; repeatable")
@@ -217,7 +224,7 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		return usage("org create <name> | org show | org add <key>... -group G | org remove <key>... [-group G] | org rekey <old> <new> | org signer | org sync")
+		return usage("org create <name> | org show | org add <key>... -group G | org remove <key>... [-group G] | org rekey <old> <new> | org signer | org sync | org due")
 	}
 	switch pos[0] {
 	case "create":
@@ -247,13 +254,18 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 			return usage("org signer")
 		}
 		return g.orgSigner(ctx)
+	case "due":
+		if len(pos) != 1 {
+			return usage("org due [-within DUR] [-apply]")
+		}
+		return g.orgDue(ctx, *within, *apply)
 	case "sync":
 		if len(pos) != 1 {
 			return usage("org sync [-retire-trees]")
 		}
 		return g.orgSync(ctx, *retire)
 	}
-	return usage("org %q: create, show, add, remove, rekey, signer or sync", termsafe.Abbrev(pos[0]))
+	return usage("org %q: create, show, add, remove, rekey, signer, sync or due", termsafe.Abbrev(pos[0]))
 }
 
 func (g *global) orgCreate(ctx context.Context, name string, opaque bool, members []string, gf grantFlags) error {

@@ -67,11 +67,15 @@ the organisation (this home's identity key is the organisation):
                                 every group, so a second home can catch up
   org sync                      rebuild this home's record of the organisation
                                 from the hosts: chains, roll, epoch keys
+  org due [-apply]              the removals due: members whose grant is no longer
+                                current, and those expiring soon; -apply removes
   grant issue <key>             issue a membership grant and admit it to the roll
   grant revoke <key|txid>...    revoke by the roll and by sweep (-by)
   group create <name>           a group with a fresh epoch key, wrapped to each member
   group list                    the organisation's groups
   epoch rotate <group>          begin a new epoch with the same members
+  kill -confirm KILL [-yes]     sweep every grant and record tree: the whole roll
+                                revoked, every grant and wrap retracted
 
 a member, or anyone reading:
   open <group>                  open the group's epoch keys this key can open,
@@ -175,6 +179,7 @@ func init() {
 		"hall":      cmdHall,
 		"history":   cmdHistory,
 		"init":      cmdInit,
+		"kill":      cmdKill,
 		"member":    cmdMember,
 		"member-of": cmdMemberOf,
 		"open":      cmdOpen,

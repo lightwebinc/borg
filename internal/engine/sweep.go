@@ -96,6 +96,27 @@ func (e *Engine) Retract(ctx context.Context, hall, txid string, vouts []uint32)
 	return &e.St.Sweeps[len(e.St.Sweeps)-1], nil
 }
 
+// Retire stops the home spending every grant and record tree it holds:
+// after the kill switch no output of them funds anything again.
+func (e *Engine) Retire() error {
+	for _, kind := range []string{state.TreeGrant, state.TreeRecord} {
+		ts := e.St.Trees[kind]
+		if ts == nil {
+			continue
+		}
+		if ts.Tree != nil {
+			ts.Tree.Next = ts.Tree.Count
+		}
+		for i := range ts.Trees {
+			ts.Trees[i].Next = ts.Trees[i].Count
+		}
+		for i := range ts.Ahead {
+			ts.Ahead[i].Next = ts.Ahead[i].Count
+		}
+	}
+	return e.St.Save()
+}
+
 // sweepFee takes the sweep's fee coin, and the coin as the pool held it,
 // so a refused sweep can give it back. When every coin left is change from
 // a transaction not yet mined, it waits up to Opts.Wait for one.

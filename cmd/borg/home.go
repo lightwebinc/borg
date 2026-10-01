@@ -776,7 +776,16 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 				}
 			}
 			if len(debt) > 0 {
-				line += fmt.Sprintf("; ROTATION DEBT: %s (cleared by the group's next transition: borg epoch rotate %s)", strings.Join(debt, ", "), gr.ID)
+				line += fmt.Sprintf("; ROTATION DEBT: %s (cleared by the group's next transition: borg org due -apply, or borg epoch rotate %s)", strings.Join(debt, ", "), gr.ID)
+			}
+			soon := 0
+			for _, m := range members {
+				if _, exp := latestGrant(o, hex.EncodeToString(m)); now.Before(exp) && exp.Sub(now) <= dueWindow {
+					soon++
+				}
+			}
+			if soon > 0 {
+				line += fmt.Sprintf("; %d member(s) hold a grant that expires within %s (borg org due)", soon, dueWindow)
 			}
 			if fs, at, err := engine.Flagged(gr); err == nil && fs != "" {
 				line += fmt.Sprintf("; INCONSISTENT: seq %d is %s, and the epoch's key is wrapped to nobody else until the group rotates (borg epoch rotate %s)", at, fs, gr.ID)
