@@ -217,6 +217,9 @@ func DecodeGrant(p []byte) (*Grant, error) {
 		return nil, err
 	}
 	copy(g.Serial[:], b)
+	if _, err := f.need(MKRevocation); err != nil {
+		return nil, err
+	}
 	rv, err := f.array(MKRevocation, MaxKeys)
 	if err != nil || len(rv) != 2 {
 		return nil, fmt.Errorf("%w: key %d", ErrType, MKRevocation)

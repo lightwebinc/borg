@@ -210,6 +210,9 @@ func Reason(err error) string {
 		{ErrCount, "count"}, {ErrScope, "scope"}, {ErrExpiry, "expiry"}, {ErrRole, "role"},
 		{ErrQuery, "query"}, {ErrToken, "token"}, {ErrUnwrap, "undecryptable"},
 		{ErrScalar, "undecryptable"}, {ErrCommitment, "commitment"},
+		{ErrShape, "shape"}, {ErrBEEF, "beef"}, {ErrMineable, "mineable"}, {ErrUnlock, "unlock"},
+		{ErrLock, "lock"}, {ErrFieldSig, "signature"}, {ErrFunding, "funding"}, {ErrUnmined, "unmined"},
+		{ErrTokenInput, "token-input"}, {ErrNotBorg, "not-borg"},
 	} {
 		if errors.Is(err, e.err) {
 			return e.s
