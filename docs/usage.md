@@ -239,8 +239,9 @@ epoch rotate <group>`). A chain that folds to a mismatch is not operable.
 **Rotation.** A transition begins a new epoch, with a key sampled fresh
 (never derived), when it removes anyone, when it adds a key any earlier
 token of the group removed, when the predecessor sets `rotateOnJoin` and
-it adds anyone, and on `epoch rotate`. A key change removes the old key,
-so it rotates too. Every group transition first removes the group's
+it adds anyone, when it adds anyone from a home that does not hold the
+current epoch's key (another home began the epoch), and on `epoch rotate`.
+A key change removes the old key, so it rotates too. Every group transition first removes the group's
 **rotation debt**: members whose grant is no longer current by the
 organisation's own record (revoked in the roll, swept, or expired).
 
@@ -296,7 +297,9 @@ hosts, and `org sync` reads it as a reader does (spec section 7.4):
    it, and anyone can tell from the organisation's key which member it is.
    `org signer` grants it and adds it to every group; with `signers` above
    one every group the home creates or changes includes it. An epoch it
-   was not a member of is printed as `missing`;
+   was not a member of is printed as `missing`; while that is a group's
+   current epoch the home wraps it to nobody (exit 3), and an addition it
+   makes to the group begins a new epoch instead;
 4. the coins and the trees. A coin the node shows spent (another home held
    it too) leaves the pool; the change of each token taken joins it. A
    grant or record tree another home also spends is retired here, and

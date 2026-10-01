@@ -293,8 +293,9 @@ chain.
 
 - the key of an epoch the signer key was not a member of (it is named as
   `missing`). Its members still hold it. If it is the current epoch, this
-  home wraps it to nobody until it opens it; `borg epoch rotate <group>`
-  begins an epoch this home holds;
+  home wraps it to nobody until it opens it, and an addition made from this
+  home begins a new epoch, which it holds (so does `borg epoch rotate
+  <group>`);
 - a grant another home issued and no token admitted yet;
 - another home's unpublished work, funding trees and coin. Each home funds
   itself and mints its own trees. The trees of every grant and wrap the

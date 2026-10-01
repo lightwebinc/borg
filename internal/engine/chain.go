@@ -717,6 +717,13 @@ func (e *Engine) GroupChange(ctx context.Context, gid string, c Change) (*Change
 		e.note("group %s: seq %d is %s, so this transition begins a new epoch", gid, at, st)
 		rotate = true
 	}
+	if !rotate && len(rec.Add) > 0 && g.EpochOf(uint32(pred.Epoch)) == nil { //nolint:gosec // at most 2^32 - 1
+		// Another instance began the epoch and this home has not opened
+		// its key: it could not wrap it to the keys it adds. A new epoch
+		// is one it holds.
+		e.note("group %s: this home does not hold the key of epoch %d, so this transition begins a new epoch", gid, pred.Epoch)
+		rotate = true
+	}
 	if !rotate && len(rec.Add) == 0 {
 		return nil, errors.New("the transition changes nothing")
 	}

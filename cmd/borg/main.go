@@ -156,10 +156,13 @@ func helpOrUsage(err error) error {
 type global struct {
 	cfg     config.Config
 	verbose bool
-	stdin   io.Reader
-	stdout  io.Writer
-	stderr  io.Writer
-	getenv  func(string) string
+	// explicitSync is set by org sync, which catches up itself and prints
+	// what it did: opening the publisher then does not do it first.
+	explicitSync bool
+	stdin        io.Reader
+	stdout       io.Writer
+	stderr       io.Writer
+	getenv       func(string) string
 }
 
 func (g *global) say(format string, args ...any) { fmt.Fprintf(g.stderr, format+"\n", args...) }

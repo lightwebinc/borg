@@ -469,6 +469,7 @@ func (g *global) orgSync(ctx context.Context, retire bool) error {
 	if err != nil {
 		return err
 	}
+	g.explicitSync = true
 	eng, err := g.engine(ctx, h)
 	if eng != nil {
 		defer func() {
@@ -489,6 +490,12 @@ func (g *global) orgSync(ctx context.Context, retire bool) error {
 	g.reportSync(g.stdout, rep)
 	o := h.st.Org
 	fmt.Fprintf(g.stdout, "org     %s %s in %s: seq %d, %d grant(s), %d group(s)\n", h.st.Identity, termsafe.Text(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
+	// What the home owes now that it holds the chain: a wrap to a member
+	// another home added, when this one holds the epoch's key. A home with
+	// no coin yet makes them with its next command.
+	if err := eng.Owed(ctx); err != nil {
+		g.say("the wraps this home owes were not all made: %s; the next command makes them", firstLine(err.Error()))
+	}
 	for _, m := range rep.Missing {
 		if m.Current {
 			return incomplete("group %s: the key of the current epoch %d is not open here; ask again after the next block (another instance publishes its wraps one block after its token), run `borg org signer` where the key is held, or rotate the group", m.Group, m.Epoch)

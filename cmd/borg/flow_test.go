@@ -575,22 +575,34 @@ func TestTwoHomesRaceAndBothStayUsable(t *testing.T) {
 	h.block()
 	dave := h.identity("dave", false)
 	r = h.must("org2", "org", "add", dave, "-group", o.group)
-	if !strings.Contains(r.stderr, "sync    took") || !strings.Contains(r.stdout, "epoch 9\n") {
+	// The first home has not released epoch 9 yet (one block after its
+	// token), so the second cannot wrap it to dave: its addition begins an
+	// epoch it holds.
+	if !strings.Contains(r.stderr, "sync    took") || !strings.Contains(r.stderr, "does not hold the key of epoch 9") ||
+		!strings.Contains(r.stdout, "epoch 10 (a new epoch") {
 		t.Fatalf("the second home after the first's removal:\n%s\n%s", r.stdout, r.stderr)
 	}
 	h.block()
-	h.must("org", "org", "sync")
-	h.block()
-	h.must("org2", "org", "sync")
+	for range 2 {
+		for _, home := range homes {
+			h.run(home, "", "org", "sync")
+			h.block()
+		}
+	}
+	for _, home := range homes {
+		if r := h.must(home, "org", "sync"); strings.Contains(r.stdout, "missing ") {
+			t.Fatalf("%s lacks an epoch key at the end:\n%s\n%s", home, r.stdout, r.stderr)
+		}
+	}
 	r = h.must("alice", "open", o.group)
-	for e := 0; e <= 9; e++ {
+	for e := 0; e <= 10; e++ {
 		if !strings.Contains(r.stdout, fmt.Sprintf("epoch   %d OPENED", e)) {
 			t.Fatalf("alice cannot open epoch %d:\n%s\n%s", e, r.stdout, r.stderr)
 		}
 	}
 	h.want(h.run("bob", "", "open", o.group), exitRefused, "removed at seq 9")
 	r = h.must("dave", "open", o.group)
-	if !strings.Contains(r.stdout, "epoch   9 OPENED") {
+	if !strings.Contains(r.stdout, "epoch   10 OPENED") || !strings.Contains(r.stdout, "epoch   9 CANNOT OPEN: not a member") {
 		t.Fatalf("dave:\n%s\n%s", r.stdout, r.stderr)
 	}
 	r = h.must("alice", "group", "show", o.group)

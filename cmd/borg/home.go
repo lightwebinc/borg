@@ -277,7 +277,7 @@ func (g *global) engine(ctx context.Context, h *home) (*engine.Engine, error) {
 	// first catches up with what another instance did (spec section 7.4):
 	// after losing a race, and whenever the node shows one of the home's
 	// latest tokens spent.
-	if g.cfg.Signers > 1 && h.st.Org != nil && (lostErr != nil || eng.Stale(ctx)) {
+	if g.cfg.Signers > 1 && !g.explicitSync && h.st.Org != nil && (lostErr != nil || eng.Stale(ctx)) {
 		rep, serr := eng.Sync(ctx, h.st.Org.Hall, engine.SyncOptions{})
 		if serr != nil {
 			if err != nil {
