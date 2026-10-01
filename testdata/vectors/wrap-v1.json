@@ -1,0 +1,174 @@
+{
+  "note": "Each entry is BRC-369 section 5.2's release in BRC-78 serialization: version 42421033, the organisation, the member, the key id SHA-256(epochId || epoch as 4 bytes big-endian), then BRC-2 ciphertext (32-byte IV, the 32-byte key, 16-byte tag) under [2, \"keyed content release\"]. IVs are fixed stand-ins, SHA-256(\"borg/vector/iv/wrap/<epoch>/<member>\"). opens records what each member's own wallet recovers, checked against the epoch's commitment (BRC-369 section 5.3 check 2).",
+  "removal": {
+    "atSeq": 2,
+    "cannotOpen": [
+      1,
+      2
+    ],
+    "checkLabels": [
+      "token",
+      "entry",
+      "undecryptable",
+      "commitment"
+    ],
+    "holds": [
+      0
+    ],
+    "removed": "bob",
+    "replayAcrossEpochs": "refused: entry (key id)",
+    "wrongToken": "the epoch 1 wrap held against epoch 0's token: token"
+  },
+  "wraps": [
+    {
+      "label": "epoch 0 to alice and bob, after create",
+      "hex": "a70044626f770101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260350406504d3fbe1ae098f09a49dffa122220400055820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc068258b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d9554685d17f749e626ca377f66b9918834872d933a324a21709188e9cb48b641e4f1c9410250b65fb1b37fe172dbef8430897deee55410eb6ab61001d45655d15340348c2077b548b0d81f6b51d2b57889cdd58b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d955467a63714fdf14bd3ab252b69b1d598b04a84bd4cf516aa34b415280c4e00b49d62e76ca7f125d7fd2df95ff837a0e901dd6b96ace25b480f0a42d14c0ae2930f64a0c22358b0a981aa7255b6e334abfd3",
+      "length": 493,
+      "epoch": 0,
+      "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+      "releaseKeyId": "370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d95546",
+      "entries": [
+        {
+          "recipient": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+          "member": "alice",
+          "iv": "85d17f749e626ca377f66b9918834872d933a324a21709188e9cb48b641e4f1c",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d9554685d17f749e626ca377f66b9918834872d933a324a21709188e9cb48b641e4f1c9410250b65fb1b37fe172dbef8430897deee55410eb6ab61001d45655d15340348c2077b548b0d81f6b51d2b57889cdd"
+        },
+        {
+          "recipient": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+          "member": "bob",
+          "iv": "7a63714fdf14bd3ab252b69b1d598b04a84bd4cf516aa34b415280c4e00b49d6",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d955467a63714fdf14bd3ab252b69b1d598b04a84bd4cf516aa34b415280c4e00b49d62e76ca7f125d7fd2df95ff837a0e901dd6b96ace25b480f0a42d14c0ae2930f64a0c22358b0a981aa7255b6e334abfd3"
+        }
+      ],
+      "opens": [
+        {
+          "party": "alice",
+          "opens": true,
+          "key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca"
+        },
+        {
+          "party": "bob",
+          "opens": true,
+          "key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca"
+        },
+        {
+          "party": "carol",
+          "opens": false,
+          "reason": "undecryptable: no entry names this member, and another member's entry does not decrypt"
+        }
+      ]
+    },
+    {
+      "label": "epoch 0 to carol, after the add",
+      "hex": "a70044626f770101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260350406504d3fbe1ae098f09a49dffa122220400055820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc068158b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d955461f467c85f78990a75ab6a2dcb8b86b39f00050db85a867cfb313ec98b73861b28759539a30c4fe3ca917e7d3c5ddf3c28ea6e5f069b5eb837cc6cc8dcbee94bcb3844c2c3149cd3dd5863a9b9a6aa45d",
+      "length": 309,
+      "epoch": 0,
+      "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+      "releaseKeyId": "370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d95546",
+      "entries": [
+        {
+          "recipient": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+          "member": "carol",
+          "iv": "1f467c85f78990a75ab6a2dcb8b86b39f00050db85a867cfb313ec98b73861b2",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d955461f467c85f78990a75ab6a2dcb8b86b39f00050db85a867cfb313ec98b73861b28759539a30c4fe3ca917e7d3c5ddf3c28ea6e5f069b5eb837cc6cc8dcbee94bcb3844c2c3149cd3dd5863a9b9a6aa45d"
+        }
+      ],
+      "opens": [
+        {
+          "party": "alice",
+          "opens": false,
+          "reason": "undecryptable: no entry names this member, and another member's entry does not decrypt"
+        },
+        {
+          "party": "bob",
+          "opens": false,
+          "reason": "undecryptable: no entry names this member, and another member's entry does not decrypt"
+        },
+        {
+          "party": "carol",
+          "opens": true,
+          "key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca"
+        }
+      ]
+    },
+    {
+      "label": "epoch 1 to alice and carol, after bob's removal",
+      "hex": "a70044626f770101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260350406504d3fbe1ae098f09a49dffa1222204010558202f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421068258b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee94355ab31a8518b37e7013fc9fdb980a1b6e0566e4a57a2eb2c4ab349c4933f1a5e05848155dbe21d35e1f34d8bdd90fd79bd6e04bb68e9ccf1697b2a3b97e019badf318470a8ddf3452836c39c37db6a158b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee948ac1453f92b19d30436a2751d13d9a54116ce4e8d353cb92379f2c947dff2eb1f2a71c87e4b736c79006a878bd9aac147b4b070007771c5f4d51761df42dfb66614760526029185b74edc9d695403f44",
+      "length": 493,
+      "epoch": 1,
+      "epochId": "2f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421",
+      "releaseKeyId": "a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee94",
+      "entries": [
+        {
+          "recipient": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+          "member": "alice",
+          "iv": "355ab31a8518b37e7013fc9fdb980a1b6e0566e4a57a2eb2c4ab349c4933f1a5",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee94355ab31a8518b37e7013fc9fdb980a1b6e0566e4a57a2eb2c4ab349c4933f1a5e05848155dbe21d35e1f34d8bdd90fd79bd6e04bb68e9ccf1697b2a3b97e019badf318470a8ddf3452836c39c37db6a1"
+        },
+        {
+          "recipient": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+          "member": "carol",
+          "iv": "8ac1453f92b19d30436a2751d13d9a54116ce4e8d353cb92379f2c947dff2eb1",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee948ac1453f92b19d30436a2751d13d9a54116ce4e8d353cb92379f2c947dff2eb1f2a71c87e4b736c79006a878bd9aac147b4b070007771c5f4d51761df42dfb66614760526029185b74edc9d695403f44"
+        }
+      ],
+      "opens": [
+        {
+          "party": "alice",
+          "opens": true,
+          "key": "2502fa9da5b7f889d8de37defbdda85531e2c6b20626a3e59efa6815aac06189"
+        },
+        {
+          "party": "bob",
+          "opens": false,
+          "reason": "undecryptable: no entry names this member, and another member's entry does not decrypt"
+        },
+        {
+          "party": "carol",
+          "opens": true,
+          "key": "2502fa9da5b7f889d8de37defbdda85531e2c6b20626a3e59efa6815aac06189"
+        }
+      ]
+    },
+    {
+      "label": "epoch 2 to alice and carol, after the scheduled rotation",
+      "hex": "a70044626f770101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260350406504d3fbe1ae098f09a49dffa1222204020558202eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2068258b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b5090295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e240554ff227f01851f722e4bc4eee798deeb32a08f99988c249baea442d1c0b263123f1211aff0d33a7923c1ea135b5c270725c1340eabe4ca74bef034d6defbdc80974fe6f7f2e63a25b00452a3df1ecd32f58b64242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc190295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e2405500772a2ba700a5b283833e660fb8c513e60d5116276f0a20b79cc48ada361537cc150aa9a7e319c5917e008f0abf958c114657212171225cab257a32bbd9581a7f01d7fa429b8a7c45891f2638936b53",
+      "length": 493,
+      "epoch": 2,
+      "epochId": "2eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2",
+      "releaseKeyId": "90295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e24055",
+      "entries": [
+        {
+          "recipient": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+          "member": "alice",
+          "iv": "4ff227f01851f722e4bc4eee798deeb32a08f99988c249baea442d1c0b263123",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b5090295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e240554ff227f01851f722e4bc4eee798deeb32a08f99988c249baea442d1c0b263123f1211aff0d33a7923c1ea135b5c270725c1340eabe4ca74bef034d6defbdc80974fe6f7f2e63a25b00452a3df1ecd32f"
+        },
+        {
+          "recipient": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+          "member": "carol",
+          "iv": "00772a2ba700a5b283833e660fb8c513e60d5116276f0a20b79cc48ada361537",
+          "wrap": "4242103303baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc190295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e2405500772a2ba700a5b283833e660fb8c513e60d5116276f0a20b79cc48ada361537cc150aa9a7e319c5917e008f0abf958c114657212171225cab257a32bbd9581a7f01d7fa429b8a7c45891f2638936b53"
+        }
+      ],
+      "opens": [
+        {
+          "party": "alice",
+          "opens": true,
+          "key": "ceebd5308ddfaee2f1fb4f5f2dc96b596b58f4ad1643136ec53eb35071587947"
+        },
+        {
+          "party": "bob",
+          "opens": false,
+          "reason": "undecryptable: no entry names this member, and another member's entry does not decrypt"
+        },
+        {
+          "party": "carol",
+          "opens": true,
+          "key": "ceebd5308ddfaee2f1fb4f5f2dc96b596b58f4ad1643136ec53eb35071587947"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,166 @@
+{
+  "expiry": [
+    {
+      "value": "2028-01-01T00:00:00Z",
+      "ok": true
+    },
+    {
+      "value": "9999-12-31T23:59:59Z",
+      "ok": true
+    },
+    {
+      "value": "2028-02-30T00:00:00Z",
+      "ok": false
+    },
+    {
+      "value": "2028-01-01T00:00:00+00:00",
+      "ok": false
+    },
+    {
+      "value": "2028-01-01 00:00:00Z",
+      "ok": false
+    },
+    {
+      "value": "2028-01-01T00:00:60Z",
+      "ok": false
+    },
+    {
+      "value": "2028-1-01T00:00:00Z",
+      "ok": false
+    },
+    {
+      "value": "1969-12-31T23:59:59Z",
+      "ok": false
+    }
+  ],
+  "grammar": "BRC-169 section 9.2, with \"*\" refused; defined verbs: member, admin",
+  "roles": [
+    {
+      "value": "engineer",
+      "ok": true
+    },
+    {
+      "value": "team lead",
+      "ok": true
+    },
+    {
+      "value": "",
+      "ok": false
+    },
+    {
+      "value": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "ok": false
+    },
+    {
+      "value": "�",
+      "ok": false
+    }
+  ],
+  "scopes": [
+    {
+      "scope": "member",
+      "parses": true,
+      "membership": true,
+      "admin": false,
+      "why": "the one token a membership needs"
+    },
+    {
+      "scope": "member,admin",
+      "parses": true,
+      "membership": true,
+      "admin": true,
+      "why": "two defined tokens"
+    },
+    {
+      "scope": "admin",
+      "parses": true,
+      "membership": false,
+      "admin": true,
+      "why": "parses, but is not a membership: member is absent"
+    },
+    {
+      "scope": "member,release:3f2a",
+      "parses": true,
+      "membership": true,
+      "admin": false,
+      "why": "an unknown verb authorises nothing and denies nothing else"
+    },
+    {
+      "scope": "member:eng",
+      "parses": true,
+      "membership": false,
+      "admin": false,
+      "why": "a defined verb with a qualifier this version does not define is denied, never read as the bare verb"
+    },
+    {
+      "scope": "member,member:eng",
+      "parses": true,
+      "membership": false,
+      "admin": false,
+      "why": "the qualified copy still denies member"
+    },
+    {
+      "scope": "member,thread:abc.def_1",
+      "parses": true,
+      "membership": true,
+      "admin": false,
+      "why": "BRC-169's qualifier characters"
+    },
+    {
+      "scope": "*",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "the whole-scope wildcard is refused for a membership grant"
+    },
+    {
+      "scope": "",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "empty"
+    },
+    {
+      "scope": "Member",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "upper case"
+    },
+    {
+      "scope": "member,",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "an empty token"
+    },
+    {
+      "scope": "member admin",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "a space"
+    },
+    {
+      "scope": "member:",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "an empty qualifier"
+    },
+    {
+      "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "a verb of 33 characters"
+    },
+    {
+      "scope": "member:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+      "parses": false,
+      "membership": false,
+      "admin": false,
+      "why": "a qualifier of 65 characters"
+    }
+  ]
+}

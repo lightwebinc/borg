@@ -1,0 +1,127 @@
+{
+  "derivedKeys": [
+    {
+      "party": "org",
+      "identityKey": "03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26",
+      "org": "02dc69784832955fa77bd684c6c3970cc78f7c57144bce78d9a6dd7ee8e5361975",
+      "group": "023c854fbe5d08696f34ce41b79f7b48c108afb677ed66b06359923b463d3a2e1c",
+      "record": "03f2c8addbf94b87e898ba562fff591ce51ed7ed1b10f1747b609b14376e53334a",
+      "grant": "0281065536cf14939ca36ec6032a577a749f0053594d1ba7f307ecaaff990c1437",
+      "chain": "02d92dcb5e78d7cbb0933bfcd6df6883521dcfa1627c3beed2580b16745b9a2fc8"
+    },
+    {
+      "party": "org-opaque",
+      "identityKey": "029ac20335eb38768d2052be1dbbc3c8f6178407458e51e6b4ad22f1d91758895b",
+      "org": "0343424c5f0d6970e3a949b4be95f9899a5d3495aca71f8d88bf0faceb90a81eeb",
+      "group": "02a65317c3769b61c0afbe8c806ee7ed16f8de1b52629943d7db63931c9fb4f77a",
+      "record": "0365060d50dc25c71b4d31c7bd2b5d5f852735ab72ddc2ae5d5833dec61de6c52f",
+      "grant": "03d98852cc1b8a2564cccee4e1e605e58729c444b84331d9e11fb2a015b9b6d13e",
+      "chain": "032cb37deeecf3c625c2e7421801bc66568bd762b2314eaabb1b27fdc382ab4f9a"
+    },
+    {
+      "party": "alice",
+      "identityKey": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+      "org": "03d747d0e478e05b2b7a164b61066fe1416b09b75d5b199bcff1c730c9d70e24b4",
+      "group": "03a9ab31e08dedbdd040fcfd9ce290083b88ec03ea8ba646f83010eabd346961af",
+      "record": "02ff9efdd5e43338623ddab1e57bd440db04f2707a2213386c69293c19f81801b6",
+      "grant": "0262857b8a644f654fed45bf2a5a6ae65c37296c0eec7a58428896743ef2b4a68d",
+      "chain": "031f0ce5e306d980cd61ed69ff9915fc097a17413a8a6e77bbdaddb3a48729d3f7"
+    },
+    {
+      "party": "bob",
+      "identityKey": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+      "org": "037b90b1665a0003f15b9a10a79bcae0a53d098724291a567369c48fce08f64be3",
+      "group": "02af56a030ff839c5c39fefce7593607da04af3e105c2462ae7d8e4a9aca37bb0b",
+      "record": "0391c282d7200854b14e64e12e296ed6f74543e8a4073a49f73f735e769e3d8e4c",
+      "grant": "03518de08337451c91a35561d02c499f1ad4dcc125def905936a88f5e074b9491c",
+      "chain": "03102639e021144e012546ba25d61b4b5cc6568eb3b03f430eea4eebd707b1d751"
+    },
+    {
+      "party": "carol",
+      "identityKey": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+      "org": "03116006654f18830e5a71917c0857a7859d49ee0c6fe11b2ca55ad51af74b4fc1",
+      "group": "02da977270ec6c008d7a745a49288614e0cbc159039209ccea874e6c923fa117e8",
+      "record": "02b9a3b98c348f5d4fc164afd21680bcf1cf483aa9b74273595fb0e7c76785bf5c",
+      "grant": "02fcde49ec18f9a3df341e2eab5bbaedf5df659b487c726b2a0d9a0b36e5ef6b7a",
+      "chain": "029bc1c00394542f3edc043a3db263db448ce436cf485a0cfd6d4e51d88bda02af"
+    }
+  ],
+  "halls": {
+    "drawnFromBytes": {
+      "bytes": "fafb0019e9ea01020304050607",
+      "result": "example_hall_azzbcdefgh",
+      "rule": "a byte below 234 gives the letter a + byte mod 26; 234 to 255 is skipped"
+    },
+    "sameNameOther": "example_hall_qzxkvbmwtr",
+    "topic": "tm_borg_example_hall_vkqzmtrwxp",
+    "vectors": "example_hall_vkqzmtrwxp"
+  },
+  "identities": [
+    {
+      "party": "org",
+      "privateKey": "5151515151515151515151515151515151515151515151515151515151515151"
+    },
+    {
+      "party": "org-opaque",
+      "privateKey": "5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      "party": "alice",
+      "privateKey": "5252525252525252525252525252525252525252525252525252525252525252"
+    },
+    {
+      "party": "bob",
+      "privateKey": "5353535353535353535353535353535353535353535353535353535353535353"
+    },
+    {
+      "party": "carol",
+      "privateKey": "5454545454545454545454545454545454545454545454545454545454545454"
+    }
+  ],
+  "note": "Public test identities, never for real use. Every key below is derived with counterparty anyone, so a reader computes it from the identity key alone; the owner's wallet derives the same key with forSelf.",
+  "refusedProtocol": {
+    "protocol": [
+      1,
+      "borg"
+    ],
+    "sdkError": "pushdrop: invalid derivation: protocol name \"borg\" is under 5 characters"
+  },
+  "registry": {
+    "anyoneKey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "grantType": "poEEbYGwpJbTzKTeSRBJzV31s8PNknNycAbyjDV3ALc=",
+    "grantTypeString": "borg membership grant v1",
+    "invoices": [
+      "1-borg organisation-org",
+      "1-borg organisation-group",
+      "1-borg organisation-record",
+      "1-borg organisation-grant",
+      "1-borg organisation-chain",
+      "1-borg organisation-fund"
+    ],
+    "keyIds": [
+      "org",
+      "group",
+      "record",
+      "grant",
+      "chain",
+      "fund"
+    ],
+    "lookupService": "ls_borg",
+    "magicGrant": "626f6d01",
+    "magicGroup": "626f6701",
+    "magicOrg": "626f6f01",
+    "magicWrap": "626f7701",
+    "protocol": [
+      1,
+      "borg organisation"
+    ],
+    "releaseProtocol": [
+      2,
+      "keyed content release"
+    ],
+    "tagFunding": "626f02",
+    "tagGroup": "626f03",
+    "tagOrg": "626f01",
+    "topicPrefix": "tm_borg_"
+  }
+}

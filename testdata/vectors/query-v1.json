@@ -1,0 +1,341 @@
+{
+  "classes": [
+    {
+      "class": "org",
+      "members": [
+        "hall",
+        "org"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "org-seq",
+      "members": [
+        "hall",
+        "org",
+        "seq"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "roll",
+      "members": [
+        "hall",
+        "roll"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "roll-after",
+      "members": [
+        "after",
+        "hall",
+        "roll"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "member",
+      "members": [
+        "hall",
+        "member",
+        "org"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "groups",
+      "members": [
+        "groupsOf",
+        "hall"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "groups-after",
+      "members": [
+        "after",
+        "groupsOf",
+        "hall"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "member-of",
+      "members": [
+        "hall",
+        "memberOf",
+        "org"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "member-of-after",
+      "members": [
+        "after",
+        "hall",
+        "memberOf",
+        "org"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "group",
+      "members": [
+        "group",
+        "hall",
+        "org"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "group-seq",
+      "members": [
+        "group",
+        "hall",
+        "org",
+        "seq"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "wraps",
+      "members": [
+        "epoch",
+        "group",
+        "hall",
+        "org"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "wraps-after",
+      "members": [
+        "after",
+        "epoch",
+        "group",
+        "hall",
+        "org"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "wrap",
+      "members": [
+        "epoch",
+        "group",
+        "hall",
+        "member",
+        "org"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "sweep",
+      "members": [
+        "hall",
+        "spent"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "history",
+      "members": [
+        "chain",
+        "hall",
+        "history"
+      ],
+      "price": "priceable",
+      "limit": 64
+    },
+    {
+      "class": "history-after",
+      "members": [
+        "after",
+        "chain",
+        "hall",
+        "history"
+      ],
+      "price": "priceable",
+      "limit": 64
+    }
+  ],
+  "questions": [
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "class": "org",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"seq\":\"0\"}",
+      "class": "org-seq",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"roll\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "class": "roll",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"roll\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51\"}",
+      "class": "roll-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"member\":\"029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50\"}",
+      "class": "member",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"groupsOf\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "class": "groups",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"groupsOf\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"406504d3fbe1ae098f09a49dffa12222\"}",
+      "class": "groups-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"memberOf\":\"029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50\"}",
+      "class": "member-of",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"memberOf\":\"029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50\",\"after\":\"406504d3fbe1ae098f09a49dffa12222\"}",
+      "class": "member-of-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\"}",
+      "class": "group",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\",\"seq\":\"3\"}",
+      "class": "group-seq",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\",\"epoch\":\"1\"}",
+      "class": "wraps",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\",\"epoch\":\"1\",\"after\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51\"}",
+      "class": "wraps-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\",\"epoch\":\"1\",\"member\":\"029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50\"}",
+      "class": "wrap",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"spent\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51.0\"}",
+      "class": "sweep",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"chain\":\"406504d3fbe1ae098f09a49dffa12222\"}",
+      "class": "history",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"chain\":\"org\",\"after\":\"12\"}",
+      "class": "history-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"00\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "class": "org",
+      "refused": false,
+      "why": "a repeated member takes its last value"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"extra\":\"1\"}",
+      "refused": true,
+      "why": "a member no class defines"
+    },
+    {
+      "question": "{\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "refused": true,
+      "why": "hall missing"
+    },
+    {
+      "question": "{\"hall\":\"example_hall\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "refused": true,
+      "why": "a hall without its suffix"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03BAF7689C0A3558FB604589036A8D1E4B685D909F6E0E2C6018A14049AE64EC26\"}",
+      "refused": true,
+      "why": "upper-case hex"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30\"}",
+      "refused": true,
+      "why": "a key alias"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"seq\":\"01\"}",
+      "refused": true,
+      "why": "a leading zero"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\",\"epoch\":\"4294967296\"}",
+      "refused": true,
+      "why": "an epoch above 2^32 - 1"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"chain\":\"orgs\"}",
+      "refused": true,
+      "why": "chain names neither the organisation nor a group"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"chain\":\"org\"}",
+      "refused": true,
+      "why": "a free class's members and a priceable one's together"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"roll\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"12\"}",
+      "refused": true,
+      "why": "a roll cursor is a txid"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"spent\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51:0\"}",
+      "refused": true,
+      "why": "an outpoint with a colon"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"group\":\"406504d3fbe1ae098f09a49dffa12222\",\"chain\":\"406504d3fbe1ae098f09a49dffa12222\"}",
+      "refused": true,
+      "why": "a member no free class defines"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":1}",
+      "refused": true,
+      "why": "a member that is not a string"
+    },
+    {
+      "question": "[\"hall\"]",
+      "refused": true,
+      "why": "not an object"
+    }
+  ]
+}
