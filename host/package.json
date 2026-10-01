@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@bsv/sdk": "2.7.1",
-    "@lightwebinc/bcommon": "file:vendor/lightwebinc-bcommon-0.5.4.tgz"
+    "@lightwebinc/bcommon": "file:vendor/lightwebinc-bcommon-0.5.5.tgz"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
