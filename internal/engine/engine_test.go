@@ -133,3 +133,50 @@ func TestLostErrorSaysTheKeyIsDiscarded(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A group whose current epoch holds a token the index reports
+// rejoin-unrotated (one another tool built: this one never does) is still
+// the organisation's to run: its members fold, the flag is reported, and
+// every transition of it begins a new epoch.
+func TestAFlaggedGroupStaysOperable(t *testing.T) {
+	e, st := offline(t)
+	a, b := key(t), key(t)
+	id := withGroup(t, e, st, [][]byte{a, b}, time.Now().Add(time.Hour))
+	g := st.Org.Group(id)
+	recs, err := GroupRecords(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(mut func(r *borgrec.Group), members [][]byte) {
+		t.Helper()
+		r := *recs[len(recs)-1]
+		r.Seq, r.Add, r.Remove, r.Prev = r.Seq+1, nil, nil, [32]byte{9}
+		mut(&r)
+		sortKeys(members)
+		r.Count, r.Members = uint64(len(members)), borgrec.MembersRoot(members)
+		enc, err := r.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.Tokens = append(g.Tokens, state.Token{Seq: r.Seq, Txid: strings.Repeat("ef", 32), Record: hex.EncodeToString(enc)})
+		recs = append(recs, &r)
+	}
+	// b removed with a new epoch, then added back in the same epoch.
+	add(func(r *borgrec.Group) { r.Remove, r.Epoch, r.EpochSeq, r.Commitment = [][]byte{b}, 1, 1, [32]byte{2} }, [][]byte{a})
+	if st, _, err := Flagged(g); err != nil || st != "" {
+		t.Fatalf("a clean epoch: %q %v", st, err)
+	}
+	add(func(r *borgrec.Group) { r.Add = [][]byte{b} }, [][]byte{a, b})
+	members, removed, err := Members(g)
+	if err != nil || len(members) != 2 || !removed[string(b)] {
+		t.Fatalf("the members of a flagged group: %d %v", len(members), err)
+	}
+	if st, at, err := Flagged(g); err != nil || st != borgrec.StatusRejoinUnrotated || at != 2 {
+		t.Fatalf("flagged: %q at %d, %v", st, at, err)
+	}
+	// A rotation clears it: the flagged token is in an ended epoch.
+	add(func(r *borgrec.Group) { r.Epoch, r.EpochSeq, r.Commitment = 2, 3, [32]byte{3} }, [][]byte{a, b})
+	if st, _, err := Flagged(g); err != nil || st != "" {
+		t.Fatalf("after a rotation: %q %v", st, err)
+	}
+}

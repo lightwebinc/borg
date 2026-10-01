@@ -220,6 +220,13 @@ and folded over the organisation's own chain first, and one that would be
 reported `roll-mismatch`, `members-mismatch`, `commitment-reuse` or
 `rejoin-unrotated` is not built.
 
+A group whose current epoch already holds a token the index reports
+`commitment-reuse` or `rejoin-unrotated` (another tool built it; this one
+does not) stays the organisation's to run: `doctor` names it
+(`INCONSISTENT`), the epoch's key is wrapped to nobody else, and every
+transition of the group begins a new epoch, which is the remedy (`borg
+epoch rotate <group>`). A chain that folds to a mismatch is not operable.
+
 **Rotation.** A transition begins a new epoch, with a key sampled fresh
 (never derived), when it removes anyone, when it adds a key any earlier
 token of the group removed, when the predecessor sets `rotateOnJoin` and

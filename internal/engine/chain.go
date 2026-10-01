@@ -160,7 +160,10 @@ func GroupRecords(g *state.Group) ([]*borgrec.Group, error) {
 }
 
 // Members folds a group's own chain: the members after its latest token
-// and every key any token removed.
+// and every key any token removed. Only a fold that breaks
+// (members-mismatch) is an error: a token the index reports
+// commitment-reuse or rejoin-unrotated leaves the members well defined,
+// and the group must stay operable so that it can be rotated (Flagged).
 func Members(g *state.Group) ([][]byte, map[string]bool, error) {
 	recs, err := GroupRecords(g)
 	if err != nil {
@@ -169,7 +172,7 @@ func Members(g *state.Group) ([][]byte, map[string]bool, error) {
 	f := borgrec.NewGroupFold()
 	removed := map[string]bool{}
 	for _, r := range recs {
-		if st := f.Apply(r); st != borgrec.StatusConsistent {
+		if st := f.Apply(r); st == borgrec.StatusMembersMismatch {
 			return nil, nil, fmt.Errorf("the group's own chain folds to %s at seq %d", st, r.Seq)
 		}
 		for _, k := range r.Remove {
@@ -177,6 +180,28 @@ func Members(g *state.Group) ([][]byte, map[string]bool, error) {
 		}
 	}
 	return f.Members(), removed, nil
+}
+
+// Flagged reports whether the group's current epoch holds a token the
+// index reports commitment-reuse or rejoin-unrotated (spec section 11.2):
+// its status and seq, or "" when the epoch is clean. Such an epoch's key is
+// not one to release: a key re-added without a rotation would read what
+// was written while it was away, and a repeated commitment is an old key.
+// A rotation begins a clean epoch.
+func Flagged(g *state.Group) (string, uint64, error) {
+	recs, err := GroupRecords(g)
+	if err != nil || len(recs) == 0 {
+		return "", 0, err
+	}
+	cur := recs[len(recs)-1].EpochSeq
+	f := borgrec.NewGroupFold()
+	for _, r := range recs {
+		st := f.Apply(r)
+		if r.Seq >= cur && (st == borgrec.StatusCommitmentReuse || st == borgrec.StatusRejoinUnrotated) {
+			return st, r.Seq, nil
+		}
+	}
+	return "", 0, nil
 }
 
 // Debt is a group's rotation debt by the organisation's own record: the
@@ -648,6 +673,13 @@ func (e *Engine) GroupChange(ctx context.Context, gid string, c Change) (*Change
 		e.note("warning: group %s has %d members; every removal wraps the new key to each (docs/limits.md)", gid, rec.Count)
 	}
 	rotate := c.Rotate || len(rec.Remove) > 0 || (pred.RotateOnJoin && len(rec.Add) > 0) || len(res.Rejoin) > 0
+	if st, at, err := Flagged(g); err != nil {
+		return nil, err
+	} else if st != "" && !rotate {
+		// The epoch is one the index flags: every transition leaves it.
+		e.note("group %s: seq %d is %s, so this transition begins a new epoch", gid, at, st)
+		rotate = true
+	}
 	if !rotate && len(rec.Add) == 0 {
 		return nil, errors.New("the transition changes nothing")
 	}
@@ -1096,6 +1128,12 @@ func (e *Engine) wrapOwed(ctx context.Context, g *state.Group) error {
 	members, _, err := Members(g)
 	if err != nil {
 		return err
+	}
+	if st, at, err := Flagged(g); err != nil {
+		return err
+	} else if st != "" {
+		e.note("group %s: seq %d is %s; the key of epoch %d is wrapped to nobody else until the group rotates (borg epoch rotate %s)", g.ID, at, st, cur.Epoch, g.ID)
+		return nil
 	}
 	var owed [][]byte
 	for _, m := range members {
