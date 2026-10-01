@@ -388,9 +388,11 @@ counterparty the organisation and opens every field; go-sdk's
 The grant carries everything a BRC-100 wallet's `acquireCertificate` takes
 under the direct protocol (type, certifier, serial number, revocation
 outpoint, signature, fields, the keyring for the subject, and the
-organisation as keyring revealer). A member's client MUST acquire its grant
-into its wallet that way, and MUST NOT keep a derived summary in its place
-(BRC-169 section 4.6).
+organisation as keyring revealer). A member's client MUST NOT keep a derived
+summary in place of its grant (BRC-169 section 4.6): a client on a BRC-100
+wallet acquires it with `acquireCertificate`; a client that is its own home
+(the borg command's embedded wallet) keeps the grant record whole, as
+carried, and rebuilds the certificate from it.
 
 ### 5.6 Revocation
 
@@ -412,11 +414,19 @@ A grant is revoked two ways, and an organisation does both:
 
 A grant is **current** for a reader when its commitment is in the roll of the
 organisation's canonical latest token, its revocation outpoint is unspent,
-its scope grants `member`, and its expiry has not passed. Whether an outpoint
+its scope grants `member`, and its expiry has not passed. A reader allows
+300 seconds of clock skew on expiry (a grant is current until 300 seconds
+after it); the organisation's own tooling allows none, so it stops wrapping
+to a key and owes its removal from the instant the grant expires by its
+clock. Whether an outpoint
 is spent comes from an index, never from SPV alone, and inherits the index's
 honesty and lag (BRC-169 section 4.2); for anything that moves value or
 releases a key, "unspent" needs a positive answer (section 13), never the
-absence of a spend.
+absence of a spend. For the organisation's own grants, its tooling's record
+of the sweeps it made is that evidence: a grant outpoint the organisation
+never swept is unspent by its own record, because only its key can spend it
+(the grant tree is locked to its derived key), and one it swept is spent
+from the moment it signed the sweep.
 
 An organisation funds each grant from its own funding output and makes one
 carrier per output: two carriers on one outpoint are equivocation, and a
@@ -623,7 +633,8 @@ grant (section 5.6). A member whose grant expires or is revoked is owed a
 removal: **rotation debt** is a group whose latest members include a key with
 no current grant now (expired at the reader's clock, revoked, or not in the
 roll), and every transition the organisation makes in such a group first
-removes those keys. The tooling SHOULD schedule each member's removal for the
+removes those keys: the debt is removed in the same transition as any other
+change, or in an earlier one, never later. The tooling SHOULD schedule each member's removal for the
 moment its grant expires, so that debt does not arise. Anyone can compute the
 debt from the roll and the groups (section 13), and the tooling reports and
 clears it.
@@ -819,9 +830,10 @@ the one field `62 6f 02` with no signature, locked to `derive(owner, k)`:
 `<key> OP_CHECKSIG <62 6f 02> OP_DROP`, where `k` is the key id of what the
 tree pays for: `grant`, `record` (wraps) or `chain`. A carrier
 spends only a **mined** tree's output, and its BEEF carries that tree with
-its proof, so a carrier's ancestry is one mined parent. A tree is never
-published to the hall on its own: it travels inside the BEEF of every carrier
-it funds, and of a chain's first token. bcommon `producer` runs a tree's
+its proof, so a carrier's ancestry is one mined parent. A publisher never
+publishes a tree to the hall on its own: it travels inside the BEEF of every
+carrier it funds, and of a chain's first token. A host given a mined tree on
+its own admits it as a sweep (section 11.1), which retracts nothing. bcommon `producer` runs a tree's
 lifecycle.
 
 The three kinds of tree are kept apart by their keys, so hosts enforce the
@@ -924,7 +936,10 @@ leaves out one whose proof no longer verifies; a host that cannot (section
 **Order and pages.** Grant and wrap carriers are in ascending order of txid
 (display order, as lowercase hex strings), groups by group id, tokens by
 `seq` then txid. A page holds at most 64 outputs; the `-after` classes answer
-only what sorts strictly after the cursor.
+only what sorts strictly after the cursor. A `history` or `history-after`
+page never splits a `seq`: it ends before a `seq` whose tokens do not all
+fit (a first `seq` is answered whole, up to its 8), so the cursor, a `seq`,
+loses nothing.
 
 **Inclusion paths.** Each output of a `member` answer carries, as its BRC-24
 `context`, the canonical CBOR array `[seq, index, size, path]`: the `seq` of
@@ -1027,9 +1042,14 @@ Every path is minimal: at its lowest level exactly the proven txid, flagged
 as the txid, and its sibling (a hash, or a duplicate flag); above that exactly
 one leaf a level. When a token and its parent are in one block, BEEF writers
 merge their paths, so the BEEF holds exactly one path, the union of the two
-minimal paths, flagging exactly the two txids and holding no other leaf; the
-organisation's tooling SHOULD still build a token only on a parent mined in an
-earlier block. Every transaction is carried whole: a txid-only entry (BRC-96)
+minimal paths, flagging exactly the two txids and holding no other leaf. A merged path MAY
+omit a sibling that is itself an ancestor of the other txid (the node the
+other path computes at that level, or at the lowest level the other txid
+itself, which is flagged); nothing else may be omitted, and nothing else may
+appear. Two separate paths for a token and a parent mined in one block are
+refused (`beef`): the BEEF writers merge them, so two of one block are not
+what a writer builds. The organisation's tooling SHOULD still build a token
+only on a parent mined in an earlier block. Every transaction is carried whole: a txid-only entry (BRC-96)
 is refused. The counts are those the BEEF declares on the wire, before any
 parser merges or collapses anything.
 
@@ -1103,7 +1123,8 @@ claims a token. Its **parent** is the other transaction in its BEEF:
 8. `token-input`: for `seq > 0`, the parent's txid is not `prev`, or no input
    of the token spends an output of the parent that is a well-formed token of
    the same kind, hall and organisation (and group) at `seq - 1`, or more than
-   one input spends a token output of the parent; for `seq` 0, no input spends
+   one input spends a token output of the parent (an output that classifies
+   as a token, well formed or not); for `seq` 0, no input spends
    an output of the parent that is a well-formed funding output locked to
    `derive(org, "chain")`, or an input spends a token output of the parent;
 9. the transition rules against the predecessor (the parent's token output):
@@ -1111,6 +1132,14 @@ claims a token. Its **parent** is the other transaction in its BEEF:
    an organisation token `transition` (same hall and organisation, the next
    `seq`, `prev` naming the predecessor's transaction, the same `opaque`) and
    `count` (the predecessor's `count` plus `admit` less `revoke`).
+
+A **well-formed** token output, here and wherever a predecessor is read, is
+one that classifies as a token of its kind (its tag), is a PushDrop of
+exactly two fields and a signature, holds 1 satoshi, decodes as a record of
+its kind, equals byte for byte the script rebuilt from its fields and the
+key derived from the record's `org` (canonical), and whose field signature
+is strict low-S DER and verifies under that key. The predecessor's record is
+not held to its own transition rules: those were its own admission's.
 
 A token's inputs that do not spend the parent are not read: they pay its fee.
 A token is admitted whether or not the topic already holds its predecessor;
@@ -1121,7 +1150,14 @@ that arrives before its predecessor is not lost.
 funding-shaped (under any key: a sweep's owner is whoever could sign its
 inputs), and whose proof verifies against the host's headers: output 0 alone
 is admitted, and its inputs' outpoints are matched against the funding
-outpoints of carriers. Without the proof it is refused `unmined`. Only output
+outpoints of carriers. A sweep is refused in the order `unmined` (its proof
+does not verify against the host's headers), `beef` (the BEEF is not
+exactly the sweep and its own minimal path), `too-large` (below). A mined
+funding tree published on its own has this shape (output 0 funding-shaped,
+nothing claimed) and is admitted as a sweep: that is harmless, because its
+inputs spend the publisher's wallet outputs, which are no carrier's funding
+outpoint, and it holds one output at the host. A publisher still never
+publishes a tree on its own (section 9.4). Only output
 0 is admitted, so a mined transaction cannot load a host with held outputs,
 and nothing unmined is admitted, so a stranger cannot fill a topic with free
 ones. A host MAY refuse (`too-large`) a sweep of more than its input bound,
@@ -1187,7 +1223,13 @@ of order, or met first on restore); `roll-mismatch` or `members-mismatch`
 when the fold breaks (sections 3.2 and 4.3); `commitment-reuse` when a group
 token's new epoch repeats an earlier epoch's commitment; and
 `rejoin-unrotated` when a group token adds a key an earlier token of the
-group removed without beginning an epoch (section 4.2). The answers of
+group removed without beginning an epoch (section 4.2). A token gets the
+first that applies, in this order: `members-mismatch` (and
+`roll-mismatch` for an organisation) is sticky, so every later token of the
+chain has it too; then `commitment-reuse`; then `rejoin-unrotated`; else the
+token is consistent. `pending` is not a fold result but the host's state
+while it lacks a predecessor, and a reader that holds the whole chain never
+sees it. The answers of
 `roll`, `member` and `member-of` use the fold of the highest token whose fold
 is complete (no `pending` token below it), so a reader that compares the
 answer with the latest token sees the gap; with several such candidates the host uses the one that verifies in its
@@ -1229,10 +1271,14 @@ host may hold two tokens at one `seq` (the one mined first, orphaned, and the
 one mined in its place), may keep a token whose stored proof names an orphaned
 block although the same transaction was mined again elsewhere, and may keep
 counting as spent an outpoint whose sweep was orphaned. It answers every
-candidate, up to 8, and keeps the outpoint rows as they are. A host cannot
-take a new proof for a transaction it holds by submission: the reference
-engine treats the same txid as a duplicate and refreshes proofs only through
-its own proof provider, for transactions it has already demoted. Readers
+candidate, up to 8, and keeps the outpoint rows as they are. A token or a
+sweep a host holds is held with its proof, and a submission of the same
+txid with a new proof is a duplicate: the reference engine takes no proof by
+submission for a transaction it holds proven, and refreshes proofs only
+through its own proof provider, for transactions it has already demoted. A
+transaction the host holds unproven is upgraded when it is submitted again
+with a proof; borg holds no such transaction (carriers are never mined, and
+tokens and sweeps are admitted only mined). Readers
 decide with their own headers (section 13): a token or a sweep whose proof
 does not verify against the reader's best chain is not mined for that reader,
 who fetches the transaction's current proof from a chain source by its txid. Because an epoch id
@@ -1287,7 +1333,12 @@ most 16), retries each on its own, and counts the object published once a
 quorum of hosts took it. A host **took** an object when its answer admits it,
 or when a lookup at that host answers it: to a submitter a duplicate and a
 raised refusal look the same, so an answer that admits nothing is confirmed by
-lookup before it counts. Tokens and sweeps must reach every host named.
+lookup before it counts. Tokens and sweeps must reach every host named. A
+grant carrier is the exception to confirming at once: no free class answers
+a grant before the roll admits it, so a grant is counted when sent, then
+confirmed by the `member` class at each host once the organisation token
+that admits it is published, and offered again to any host whose answer
+lacks it.
 
 **In order.** Chain tokens are mined one after another, so they are naturally
 published a block or more apart. A host admits a token whose predecessor it
@@ -1352,7 +1403,11 @@ wrap carrier, and take the recipients of every entry; their members root MUST
 equal the token's `members`. A recipient not in the set is a **stray** wrap,
 which the organisation made to someone the chain never admitted, and a member
 of the set with no entry has an **incomplete** release: both are reported,
-and the group is shown as inconsistent.
+and the group is shown as inconsistent. An incomplete release is reported
+**pending**, not inconsistent, while the reader's best chain is at most one
+block past the latest token's block: wraps are published only after their
+token mines and, where several instances of the tooling can sign, one
+further block (section 7.2). A stray wrap is never pending.
 
 **An epoch key.** Section 6.4. A reader that holds the commitments of earlier
 epochs checks that the new commitment repeats none of them, and a reader that
@@ -1432,6 +1487,12 @@ a client MUST respect it.
 | Priced questions | BRC-105 over BRC-103 and BRC-104; BRC-29; BRC-180 rule 2 | only the bulk history classes are priceable; the payment's output index and script are fixed here, where BRC-105 leaves them to the implementation |
 | Carrier ancestry and proofs | BRC-62, BRC-96 and BRC-95 BEEF; BRC-74 BUMP | exactly what the object needs, so nobody can attach anything to it; a chain token carries its proven parent in a BEEF V1 or V2, which Atomic BEEF cannot |
 | Objects on the plane | BRC-148 and BRC-149 | none |
+
+The BRC-52 certificate verifier and the BRC-369 epoch-key code are borg's
+own (Go `internal/borgrec`, TypeScript `host/src`) and stay in this
+repository until a second application (E5) needs them; they move to bcommon
+then, unchanged in behaviour and checked against the same vectors. borg pins
+bcommon v0.5.5 in both languages.
 
 ## 16. What this does not do
 
