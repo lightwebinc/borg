@@ -97,6 +97,11 @@ const (
 // then the host is reported missed and the object stays persisted.
 var Retries = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 
+// PlaneWait are the waits between a publisher's lookups for a wrap it
+// submitted to the plane, at each host it names, before it offers the wrap
+// to that host directly: the plane delivers in well under a second.
+var PlaneWait = []time.Duration{500 * time.Millisecond, time.Second, 2 * time.Second}
+
 // Reading.
 const (
 	// PageSize is the most outputs one answer page holds (the spec's).

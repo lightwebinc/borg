@@ -24,8 +24,8 @@ const fillHelp = `usage: borg fill [group...]
 Fills every host in hosts that lacks something another host answered
 (spec sections 11.6 and 12, "Filling a host that missed something"): the
 organisation's chain, the grants of its roll, and for each group (every
-group any host answers, or those named) its chain and the wraps of its
-current epoch. Each token is replayed in the BEEF a host admits, assembled
+group any host answers, or those named) its chain and the wraps of every
+epoch a host still answers. Each token is replayed in the BEEF a host admits, assembled
 here from the token and its parent (the token at seq - 1, or at seq 0 the
 chain tree, read from the node: config key asset); each carrier is
 submitted as another host answered it, once it verifies here. Everything is
@@ -85,13 +85,20 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 			continue
 		}
 		f.chain(ctx, "group "+gid, gv.ChainView)
-		e := fmt.Sprint(gv.Epoch())
 		orgHex := hex.EncodeToString(t.org)
-		f.carriers(ctx, "wrap", borgrec.TxWrap, reader.Query{"hall": t.hall, "org": orgHex, "group": gid, "epoch": e},
-			func(c *reader.Car) reader.Query {
-				return reader.Query{"hall": t.hall, "org": orgHex, "group": gid, "epoch": e,
-					"member": hex.EncodeToString(c.Carrier.Wrap.Recipients()[0])}
-			})
+		for n := uint32(0); ; n++ {
+			if gv.Begins[n] != nil {
+				e := fmt.Sprint(n)
+				f.carriers(ctx, "wrap", borgrec.TxWrap, reader.Query{"hall": t.hall, "org": orgHex, "group": gid, "epoch": e},
+					func(c *reader.Car) reader.Query {
+						return reader.Query{"hall": t.hall, "org": orgHex, "group": gid, "epoch": e,
+							"member": hex.EncodeToString(c.Carrier.Wrap.Recipients()[0])}
+					})
+			}
+			if n == gv.Epoch() {
+				break
+			}
+		}
 	}
 	fmt.Fprintf(g.stdout, "filled  %d object(s) at %d host(s)\n", f.filled, len(f.hostsFilled))
 	if f.problem {

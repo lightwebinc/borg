@@ -1326,7 +1326,13 @@ to handle. Tokens and sweeps are also submitted directly to every host the
 publisher names, because a host off the plane learns of the chain only by
 receiving it, and a host whose headers lagged refused it (`unmined`) and does
 not receive it from the plane again. They are published only after the
-propagation delay of section 7.2, which makes that refusal rare.
+propagation delay of section 7.2, which makes that refusal rare. A publisher
+that names hosts SHOULD also look for each wrap at each of them once the
+facade took it (the `wrap` class answers a wrap as soon as a host holds it),
+and offer it directly to a host that still lacks it after a few seconds:
+that is a copy across (below), not a way round the plane's repair, and a
+direct copy that meets the plane's is a duplicate. A grant is confirmed the
+same way once the organisation token that admits it is published.
 
 **Unicast.** The publisher submits the same bytes to each host it names (at
 most 16), retries each on its own, and counts the object published once a

@@ -496,7 +496,52 @@ func (e *Engine) publish(ctx context.Context, p state.Pending) error {
 			return fmt.Errorf("%s: a mined object reaches every host named, off the plane too: %w; it is persisted and the next command publishes it", what, err)
 		}
 	}
+	if p.Kind == state.KindWrap {
+		e.confirmOnPlane(ctx, what, topic, beef, confirm)
+	}
 	return nil
+}
+
+// confirmOnPlane confirms a wrap at every host the publisher names, once
+// the facade took it, and offers it again, directly, to a host the plane
+// did not deliver it to (spec section 12). A wrap is answered by a free
+// class as soon as a host holds it, so a host that still lacks it after
+// PlaneWait was missed: the plane repairs loss within its window, and a
+// wrap nobody confirms would leave one host unable to answer a member. A
+// direct copy that races the plane's is a duplicate and harmless. A host
+// that cannot be asked, or does not take it, is noted and left to fill.
+func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []byte, confirm unicast.Confirm) {
+	rd := e.Legs.Reader
+	if rd == nil || confirm == nil {
+		return
+	}
+	for _, host := range rd.Hosts {
+		held, asked := false, true
+		for i := 0; ; i++ {
+			ok, err := confirm(ctx, host)
+			if err != nil {
+				e.note("%s: host %s could not be asked whether it holds it: %v", what, host, err)
+				asked = false
+				break
+			}
+			if ok {
+				held = true
+				break
+			}
+			if i == len(limits.PlaneWait) || e.Sleep(ctx, limits.PlaneWait[i]) != nil {
+				break
+			}
+		}
+		if held || !asked {
+			continue
+		}
+		set := &unicast.Set{Hosts: []string{host}, Need: 1, Retries: Retries, HTTP: rd.HTTP, Note: e.Note}
+		if err := set.Send(ctx, what, topic, beef, 1, confirm).Err(); err != nil {
+			e.note("%s: host %s lacks it after the plane's delivery and did not take it directly: %v (borg fill offers it again)", what, host, err)
+			continue
+		}
+		e.note("%s: host %s lacked it after the plane's delivery; offered directly and confirmed", what, host)
+	}
 }
 
 func (e *Engine) submitFacade(ctx context.Context, what, topic string, beef []byte) error {

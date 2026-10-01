@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lightwebinc/bcommon/guard"
+
+	"github.com/lightwebinc/borg/internal/borgrec"
 	"github.com/lightwebinc/borg/internal/testchain"
 )
 
@@ -412,5 +415,43 @@ func TestFillReplaysWhatAHostLacks(t *testing.T) {
 	r = h.must("alice", "fill")
 	if !strings.Contains(r.stdout, "filled  0 object(s)") {
 		t.Fatalf("a second fill:\n%s", r.stdout)
+	}
+}
+
+// On the plane a wrap is submitted once to the facade. A wrap the plane
+// does not deliver to a host the publisher names is looked for there,
+// found missing, and offered to that host directly; a fill replays the
+// wraps of an ended epoch a host lacks too.
+func TestPlaneWrapAHostMissedIsOfferedDirectly(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	lost := 0
+	h.plane.Lost = func(host int, beef []byte) bool {
+		_, tx, _, err := guard.ParseBEEF(beef, 8<<20)
+		if err != nil || tx == nil || host != 1 || borgrec.Classify(*tx.Outputs[0].LockingScript) != borgrec.KindWrap {
+			return false
+		}
+		lost++
+		return true
+	}
+	o := h.orgWithGroup()
+	if lost == 0 {
+		t.Fatal("the plane lost no wrap on the way to host b")
+	}
+	wraps := h.a.Txids("wrap")
+	if len(wraps) == 0 || len(h.b.Txids("wrap")) != len(wraps) {
+		t.Fatalf("host a holds %d wrap(s), host b %d: the wrap the plane lost was not offered to b directly", len(wraps), len(h.b.Txids("wrap")))
+	}
+	r := h.must("alice", "group", "show", o.group)
+	if strings.Contains(r.stderr, "DISAGREES") || strings.Contains(r.stdout, "INCOMPLETE") {
+		t.Fatalf("group show:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// An ended epoch's wrap a host lost is filled as well.
+	h.plane.Lost = nil
+	h.must("org", "org", "remove", o.bob, "-group", o.group)
+	h.b.Forget(wraps[0])
+	r = h.must("alice", "fill")
+	if !strings.Contains(r.stdout, "filled  wrap ") || !h.b.Holds(wraps[0]) {
+		t.Fatalf("fill of an ended epoch's wrap:\n%s\n%s", r.stdout, r.stderr)
 	}
 }

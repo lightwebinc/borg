@@ -77,7 +77,7 @@ a member, or anyone reading:
   history                       a priced question: pay the host's 402, read a chain
   terms [URL]                   a host's terms document
   fill [group...]               replay to each host what another host answered
-                                and it lacks: chains, roll grants, current wraps
+                                and it lacks: chains, roll grants, wraps
 
 a host's payee:
   payee key -out FILE           write BORG_PAYEE_KEY for this home's identity
