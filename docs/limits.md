@@ -10,7 +10,9 @@ a new record version.
 
 A **cap** is refused by a client before anything is sent, with a message
 naming the setting and the limit. A **warning** is printed and the client
-goes on.
+goes on. The `borg` command applies every row below that concerns the
+organisation's tooling or a member's client ([usage.md](usage.md));
+[host.md](host.md) sets a host's.
 
 ## The table
 

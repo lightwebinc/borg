@@ -31,6 +31,9 @@ whose key the removed member never receives.
 
 | If you want to | Read |
 | --- | --- |
+| Try it on one machine in minutes | [QUICKSTART.md](QUICKSTART.md) |
+| Run an organisation, or use one as a member | [docs/user-guide.md](docs/user-guide.md) |
+| Look up a command, a setting or an exit code | [docs/usage.md](docs/usage.md) |
 | Implement a compatible organisation, member client or host | [docs/spec.md](docs/spec.md) (the specification) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
 | Know the defaults and caps, and why each is set where it is | [docs/limits.md](docs/limits.md) |
@@ -40,10 +43,14 @@ whose key the removed member never receives.
 
 ```console
 $ (cd host && npm ci)   # once
-$ make verify           # gofmt, vet, dependency set, typecheck, vectors, tests
+$ make verify           # gofmt, vet, dependency set, licences, typecheck, vectors, tests
+$ make borg             # the command, bin/borg
 $ make vectors          # regenerate both vector sets
 $ make module           # the host module, host/bundle/borg-module.js
-$ make e2e REFERENCE_HOST=/path/to/reference-host   # the module on a local reference host (Docker)
+$ make e2e REFERENCE_HOST=/path/to/reference-host          # the module on a local reference host (Docker)
+$ make e2e-client REFERENCE_HOST=/path/to/reference-host   # the command against two local reference hosts (Docker)
+$ make docker-build docker-build-host REFERENCE_HOST_IMAGE=<image>   # the images, locally
+$ make quickstart-check # QUICKSTART.md, run as written, on those images
 ```
 
 Go 1.27.1 or later and Node 24; `NODE=/path/to/node` selects a Node 24

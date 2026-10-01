@@ -25,6 +25,14 @@ BORG_STATE_DIR=/var/lib/borg
 BORG_HEADERS_URL=https://headers.example.com
 ```
 
+Or run the image `ghcr.io/lightwebinc/borg-host` (built by
+`make docker-build-host REFERENCE_HOST_IMAGE=<reference overlay host
+image>`): the reference host with the module at
+`/app/modules/borg/borg-module.js`, its state directory at `/var/lib/borg`
+(mount a volume there), and an entrypoint that requires `BORG_HALLS` and
+derives `OVERLAY_TOPICS` from it when unset.
+`deploy/quickstart/compose.yaml` runs two of them.
+
 The host must run with no broadcaster, and must not enable an unordered
 synchronisation of unspent outputs for `tm_borg_` topics (spec sections
 11.1 and 11.6). The reference host has neither unless configured.
