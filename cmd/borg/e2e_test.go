@@ -287,6 +287,34 @@ func TestClientE2E(t *testing.T) {
 	}
 	step("payee settle: the host's recorded payment broadcast in parallel, mined and pooled")
 
+	// One coin, three priced questions inside one block: each payment
+	// after the first spends the unmined change of the one before, and the
+	// host verifies it through that payment.
+	h.identity("erin", false)
+	h.must("erin", "fund", "-blocks", "101")
+	h.chain.SetHold(true)
+	var paid []string
+	for range 3 {
+		r := h.must("erin", "history", "-chain", o.group)
+		pm := paidLine.FindStringSubmatch(r.stdout)
+		if pm == nil {
+			t.Fatalf("history in a row:\n%s\n%s", r.stdout, r.stderr)
+		}
+		paid = append(paid, pm[1])
+	}
+	for i := 1; i < len(paid); i++ {
+		if tx := h.chain.Tx(paid[i]); tx == nil || tx.Inputs[0].SourceTXID.String() != paid[i-1] {
+			t.Fatalf("payment %d does not spend the change of payment %d", i, i-1)
+		}
+	}
+	h.chain.SetHold(false)
+	h.chain.Mine()
+	r = h.must("payee", "payee", "settle", filepath.Join(a.state, "payments.jsonl"))
+	if !strings.Contains(r.stdout, "3 payment(s) settled, 15 sat; 1 settled before") {
+		t.Fatalf("payee settle of payments in a row:\n%s\n%s", r.stdout, r.stderr)
+	}
+	step("one coin pays three priced questions in one block, each payment spending the last one's unmined change; the payee settles all three")
+
 	// Restart and restore: host a from its storage and rows.
 	a.stop()
 	a.start()
@@ -339,5 +367,33 @@ func TestClientE2E(t *testing.T) {
 		}
 	}
 	step("b down: a token needs every host, so it stays persisted (exit 2); b back: the next command publishes it first; both agree")
+
+	// A second home of the organisation, made around its identity key on
+	// another machine, rebuilds from the hosts and goes on.
+	r = h.must("org", "org", "signer")
+	if !strings.Contains(r.stdout, "signer  ") || !strings.Contains(r.stdout, "epoch 5\n") {
+		t.Fatalf("org signer:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.secondHome("org2")
+	if r.code != 0 || !strings.Contains(r.stdout, "(1 new group(s))") || !strings.Contains(r.stdout, " 1 epoch key(s)") ||
+		!strings.Contains(r.stdout, "epoch 4: the signer key was not a member of this epoch") {
+		t.Fatalf("org sync on a second home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if got, want := sorted(h.must("org2", "org", "show").stdout), sorted(h.must("org", "org", "show").stdout); got != want {
+		t.Fatalf("the second home differs:\n%s\n---\n%s", got, want)
+	}
+	r = h.must("org2", "epoch", "rotate", o.group)
+	if !strings.Contains(r.stdout, "epoch 6 (a new epoch") {
+		t.Fatalf("rotate from the second home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("alice", "open", o.group)
+	if !strings.Contains(r.stdout, "epoch   6 OPENED") || strings.Contains(r.stderr, "DISAGREES") {
+		t.Fatalf("alice after the second home's rotation:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "org", "sync")
+	if !strings.Contains(r.stdout, "1 group token(s)") || !strings.Contains(r.stdout, " 1 epoch key(s)") {
+		t.Fatalf("the first home catches up:\n%s\n%s", r.stdout, r.stderr)
+	}
+	step("org signer, then a second home made around the identity key: org sync rebuilds chains, roll and the epoch key from the real hosts; it rotates, and the first home catches up")
 	t.Logf("e2e client: PASS (%d steps)", n)
 }

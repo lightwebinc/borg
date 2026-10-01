@@ -15,9 +15,11 @@ import (
 	"time"
 
 	clients "github.com/bsv-blockchain/go-sdk/auth/clients/authhttp"
+	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
 
 	"github.com/lightwebinc/bcommon/bwallet"
+	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/lookup"
 	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/producer"
@@ -568,13 +570,61 @@ func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracke
 		return nil, fmt.Errorf("node tip: %w", err)
 	}
 	engine.CollectChange(ctx, h.e.Pool, asset)
+	if h.st.KeepPayments(h.e.Pool.UnprovenTxids()) {
+		if err := h.st.Save(); err != nil {
+			return nil, err
+		}
+	}
 	s := h.e.Signer()
+	// The change of this home's own unmined payment is spendable by its
+	// next payment, which carries that payment in its BEEF: a payer with
+	// one coin is not held to one priced question per block.
+	kept := &producer.Kept{Load: func(txid string) (*transaction.Transaction, error) {
+		if p := h.st.PaymentOf(txid); p != nil {
+			return funding.Rebuild("", "", p.Beef)
+		}
+		return nil, fmt.Errorf("transaction %s is not a payment this home keeps", txid)
+	}}
+	allow := func() []string {
+		var ids []string
+		for _, p := range h.st.Payments {
+			// A payment and the unmined payments under it: the next one
+			// would carry them all.
+			if tx, err := kept.Tx(p.Txid); err == nil && len(purse.Unmined(tx))+1 < limits.MaxUnminedPayments {
+				ids = append(ids, p.Txid)
+			}
+		}
+		return ids
+	}
 	newPayer := func() *producer.Payer {
 		return &producer.Payer{Pool: h.e.Pool, Tip: tip.Height, Keys: map[string]*bwallet.Signer{s.IdentityHex(): s},
-			Settler: settler, Asset: asset, Fees: mint.DefaultFees, Poll: poll, Note: g.say}
+			Kept: kept, Allow: allow, Settler: settler, Asset: asset, Fees: mint.DefaultFees, Poll: poll, Note: g.say}
 	}
 	return &purse.Purse{Embedded: h.e, NewPayer: newPayer, Fees: mint.DefaultFees, MaxPay: maxPay,
 		Settler: settler, Asset: asset, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
+}
+
+// keepPayment records a payment the host accepted, so the next payment can
+// spend its change before it mines, and hands it to the settlement leg:
+// it is this home's own transaction, and once it mines its change is an
+// ordinary coin whenever the payee settles. A leg that does not take it
+// changes nothing: the payee broadcasts the same bytes.
+func (g *global) keepPayment(ctx context.Context, h *home, p *purse.Purse, tx *transaction.Transaction) error {
+	beef, err := funding.BEEF(tx)
+	if err != nil {
+		return err
+	}
+	h.st.Payments = append(h.st.Payments, state.Payment{Txid: tx.TxID().String(), Beef: hex.EncodeToString(beef)})
+	if err := h.st.Save(); err != nil {
+		return err
+	}
+	if p.Settler == nil {
+		return nil
+	}
+	if err := p.Settler.Submit(ctx, tx); err != nil && !strings.Contains(strings.ToLower(err.Error()), "already") {
+		g.say("payment %s: not broadcast from here (%s); the payee broadcasts it when it settles", reader.Short(tx.TxID().String()), firstLine(err.Error()))
+	}
+	return nil
 }
 
 const historyHelp = `usage: borg history [-org KEY] [-chain org|GROUP] [-after SEQ] [-at URL] [-max-sats N]
@@ -584,8 +634,10 @@ a chain of the organisation (its own, or a group's), one page. It is asked
 at the host's terms route (-at, default the configured history_host) over
 BRC-104 authentication; the host answers 402 with its price, and the
 question is asked again with a BRC-29 payment to the host from this home's
-pool (BRC-105) as output 0, which the host records unbroadcast and its
-payee settles. A price over -max-sats is not paid. Every token answered is
+pool (BRC-105) as output 0, which the host records and its payee settles.
+The payment's change is spendable by this home's next payment at once,
+which then carries this one, up to 16 unmined in a row; for anything else
+it is spendable once the payment mines. A price over -max-sats is not paid. Every token answered is
 verified against this home's headers. The free org-seq and group-seq
 classes give the same tokens one at a time.`
 
@@ -657,6 +709,9 @@ func cmdHistory(ctx context.Context, g *global, args []string) error {
 	if paid := resp.Header.Get("x-bsv-payment-satoshis-paid"); paid != "" {
 		if tx := p.Settle(); tx != nil {
 			fmt.Fprintf(g.stdout, "paid %s sat to %s in %s, recorded by the host for its payee to settle\n", paid, termsafe.Abbrev(resp.Header.Get("x-bsv-auth-identity-key")), tx.TxID())
+			if err := g.keepPayment(ctx, h, p, tx); err != nil {
+				return err
+			}
 		}
 	} else {
 		p.Refund()

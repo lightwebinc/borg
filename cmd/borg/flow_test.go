@@ -16,6 +16,7 @@ import (
 	"github.com/lightwebinc/bcommon/guard"
 
 	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/internal/limits"
 	"github.com/lightwebinc/borg/internal/testchain"
 )
 
@@ -731,5 +732,101 @@ func TestTransitionWhoseFeeCoinIsSpentElsewhereIsDiscarded(t *testing.T) {
 	r = h.must("alice", "open", ops)
 	if !strings.Contains(r.stdout, "epoch   1 OPENED") {
 		t.Fatalf("alice:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// A payer with one coin asks several priced questions inside one block:
+// each payment after the first spends the change of the one before, which
+// it carries, and the payee settles them all. Past the bound on unmined
+// payments in a row the payer waits for a block.
+func TestOneCoinPaysSeveralQuestionsInOneBlock(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.identity("payee", false)
+	h.startPaid(t, "payee", 7)
+	// Exactly one coin is mature, and no block is mined from here on.
+	h.must("bob", "fund", "-blocks", "101")
+	h.chain.SetHold(true)
+	for i := range limits.MaxUnminedPayments {
+		r := h.must("bob", "history", "-chain", o.group)
+		if !strings.Contains(r.stdout, "paid 7 sat") {
+			t.Fatalf("question %d:\n%s\n%s", i, r.stdout, r.stderr)
+		}
+	}
+	if n := len(h.paid.Payments); n != limits.MaxUnminedPayments {
+		t.Fatalf("the host recorded %d payment(s), want %d", n, limits.MaxUnminedPayments)
+	}
+	if r := h.must("bob", "doctor"); !strings.Contains(r.stdout, "unmined payment(s) of this home's is spendable by its next payment") {
+		t.Fatalf("doctor:\n%s", r.stdout)
+	}
+	// Each payment spends the one before: one coin, never spent twice.
+	for i := 1; i < limits.MaxUnminedPayments; i++ {
+		tx := h.chain.Tx(h.paid.Payments[i].Txid)
+		if tx == nil || tx.Inputs[0].SourceTXID.String() != h.paid.Payments[i-1].Txid {
+			t.Fatalf("payment %d does not spend the change of payment %d", i, i-1)
+		}
+	}
+	// One more would carry more unmined payments than the bound: the
+	// payer waits for a block, and nothing was paid.
+	r := h.run("bob", "", "history", "-chain", o.group)
+	h.want(r, exitUsage, "whose proofs have not arrived")
+	if n := len(h.paid.Payments); n != limits.MaxUnminedPayments {
+		t.Fatalf("a payment past the bound was made: %d", n)
+	}
+	h.chain.SetHold(false)
+	h.chain.Mine()
+	ledger := filepath.Join(h.dir, "payments.jsonl")
+	if err := os.WriteFile(ledger, h.paid.Ledger(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = h.must("payee", "payee", "settle", ledger)
+	if !strings.Contains(r.stdout, fmt.Sprintf("%d payment(s) settled, %d sat", limits.MaxUnminedPayments, 7*limits.MaxUnminedPayments)) {
+		t.Fatalf("settle:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("bob", "history", "-chain", o.group)
+	if !strings.Contains(r.stdout, "paid 7 sat") || !strings.Contains(h.must("bob", "doctor").stdout, "the change of 1 unmined payment(s)") {
+		t.Fatalf("after the block:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// A payer whose settlement leg takes nothing still pays in a row, and the
+// payee, which holds each payment with the unmined payment it spends,
+// broadcasts those first: nothing is left for the payer to do.
+func TestPayeeBroadcastsThePaymentsAPaymentSpends(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.identity("payee", false)
+	h.startPaid(t, "payee", 7)
+	h.must("bob", "fund", "-blocks", "101")
+	settle := h.env["BORG_SETTLE"]
+	h.env["BORG_SETTLE"] = "rpc:http://127.0.0.1:1/rpc"
+	h.chain.SetHold(true)
+	for i := range 3 {
+		r := h.must("bob", "history", "-chain", o.group)
+		if !strings.Contains(r.stdout, "paid 7 sat") || !strings.Contains(r.stderr, "not broadcast from here") {
+			t.Fatalf("question %d:\n%s\n%s", i, r.stdout, r.stderr)
+		}
+	}
+	if h.chain.Waiting() != 0 {
+		t.Fatal("a payment reached the chain although the payer's leg is down")
+	}
+	h.chain.SetHold(false)
+	h.env["BORG_SETTLE"] = settle
+	ledger := filepath.Join(h.dir, "payments.jsonl")
+	// The last payment alone: the two it rests on are in its BEEF.
+	lines := strings.Split(strings.TrimSpace(string(h.paid.Ledger())), "\n")
+	if err := os.WriteFile(ledger, []byte(lines[2]+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := h.must("payee", "payee", "settle", ledger)
+	if !strings.Contains(r.stdout, "1 payment(s) settled, 7 sat") {
+		t.Fatalf("settle:\n%s\n%s", r.stdout, r.stderr)
+	}
+	for _, p := range h.paid.Payments {
+		if !h.chain.Mined(p.Txid) {
+			t.Fatalf("payment %s is not mined", p.Txid)
+		}
 	}
 }

@@ -91,6 +91,11 @@ type State struct {
 	// token's output was unspent (spec section 6.5).
 	Evidence []Evidence `json:"evidence,omitempty"`
 
+	// Payments are the payments this identity made for priced questions
+	// that have not mined yet, each as the BEEF the host was handed: the
+	// next payment may spend the change of one, and then carries it.
+	Payments []Payment `json:"payments,omitempty"`
+
 	// Settled are the txids of payments to this identity as a host's payee
 	// that payee settle internalized; Unsettleable those the network
 	// refused for good.
@@ -358,6 +363,32 @@ type Evidence struct {
 	At int64 `json:"at"`
 	// Source names what said unspent.
 	Source string `json:"source"`
+}
+
+// Payment is a payment this identity made that has not mined yet.
+type Payment struct {
+	Txid string `json:"txid"`
+	// Beef is the payment as Atomic BEEF, hex, with its ancestry back to
+	// each proof.
+	Beef string `json:"beef"`
+}
+
+// PaymentOf finds an unmined payment of this identity's.
+func (s *State) PaymentOf(txid string) *Payment {
+	for i := range s.Payments {
+		if s.Payments[i].Txid == txid {
+			return &s.Payments[i]
+		}
+	}
+	return nil
+}
+
+// KeepPayments drops every payment whose txid is not in waiting: it mined,
+// and its change needs no ancestry any more. It reports whether any went.
+func (s *State) KeepPayments(waiting []string) bool {
+	n := len(s.Payments)
+	s.Payments = slices.DeleteFunc(s.Payments, func(p Payment) bool { return !slices.Contains(waiting, p.Txid) })
+	return len(s.Payments) != n
 }
 
 // Unsettleable is a payment the network refused, and why.

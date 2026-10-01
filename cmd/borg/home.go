@@ -798,6 +798,9 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 	if len(st.Keys) > 0 {
 		fmt.Fprintf(out, "keys        %d epoch key(s) opened as a member\n", len(st.Keys))
 	}
+	if n := len(st.Payments); n > 0 {
+		fmt.Fprintf(out, "payments    the change of %d unmined payment(s) of this home's is spendable by its next payment, up to %d unmined in a row\n", n, limits.MaxUnminedPayments)
+	}
 }
 
 // currentAt is the organisation's current grant to subject at now.

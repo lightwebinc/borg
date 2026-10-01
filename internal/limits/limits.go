@@ -116,6 +116,10 @@ const (
 	DefaultMaxPrice = 1000
 	// MaxBEEF is the most a reader takes for one answered object.
 	MaxBEEF = 1 << 20
+	// MaxUnminedPayments is how many of a payer's own payments may be
+	// unmined at once with the next spending the change of the last: each
+	// adds its transaction to the next payment's BEEF.
+	MaxUnminedPayments = 16
 )
 
 // Settling.

@@ -126,9 +126,12 @@ func (p *Purse) CreateAction(ctx context.Context, args wallet.CreateActionArgs, 
 }
 
 // Settle keeps the last payment CreateAction made, which the payee
-// accepted: its fee coin is spent and its change, unproven until the payee
-// broadcasts it, is held in the pool. Every earlier payment is refunded.
-// It returns the kept payment, or nil when none was made.
+// accepted: its fee coin is spent and its change, unproven until the
+// payment mines, is held in the pool. Every earlier payment is refunded.
+// It returns the kept payment, or nil when none was made. The caller keeps
+// the payment (funding.BEEF) for as long as it is unmined, so that a later
+// payment can spend its change and carry it, and may broadcast it itself:
+// it is the payer's own transaction, and the same bytes the payee settles.
 func (p *Purse) Settle() *transaction.Transaction {
 	if len(p.made) == 0 {
 		return nil
@@ -250,6 +253,14 @@ func (p *Purse) Broadcast(ctx context.Context, in *Incoming) error {
 	if p.Settler == nil {
 		return errors.New("purse: no settlement leg to broadcast the payment (config key settle)")
 	}
+	// A payment may spend the change of the payer's earlier payment, not
+	// yet mined, which its BEEF then carries: those go first, oldest
+	// first. Each is the payer's own signed transaction; one the network
+	// holds already is not an error, and one it refuses shows in the
+	// payment's own answer.
+	for _, anc := range Unmined(in.Tx) {
+		_ = p.Settler.Submit(ctx, anc)
+	}
 	if err := p.Settler.Submit(ctx, in.Tx); err != nil && !alreadyKnown(err) {
 		if why, ok := chainview.RefusedAnswer(err); ok {
 			return &RefusedError{Txid: in.Txid, Why: why}
@@ -266,6 +277,27 @@ func (p *Purse) Broadcast(ctx context.Context, in *Incoming) error {
 		return &RefusedError{Txid: in.Txid, Why: why}
 	}
 	return nil
+}
+
+// Unmined are the ancestors of tx its BEEF carries without a proof, each
+// after its own.
+func Unmined(tx *transaction.Transaction) []*transaction.Transaction {
+	var out []*transaction.Transaction
+	seen := map[*transaction.Transaction]bool{}
+	var walk func(t *transaction.Transaction)
+	walk = func(t *transaction.Transaction) {
+		for _, in := range t.Inputs {
+			src := in.SourceTransaction
+			if src == nil || src.MerklePath != nil || seen[src] {
+				continue
+			}
+			seen[src] = true
+			walk(src)
+			out = append(out, src)
+		}
+	}
+	walk(tx)
+	return out
 }
 
 // RefusedError is a payment the network will never mine: the leg refused
