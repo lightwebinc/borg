@@ -38,6 +38,19 @@ export class OrgFold {
   rollNow(): Uint8Array[] {
     return [...this.roll.values()].sort(compareBytes)
   }
+
+  /** Whether the roll holds commitment c (hash byte order hex). */
+  holds(c: string): boolean {
+    return this.roll.has(c)
+  }
+
+  /** A copy to fold a second successor on. */
+  clone(): OrgFold {
+    const f = new OrgFold()
+    for (const [k, v] of this.roll) f.roll.set(k, v)
+    f.broken = this.broken
+    return f
+  }
 }
 
 /** A group's members, every removed key and every epoch's commitment, folded from seq 0. */
@@ -74,6 +87,21 @@ export class GroupFold {
 
   membersNow(): Uint8Array[] {
     return [...this.members.values()].sort(compareBytes)
+  }
+
+  /** Whether key (hex) is a member. */
+  holds(key: string): boolean {
+    return this.members.has(key)
+  }
+
+  /** A copy to fold a second successor on. */
+  clone(): GroupFold {
+    const f = new GroupFold()
+    for (const [k, v] of this.members) f.members.set(k, v)
+    for (const k of this.removed) f.removed.add(k)
+    for (const c of this.commitments) f.commitments.add(c)
+    f.broken = this.broken
+    return f
   }
 }
 
