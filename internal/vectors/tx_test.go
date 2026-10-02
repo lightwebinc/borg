@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/borg/internal/borgrec"
 )
@@ -188,4 +189,74 @@ func TestAdmitSurvivesGarbage(t *testing.T) {
 		}
 	}
 	_ = fmt.Sprint
+}
+
+// TestTokenBEEFOfSiblings: a token and its parent mined beside each other in
+// one block. Each minimal path lists the other's txid as a plain hash, and
+// merging the two paths kept one flag only, so the token rule refused the
+// BEEF this module built for a replay. TokenBEEF flags both, and the BEEF
+// is admitted, whichever of the two is on the left.
+func TestTokenBEEFOfSiblings(t *testing.T) {
+	f, _ := readTxFile(t)
+	byTxid := map[string][]byte{}
+	for _, s := range f.Stored {
+		b, _ := hex.DecodeString(s.Stored)
+		byTxid[s.Txid] = b
+	}
+	ran := 0
+	for _, s := range f.Stored {
+		pb, ok := byTxid[s.Parent]
+		if !ok {
+			continue // a chain tree, which no host keeps
+		}
+		for _, tokenLeft := range []bool{false, true} {
+			tx, tok, err := borgrec.StoredToken(byTxid[s.Txid])
+			if err != nil {
+				t.Fatal(err)
+			}
+			ptx, _, err := borgrec.StoredToken(pb)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const height = 5000
+			first, second := ptx, tx
+			if tokenLeft {
+				first, second = tx, ptx
+			}
+			// A block of four: the two at offsets 2 and 3, each with its
+			// own minimal path, in which the other is a plain hash.
+			prove := func(own *transaction.Transaction) {
+				yes := true
+				a := &transaction.PathElement{Offset: 2, Hash: first.TxID()}
+				b := &transaction.PathElement{Offset: 3, Hash: second.TxID()}
+				if own == first {
+					a.Txid = &yes
+				} else {
+					b.Txid = &yes
+				}
+				own.MerklePath = transaction.NewMerklePath(height, [][]*transaction.PathElement{{a, b}, {{Offset: 0, Hash: fixedHash(0x37)}}})
+			}
+			prove(tx)
+			prove(ptx)
+			root, err := tx.MerklePath.ComputeRoot(tx.TxID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			beef, err := borgrec.TokenBEEF(tx, ptx)
+			if err != nil {
+				t.Fatalf("%s: %v", s.Name, err)
+			}
+			a, err := borgrec.Admit(context.Background(), beef, nil, borgrec.Host{Hall: f.Hall, Headers: Headers{height: *root}, MaxBEEF: f.MaxBEEF})
+			if err != nil {
+				t.Fatalf("%s (token on the left %v): the BEEF TokenBEEF built is refused: %q (%v)", s.Name, tokenLeft, borgrec.Reason(err), err)
+			}
+			if a.Token == nil || a.Token.Seq() != tok.Seq() || a.Parent != [32]byte(*ptx.TxID()) {
+				t.Errorf("%s: admitted %+v", s.Name, a)
+			}
+			ran++
+		}
+	}
+	if ran == 0 {
+		t.Fatal("no stored token has a stored parent")
+	}
 }
