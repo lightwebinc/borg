@@ -86,6 +86,8 @@ or a member's client ([usage.md](usage.md)).
 
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
+| Payments one coin can make to one host | one | none | Two unbroadcast payments spending one coin both verify and only one can mine: the host refuses the second (409). A payer's next payment spends the change of its last, which is another coin | Not on the plane |
+| `borg history` refused for its session's budget (429) | waits as the host says, 1 to 30 s, and asks once more | one retry | A second refusal ends the command, exit 3; nothing was paid for a refused request | Not on the plane |
 | Price the client pays for one priced question (`-max-sats`) | 1000 sat | the flag | A price is per question (one page); a host that asks more is asked by the user, never paid by default | Not on the plane: the terms route is HTTP |
 | A payer's unmined payments in a row | each spends the change of the last | 16 | A payment is mined only when someone broadcasts it. The change of the payer's own unmined payment is spendable by its next payment, which carries that payment in its BEEF; past 16 the payer waits for a block. For anything but a payment the change waits until it mines | Not on the plane |
 | Coins a payer needs | one | none | See the row above. A payer that asks more than 16 priced questions a block holds several coins (`fund` more than once, or several payments to the fund address) | Not on the plane |
@@ -98,13 +100,16 @@ or a member's client ([usage.md](usage.md)).
 | --- | --- | --- | --- | --- |
 | BEEF bound (`BORG_MAX_BEEF`) | 262144 bytes | at least 262144 (a floor, never lowered) | A token of 64 additions and 64 removals with its parent, or a carrier from a 1000-output tree, fits | Same |
 | Sweep inputs (`BORG_MAX_SWEEP_INPUTS`) | 1024 | at least 1024 | A sweep of a whole 1000-output tree is admitted | Same |
-| Tokens kept per seq of a chain | 8, the lowest txids | host policy | Bounds what a fork can make a host keep | Same |
+| Tokens kept per seq of a chain | 8: those not `pending` first, then the lowest txids | host policy | Bounds what a fork can make a host keep. A `pending` token turned away is read back from storage once its predecessor is decided | Same |
 | Superseded carriers kept per funding output | 8 wraps, 64 grants | host policy | Evidence that an output was used twice, bounded | Same |
 | Retention of what a host no longer answers (`BORG_RETENTION_DAYS`) | 31 days | at least 31 (spec section 11.3) | Longer retention of ended epochs' wraps is what a host sells | Same |
 | Spends of outpoints no carrier used (`BORG_SPEND_TABLE`) | 65536, oldest dropped first | at least 65536 | A sweep can arrive before the carrier it retracts | Same |
 | Outpoint rows (`borg-rows.jsonl`) | kept for the host's life | none | It is what keeps a retracted carrier retracted across restarts; back it up ([host.md](host.md)) | Same |
+| Carrier lines held in memory | every carrier ever admitted, about 1 KB of memory and 300 bytes of journal each | none: not bounded. 1,000,000 carriers are about 1 GB of memory | The winner of a funding output is the lowest commitment ever admitted on it, so every one is kept. `borg_carrier_lines` counts them; size Node's heap for it | Same |
 | BRC-104 sessions the terms route keeps (`BORG_SESSIONS`, `BORG_SESSION_TTL`) | 10000, each forgotten after 600 s idle | host policy | A handshake is unauthenticated: the store must not grow without end. Past the cap the least recently used goes and its client shakes hands again | Not on the plane |
 | BRC-104 handshakes the terms route answers (`BORG_HANDSHAKES_PER_SEC`, `BORG_HANDSHAKE_BURST`, `BORG_HANDSHAKES_PER_ADDR_PER_SEC`, `BORG_HANDSHAKE_ADDR_BURST`) | 4 a second, 8 at once; per remote address (IPv6 per /64) 1 a second, 4 at once | host policy; over it answered 429 with `Retry-After`, before any signature | The session cap bounds memory, not work: each handshake is a signature on the host's own process. An honest client shakes hands once a session | Not on the plane |
+| Signed responses one BRC-104 session is given (`BORG_RESPONSES_PER_SEC`, `BORG_RESPONSE_BURST`) | 5 a second, 20 at once | host policy; over it answered 429 with `Retry-After` and no signature | Every authenticated answer is a signature on the host's own process: one handshake must not buy them without end. A reader walking pages asks far fewer | Not on the plane |
+| Authenticated requests remembered, to refuse one sent twice | the last 65536 | fixed | A replay is refused 401 before any signature; the session budget bounds an older one | Not on the plane |
 | Lookup rate a host accepts | host policy | host policy; 429 with `Retry-After` | Lookup is an unauthenticated surface | Same |
 
 ## Where the numbers come from

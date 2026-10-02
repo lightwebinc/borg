@@ -49,7 +49,7 @@ synchronisation of unspent outputs for `tm_borg_` topics (spec sections
 | `BORG_MAX_SWEEP_INPUTS` | 1024 | the most inputs of a sweep the host accepts. At least 1024 |
 | `BORG_SPEND_TABLE` | 65536 | the spends of outpoints no carrier used that the host keeps (below). At least 65536 |
 | `BORG_LISTEN` | none | `host:port` of the terms route (below) |
-| `BORG_PRICES` | none | the classes this host prices, for example `history=5,history-after=5`. Only the priceable classes; a price of 0 charges nothing |
+| `BORG_PRICES` | none | the classes this host prices, for example `history=5,history-after=5`. Only the priceable classes; a price of 0 charges nothing. A class and its `-after` form are priced together or not at all |
 | `BORG_PAYEE_KEY` | none | the payee's private key, 64 lowercase hex characters: the terms route's BRC-104 identity and the key payments are derived from |
 | `BORG_SESSIONS` | 10000 | the most BRC-104 sessions the terms route keeps. Past it the least recently used is forgotten |
 | `BORG_SESSION_TTL` | 600 | seconds a BRC-104 session is kept once idle |
@@ -57,9 +57,13 @@ synchronisation of unspent outputs for `tm_borg_` topics (spec sections
 | `BORG_HANDSHAKE_BURST` | 8 | the most handshakes the terms route answers at once |
 | `BORG_HANDSHAKES_PER_ADDR_PER_SEC` | 1 | handshakes a second one remote address is answered; decimals allowed |
 | `BORG_HANDSHAKE_ADDR_BURST` | 4 | the most handshakes one remote address is answered at once |
+| `BORG_RESPONSES_PER_SEC` | 5 | signed responses a second one BRC-104 session is given; decimals allowed |
+| `BORG_RESPONSE_BURST` | 20 | the most signed responses one session is given at once |
 
-A price needs `BORG_LISTEN` and `BORG_PAYEE_KEY`. Any mistake stops the
-host before its port opens.
+A price needs `BORG_LISTEN` and `BORG_PAYEE_KEY`. `history` and
+`history-after` sell one walk, so a host that prices one and not the other
+(`history=5` alone) is refused: the free form would answer every page but
+the first for nothing. Any mistake stops the host before its port opens.
 
 ### The header source
 
@@ -87,7 +91,15 @@ returns rows in. Tokens the next token spent are not among the unspent rows
 the host hands a module; the module reads them back from the rows it keeps,
 and failing that walks back from each held token through the input that
 spends its predecessor, reading each as the engine stores it (the token
-alone with its proof).
+alone with its proof). An admission that arrives while the index is being
+rebuilt waits for the rebuild, and is then decided as any other.
+
+At most 8 tokens are kept at one `seq` of a chain: those that are not
+`pending` first, then the lowest txids. The set is a function of what the
+host holds, never of arrival order, and a token on a predecessor no host
+has cannot take the place of one on the chain. A `pending` token turned
+away from a full `seq` stays in the engine's storage; once the predecessor
+it names is decided the module reads it back and it takes its place.
 
 ### Statuses
 
@@ -120,7 +132,15 @@ carrier that arrives later on a waiting outpoint is retracted at once and
 the spend joins its row. A sweep whose every spend has left the table is
 dropped and deleted from storage, so a chain of mined sweeps of a
 stranger's own outputs costs the host the table and nothing more. The
-table is rebuilt on start from the sweeps storage holds.
+table is rebuilt on start from the sweeps storage holds. A held sweep whose
+tombstone an admitted transaction then spends is no longer among the
+unspent rows storage hands a restart, so the state directory names it and
+the restart reads it back: a spend that waits in the table still retracts
+a carrier that arrives after a restart.
+
+One mined sweep may be published in several halls. It is indexed in each
+hall that admitted it, and dropping it from one topic leaves it answering
+in the others.
 
 ### Retention
 
@@ -133,25 +153,47 @@ wraps of a group's current epoch are kept; those of an earlier epoch for
 Up to 8 superseded wraps and 64 superseded grants are kept on one outpoint
 as evidence, and the rest are dropped at once. Retention runs hourly.
 
+What the index drops is deleted from the engine's storage at once: after
+the admission that dropped it, and after each retention run. A storage
+with no `deleteOutput` keeps what was dropped; the module says so in the
+log once and keeps no list of it.
+
 ## The state directory
 
 - `borg-rows.jsonl` holds what the host keeps for its life beside the
   engine's storage: every carrier any hall admitted with the funding output
   it spent, every drop, every spend of such an outpoint by an admitted
-  sweep, and when the host first saw each token. It keeps a funding output
-  from answering a second carrier and keeps retention's clocks, so it is
-  kept for the host's life, backed up with the database, and never edited.
-  Each line is flushed to disk before the admission it records completes.
+  sweep, when the host first saw each token, and each held sweep whose
+  tombstone was spent. It keeps a funding output from answering a second
+  carrier and keeps retention's clocks, so it is kept for the host's life,
+  backed up with the database, and never edited. Each line is flushed to
+  disk before the admission it records completes.
 - `payments.jsonl` holds every payment the terms route accepted: the Atomic
   BEEF, the derivation prefix and suffix, the sender's identity key, the
-  satoshis and the class. The route answers once the line is on disk. It
-  does not broadcast the payment.
+  satoshis, the class and the outpoints it spends. The route answers once
+  the line is on disk. It does not broadcast the payment.
 
 Both files are append-only, so a copy taken while the host runs is safe: at
 worst its last line is cut short, and both readers skip such a line. Copy
 the directory daily beside the database backup and keep several days.
 Restore it only when it is lost or damaged, never to roll the host back:
 rows written after the copy are gone.
+
+The module holds every carrier line of `borg-rows.jsonl` in memory for the
+host's life, and nothing bounds it: about 1 KB of memory and 300 bytes of
+journal for each carrier ever admitted, dropped or not, so 1,000,000
+carriers cost about 1 GB of memory and 300 MB of disk
+(`borg_carrier_lines` counts them). Tokens cost a line each as well. Give
+Node the heap for the carriers the host expects (`--max-old-space-size`),
+and watch the gauge.
+
+A state directory written by an earlier build loads unchanged: the lines it
+holds are the lines this build writes, and a `payments.jsonl` line without
+its outpoints has them read from its transaction. The reverse does not
+hold once a spent sweep has been named: an earlier build refuses a journal
+with a line it does not know (`"k":"w"`) and does not start. To run an
+earlier build again, remove those lines from a copy of `borg-rows.jsonl`
+first.
 
 A payment is money only once it is broadcast and mined; until then the
 payer can spend the same coins elsewhere. Settle each line promptly with
@@ -182,8 +224,14 @@ header it is answered 402 with `x-bsv-payment-version` (`1.0`),
 with one, it is answered once output 0 of the payment pays at least the
 price, P2PKH, to the key BRC-29 derives for the prefix, the suffix and the
 asker, the prefix is one this route issued, the payment verifies against
-the host's headers, and its txid was never used before. One payment buys
-one question. The same class asked on the host's own `/lookup` is refused
+the host's headers, its txid was never used before, and it spends no
+coin an accepted payment spent. A payment is unbroadcast when it is
+offered, so two transactions spending one coin both verify and at most one
+can ever be mined: the second is refused 409 `ERR_PAYMENT_CONFLICT`, as a
+used txid is refused 409 `ERR_PAYMENT_REPLAYED`. The coins of every
+accepted payment are kept in `payments.jsonl` and refused again after a
+restart. A payer's next payment may spend the change of its last, which is
+another coin. One payment buys one question. The same class asked on the host's own `/lookup` is refused
 with an error that names this route.
 
 A handshake is unauthenticated and costs the host a signature, so the
@@ -200,7 +248,18 @@ route bounds both its memory and its work:
   first, so a flooding address spends its own budget. A handshake over
   either is answered 429 with `Retry-After`. Behind a reverse proxy every
   client shares the proxy's address: raise the per-address limit to the
-  route's, or limit at the proxy.
+  route's, or limit at the proxy;
+- **signed responses:** every authenticated request is answered with a
+  signature, so one handshake must not buy signatures without end. Each
+  session has a token bucket (`BORG_RESPONSES_PER_SEC`,
+  `BORG_RESPONSE_BURST`), taken only by a request that verified; a request
+  over it is answered 429 with `Retry-After` and no signature. A BRC-104
+  client reports an unsigned answer as a failed authentication: `borg
+  history` waits as the header says (1 to 30 seconds) and asks once more;
+- **replays:** an authenticated request sent again byte for byte is
+  refused 401 `ERR_AUTH_REPLAYED` before any signature work. The route
+  remembers the last 65536 requests it verified; the session budget bounds
+  what an older replay can cost.
 
 ## Metrics
 
@@ -213,7 +272,9 @@ route bounds both its memory and its work:
 | `borg_dropped_total{why}` | carriers dropped as `evidence` or by `retention`, and sweeps dropped from the `table` |
 | `borg_lookups_total{class}` | questions answered |
 | `borg_halls`, `borg_tokens`, `borg_tokens_pending`, `borg_grants`, `borg_wraps`, `borg_sweeps`, `borg_outpoint_rows`, `borg_spend_table` | what the index holds |
-| `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}`, `borg_payments_total{result}` | the terms route |
+| `borg_carrier_lines` | carriers ever admitted, each a journal line held in memory for the host's life |
+| `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}`, `borg_payments_total{result}` | the terms route; a payment refused for its txid or for a coin already spent counts `replayed` |
+| `borg_requests_total{result}` | authenticated requests refused before any signature: `replayed`, or `limited` by the session's budget |
 
 ## Testing against a reference host
 
