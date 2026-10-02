@@ -3,16 +3,22 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
+	"github.com/bsv-blockchain/go-sdk/transaction"
+
+	"github.com/lightwebinc/borg/internal/config"
 
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/limits"
@@ -23,6 +29,10 @@ func init() {
 	poll = 5 * time.Millisecond
 	engine.Retries = []time.Duration{time.Millisecond}
 	limits.Retries = engine.Retries
+	limits.PlaneWait = []time.Duration{time.Millisecond}
+	// A history page of more than 2 tokens is followed by another, so that
+	// a chain of a few tokens takes several pages.
+	historyLast = 2
 }
 
 // harness is a local chain, two stand-in hosts behind a stand-in plane, a
@@ -41,13 +51,60 @@ type harness struct {
 	plane  *testchain.Plane
 	env    map[string]string
 	hall   string
+
+	mu sync.Mutex
+	// onSend, when set, runs once, before the chain takes the next
+	// transaction a client sends, with that transaction.
+	onSend func(tx *transaction.Transaction)
+}
+
+// serveChain is the chain, with the onSend hook in front of it.
+func (h *harness) serveChain(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/rpc" {
+		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		var req struct {
+			Method string `json:"method"`
+			Params []any  `json:"params"`
+		}
+		if json.Unmarshal(body, &req) == nil && req.Method == "sendrawtransaction" && len(req.Params) > 0 {
+			h.mu.Lock()
+			hook := h.onSend
+			h.onSend = nil
+			h.mu.Unlock()
+			if raw, ok := req.Params[0].(string); ok && hook != nil {
+				if tx, err := transaction.NewTransactionFromHex(raw); err == nil {
+					hook(tx)
+				}
+			}
+		}
+	}
+	h.chain.ServeHTTP(w, r)
+}
+
+// global is the command's state as the home name would run it, for a test
+// that calls below the command line.
+func (h *harness) global(name string) (*global, *bytes.Buffer, *bytes.Buffer) {
+	h.t.Helper()
+	env := func(k string) string {
+		if k == "BORG_HOME" {
+			return filepath.Join(h.dir, name)
+		}
+		return h.env[k]
+	}
+	cfg, err := config.Load(config.Path("", env), env)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	return &global{cfg: cfg, stdin: strings.NewReader(""), stdout: &out, stderr: &errb, getenv: env}, &out, &errb
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	h := &harness{t: t, dir: t.TempDir(), chain: testchain.New(700)}
 	h.a, h.b = testchain.NewHost(h.chain), testchain.NewHost(h.chain)
-	h.chainS = httptest.NewServer(h.chain)
+	h.chainS = httptest.NewServer(http.HandlerFunc(h.serveChain))
 	h.aS, h.bS = httptest.NewServer(h.a), httptest.NewServer(h.b)
 	h.plane = &testchain.Plane{Hosts: []http.Handler{h.a, h.b}}
 	h.planeS = httptest.NewServer(h.plane)
@@ -191,3 +248,9 @@ func (h *harness) orgWithGroup() org {
 	h.env["BORG_ORG"] = o.key
 	return o
 }
+
+// The stand-in host and its answered output, by shorter names.
+type (
+	testHost   = testchain.Host
+	testOutput = testchain.Output
+)

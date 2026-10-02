@@ -7,8 +7,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/lightwebinc/bcommon/termsafe"
-
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/state"
@@ -87,10 +85,10 @@ func printDue(out io.Writer, items []dueItem, now time.Time) int {
 			if !it.signer {
 				n++
 			}
-			fmt.Fprintf(out, "due     group %s %s: %s: %s\n", it.group.ID, termsafe.Text(it.group.Name), who, it.why)
+			fmt.Fprintf(out, "due     group %s %s: %s: %s\n", it.group.ID, field(it.group.Name), who, it.why)
 			continue
 		}
-		fmt.Fprintf(out, "soon    group %s %s: %s: its grant expires %s, in %s\n", it.group.ID, termsafe.Text(it.group.Name), who,
+		fmt.Fprintf(out, "soon    group %s %s: %s: its grant expires %s, in %s\n", it.group.ID, field(it.group.Name), who,
 			it.expiry.UTC().Format(borgrec.ExpiryLayout), roundLeft(it.expiry.Sub(now)))
 	}
 	return n

@@ -69,13 +69,30 @@ type home struct {
 	close func()
 }
 
-// openHome opens and locks the home and loads its state.
-func (g *global) openHome() (*home, error) {
-	e, err := g.openWallet()
-	if err != nil {
-		return nil, err
+// lockedWallet takes the home's lock and only then opens its wallet. The
+// order matters: the wallet's coin pool is read into memory when it is
+// opened and written back whole when it changes, so a pool read before the
+// lock is one another command may change in between, and saving it would
+// put back coins that command spent.
+func (g *global) lockedWallet() (*bwallet.Embedded, func(), error) {
+	if _, err := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); err != nil {
+		return nil, nil, fmt.Errorf("open the home %s: %w (run `borg init`)", g.cfg.Home, err)
 	}
 	unlock, err := g.lockHome()
+	if err != nil {
+		return nil, nil, err
+	}
+	e, err := g.openWallet()
+	if err != nil {
+		unlock()
+		return nil, nil, err
+	}
+	return e, unlock, nil
+}
+
+// openHome locks the home, opens its wallet and loads its state.
+func (g *global) openHome() (*home, error) {
+	e, unlock, err := g.lockedWallet()
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +139,32 @@ func (g *global) node(needRPC bool) (*nodeapi.RPC, *nodeapi.Asset, error) {
 	return rpc, &nodeapi.Asset{Base: g.cfg.Asset}, nil
 }
 
+// spendSource is the node's view of which outputs are spent, held to its
+// form: a spender is a transaction id, 64 lowercase hex digits, or the
+// answer is refused. What a node names is printed, compared and asked for
+// again, and a node is somebody else's server.
+type spendSource struct{ *nodeapi.Asset }
+
+// Spender is the node's answer, refused unless it is a transaction id.
+func (s spendSource) Spender(ctx context.Context, txid string, vout uint32) (string, error) {
+	by, err := s.Asset.Spender(ctx, txid, vout)
+	if err != nil {
+		return "", err
+	}
+	by = strings.ToLower(by)
+	if _, herr := reader.Hash(by); by != "" && herr != nil {
+		return "", fmt.Errorf("the node names a spender of %s.%d that is not a transaction id", txid, vout)
+	}
+	return by, nil
+}
+
 // spends is the configured spend source, or nil: the node's view of which
 // outputs are spent.
 func (g *global) spends() reader.Spends {
 	if g.cfg.Asset == "" {
 		return nil
 	}
-	return &nodeapi.Asset{Base: g.cfg.Asset}
+	return spendSource{&nodeapi.Asset{Base: g.cfg.Asset}}
 }
 
 // settler is the configured settlement leg.
@@ -155,7 +191,13 @@ func (g *global) reader() (*reader.Client, error) {
 	if len(g.cfg.Hosts) == 0 {
 		return nil, usage("no overlay host configured (config key hosts, or -hosts)")
 	}
-	return &reader.Client{Hosts: g.cfg.Hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}, nil
+	rd := &reader.Client{Hosts: g.cfg.Hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}
+	if g.cfg.Asset != "" {
+		// A proof a host stored that a reorganisation left stale is
+		// replaced by the node's current one (spec section 11.5).
+		rd.Source = &nodeapi.Asset{Base: g.cfg.Asset}
+	}
+	return rd, nil
 }
 
 // hall is the hall a command uses: its -hall flag, else the configured one.
@@ -238,14 +280,27 @@ func (g *global) legs() (engine.Legs, error) {
 // engine opens a publisher over an open home and finishes whatever a
 // previous run left.
 func (g *global) engine(ctx context.Context, h *home) (*engine.Engine, error) {
+	return g.engineFor(ctx, h, false)
+}
+
+// engineFor is engine; with lenient set, work a previous run left that
+// cannot be finished now is reported and left for the next command, and
+// the publisher is returned all the same. The kill switch runs so: an
+// object that cannot reach a host, or a transition that cannot finish, must
+// not keep a revocation from the chain.
+func (g *global) engineFor(ctx context.Context, h *home, lenient bool) (*engine.Engine, error) {
 	legs, err := g.legs()
 	if err != nil {
 		return nil, err
 	}
 	p := limits.Publisher{Plane: g.cfg.Mode == config.ModePlane, Hosts: len(g.cfg.Hosts), TreeCount: g.cfg.TreeCount,
 		ChainTreeCount: g.cfg.ChainTreeCount, Entries: g.cfg.EntriesFor(), ObjectBound: g.cfg.ObjectBound}
+	need, err := config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
+	if err != nil {
+		return nil, usage("%v (config key quorum)", err)
+	}
 	if g.cfg.Mode == config.ModeUnicast {
-		p.Need, _ = config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
+		p.Need = need
 	}
 	warnings, err := p.Check()
 	if err != nil {
@@ -256,7 +311,7 @@ func (g *global) engine(ctx context.Context, h *home) (*engine.Engine, error) {
 	}
 	o := engine.Options{TreeCount: g.cfg.TreeCount, ChainTreeCount: g.cfg.ChainTreeCount, TreeSats: limits.DefaultTreeSats,
 		Ahead: limits.DefaultAhead, Fees: mint.DefaultFees, ObjectBound: g.cfg.ObjectBound, Poll: poll, Wait: 10 * time.Minute,
-		Delay: g.cfg.Delay, Signers: g.cfg.Signers, Entries: g.cfg.EntriesFor()}
+		Delay: g.cfg.Delay, Signers: g.cfg.Signers, Entries: g.cfg.EntriesFor(), PlaneNeed: need}
 	if uint32(o.TreeCount) <= o.Ahead { //nolint:gosec // bounded by the limits
 		o.Ahead = uint32(o.TreeCount / 2) //nolint:gosec // bounded by the limits
 	}
@@ -271,7 +326,11 @@ func (g *global) engine(ctx context.Context, h *home) (*engine.Engine, error) {
 	err = eng.Start(ctx)
 	var lostErr *engine.LostError
 	if err != nil && !errors.As(err, &lostErr) {
-		return eng, err
+		if !lenient || ctx.Err() != nil {
+			return eng, err
+		}
+		g.say("work an earlier command left is not finished, and is left for the next command: %v", err)
+		return eng, nil
 	}
 	// Where more than one instance of the tooling can sign, a command
 	// first catches up with what another instance did (spec section 7.4):
@@ -363,6 +422,16 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 		}
 		fmt.Fprintln(g.stdout, "created", g.cfg.Home, "around the identity in", *from)
 	}
+	// The lock is taken before the wallet is made or opened: a home that
+	// exists may be in use.
+	if err := os.MkdirAll(g.cfg.Home, 0o700); err != nil {
+		return err
+	}
+	unlock, err := g.lockHome()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	e, err := bwallet.Create(g.cfg.Home, engine.Profile)
 	if errors.Is(err, bwallet.ErrIdentityExists) {
 		if e, err = g.openWallet(); err != nil {
@@ -455,10 +524,11 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 	if g.cfg.Network == "main" {
 		return usage("fund without -txid mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid")
 	}
-	e, err := g.openWallet()
+	e, unlock, err := g.lockedWallet()
 	if err != nil {
 		return err
 	}
+	defer unlock()
 	addr, err := e.FundAddress(e.Mainnet)
 	if err != nil {
 		return err
@@ -470,11 +540,6 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
-	unlock, err := g.lockHome()
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	tip, err := asset.BestHeader(ctx)
 	if err != nil {
 		return fmt.Errorf("node tip: %w", err)
@@ -508,10 +573,11 @@ func (g *global) importPayment(ctx context.Context, txid string) error {
 	if h, err := chainhash.NewHashFromHex(txid); err != nil || h.String() != txid {
 		return usage("-txid %q is not a transaction id (64 lowercase hex characters)", termsafe.Abbrev(txid))
 	}
-	e, err := g.openWallet()
+	e, unlock, err := g.lockedWallet()
 	if err != nil {
 		return err
 	}
+	defer unlock()
 	hc, err := g.headerClient()
 	if err != nil {
 		return err
@@ -559,11 +625,6 @@ func (g *global) importPayment(ctx context.Context, txid string) error {
 	if len(outs) == 0 {
 		return usage("payment %s pays nothing to the fund address %s", txid, addr)
 	}
-	unlock, err := g.lockHome()
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	added, err := e.Pool.Add(outs...)
 	if err != nil {
 		return err
@@ -602,8 +663,8 @@ func cmdHall(_ context.Context, g *global, args []string) error {
 		if err != nil {
 			return err
 		}
-		if e, err := g.openWallet(); err == nil {
-			unlock, err := g.lockHome()
+		if _, serr := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); serr == nil {
+			e, unlock, err := g.lockedWallet()
 			if err != nil {
 				return err
 			}
@@ -655,7 +716,7 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 	fmt.Fprintf(out, "home        %s\n", g.cfg.Home)
 	fmt.Fprintf(out, "network     %s\n", g.cfg.Network)
 	if g.cfg.Hall != "" {
-		fmt.Fprintf(out, "hall        %s\n", termsafe.Text(g.cfg.Hall))
+		fmt.Fprintf(out, "hall        %s\n", field(g.cfg.Hall))
 	} else {
 		fmt.Fprintln(out, "hall        not configured")
 	}
@@ -743,16 +804,16 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 		fmt.Fprintf(out, "tree        %s: %s %d of %d left\n", kind, ts.Tree.Txid, ts.Tree.Remaining(), ts.Tree.Count)
 	}
 	if o := st.Org; o != nil {
-		fmt.Fprintf(out, "org         %s in %s: seq %d, %d grant(s), %d group(s)\n", termsafe.Text(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
+		fmt.Fprintf(out, "org         %s in %s: seq %d, %d grant(s), %d group(s)\n", field(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
 		if p := o.Pending; p != nil {
-			fmt.Fprintf(out, "transition  %s %s persisted and not yet mined; the next command finishes it\n", termsafe.Text(p.What), p.Txid)
+			fmt.Fprintf(out, "transition  %s %s persisted and not yet mined; the next command finishes it\n", field(p.What), p.Txid)
 		}
 		now := time.Now()
 		for i := range o.Groups {
 			gr := &o.Groups[i]
 			members, _, err := engine.Members(gr)
 			if err != nil {
-				fmt.Fprintf(out, "group       %s %s: %v\n", gr.ID, termsafe.Text(gr.Name), err)
+				fmt.Fprintf(out, "group       %s %s: %v\n", gr.ID, field(gr.Name), err)
 				continue
 			}
 			var debt []string
@@ -761,7 +822,7 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 					debt = append(debt, hex.EncodeToString(m))
 				}
 			}
-			line := fmt.Sprintf("group       %s %s: %d member(s), %d token(s)", gr.ID, termsafe.Text(gr.Name), len(members), len(gr.Tokens))
+			line := fmt.Sprintf("group       %s %s: %d member(s), %d token(s)", gr.ID, field(gr.Name), len(members), len(gr.Tokens))
 			if recs, err := engine.GroupRecords(gr); err == nil && len(recs) > 0 {
 				last := recs[len(recs)-1]
 				if gr.RotateEvery > 0 {
@@ -801,7 +862,7 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 	}
 	for _, sw := range st.Sweeps {
 		if sw.Failed != "" {
-			fmt.Fprintf(out, "sweep       %s FAILED: %s; it revokes nothing\n", sw.Txid, termsafe.Text(sw.Failed))
+			fmt.Fprintf(out, "sweep       %s FAILED: %s; it revokes nothing\n", sw.Txid, field(sw.Failed))
 		}
 	}
 	if len(st.Keys) > 0 {
@@ -859,4 +920,56 @@ func firstLine(s string) string {
 		s = s[:160] + "..."
 	}
 	return termsafe.Text(s)
+}
+
+// field is someone else's text that fills one field of a line this command
+// prints (an organisation's or a group's name, a role, a class name):
+// filtered for the terminal, and held to that line. A name is any UTF-8,
+// and one with a line break in it would otherwise write lines of its own
+// in a report, in this command's voice.
+func field(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', '\t', '\v', '\f', 0x85, 0x2028, 0x2029:
+			return ' '
+		}
+		return r
+	}, s)
+	return termsafe.Text(s)
+}
+
+// plainName refuses a name this tooling would write into a record that is
+// not one line of plain text. The record takes any UTF-8; a name every
+// reader can print as it is holds no line break and nothing a terminal
+// would act on.
+func plainName(flag, s string) error {
+	if field(s) != s {
+		return usage("%s holds a line break or a character a terminal would act on; a name is one line of plain text", flag)
+	}
+	return nil
+}
+
+// plain is a note or an error filtered for the terminal, whole. termsafe
+// bounds a line at 512 columns, and a line that quotes a refusal with two
+// transaction ids and a host's words is longer: it would lose its end,
+// which is where it says what to do. So each line is filtered in pieces of
+// 256 runes: a piece holds nothing a terminal acts on once filtered, and
+// joining pieces adds nothing, so the whole is as safe as its parts. At
+// most 200 lines are printed.
+func plain(s string) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > termsafe.MaxLines {
+		lines = append(lines[:termsafe.MaxLines], "[truncated]")
+	}
+	for i, l := range lines {
+		r := []rune(l)
+		var b strings.Builder
+		for len(r) > 0 {
+			n := min(len(r), 256)
+			b.WriteString(termsafe.Text(string(r[:n])))
+			r = r[n:]
+		}
+		lines[i] = b.String()
+	}
+	return strings.Join(lines, "\n")
 }

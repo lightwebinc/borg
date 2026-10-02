@@ -27,7 +27,6 @@ import (
 	"syscall"
 
 	"github.com/lightwebinc/bcommon/headers"
-	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/internal/config"
 )
@@ -108,9 +107,9 @@ global flags:
   -mode MODE          plane (submit once to the facade; the default) or
                       unicast (submit to each of hosts)
   -network NET        main, test or regtest (default main)
-  -quorum Q           mode unicast: hosts that must take a carrier for it to
-                      count as published: all (default), majority, one or N;
-                      tokens and sweeps always need every host
+  -quorum Q           hosts that must hold a carrier for it to count as
+                      published: all (default), majority, one or N; tokens
+                      and sweeps always need every host
   -timeout DUR        per request (default 15s)
   -v                  verbose
   -version            print the version and exit
@@ -165,7 +164,12 @@ type global struct {
 	getenv       func(string) string
 }
 
-func (g *global) say(format string, args ...any) { fmt.Fprintf(g.stderr, format+"\n", args...) }
+// say writes a note to standard error. A note may quote what a host, a
+// node or a record said, which is someone else's text: every note is
+// filtered for the terminal.
+func (g *global) say(format string, args ...any) {
+	fmt.Fprintln(g.stderr, plain(fmt.Sprintf(format, args...)))
+}
 
 type command func(ctx context.Context, g *global, args []string) error
 
@@ -277,11 +281,11 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return exitOK
 	case errors.As(err, &ee):
 		if ee.msg != "" {
-			fmt.Fprintln(stderr, "borg:", termsafe.Text(ee.msg))
+			fmt.Fprintln(stderr, "borg:", plain(ee.msg))
 		}
 		return ee.code
 	default:
-		fmt.Fprintln(stderr, "borg:", termsafe.Text(err.Error()))
+		fmt.Fprintln(stderr, "borg:", plain(err.Error()))
 		return exitUsage
 	}
 }

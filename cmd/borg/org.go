@@ -77,6 +77,12 @@ type orgRun struct {
 // openOrg opens the home and a publisher, finishing whatever a previous
 // run left. need says whether the organisation must exist already.
 func (g *global) openOrg(ctx context.Context, need bool) (*orgRun, error) {
+	return g.openOrgFor(ctx, need, false)
+}
+
+// openOrgFor is openOrg; with lenient set, work a previous run left that
+// cannot be finished now is reported and left (engineFor).
+func (g *global) openOrgFor(ctx context.Context, need, lenient bool) (*orgRun, error) {
 	h, err := g.openHome()
 	if err != nil {
 		return nil, err
@@ -98,7 +104,7 @@ func (g *global) openOrg(ctx context.Context, need bool) (*orgRun, error) {
 		h.close()
 		return nil, err
 	}
-	eng, err := g.engine(ctx, h)
+	eng, err := g.engineFor(ctx, h, lenient)
 	if err != nil {
 		if eng != nil {
 			_ = eng.Close(context.WithoutCancel(ctx))
@@ -272,6 +278,9 @@ func (g *global) orgCreate(ctx context.Context, name string, opaque bool, member
 	if l := len(name); l < 1 || l > borgrec.MaxName {
 		return usage("the organisation's name is 1 to %d bytes", borgrec.MaxName)
 	}
+	if err := plainName("the organisation's name", name); err != nil {
+		return err
+	}
 	hall, err := g.hall()
 	if err != nil {
 		return err
@@ -308,13 +317,13 @@ func (g *global) orgCreate(ctx context.Context, name string, opaque bool, member
 		// A previous run's first token, finished as this one opened.
 		g.say("the organisation's first token was persisted by a previous run and is finished now")
 	default:
-		return usage("this home runs the organisation %q already (borg org show)", termsafe.Text(o.Name))
+		return usage("this home runs the organisation %q already (borg org show)", field(o.Name))
 	}
 	o := r.h.st.Org
 	t := state.Latest(o.Tokens)
-	fmt.Fprintf(g.stdout, "org     %s\nhall    %s\nname    %s\nseq     0 %s\n", r.eng.Signer.IdentityHex(), o.Hall, termsafe.Text(o.Name), t.Txid)
+	fmt.Fprintf(g.stdout, "org     %s\nhall    %s\nname    %s\nseq     0 %s\n", r.eng.Signer.IdentityHex(), o.Hall, field(o.Name), t.Txid)
 	for _, gr := range o.Grants {
-		fmt.Fprintf(g.stdout, "grant   %s %s %s\n", gr.Txid, gr.Subject, termsafe.Text(gr.Role))
+		fmt.Fprintf(g.stdout, "grant   %s %s %s\n", gr.Txid, gr.Subject, field(gr.Role))
 	}
 	return nil
 }
@@ -332,12 +341,12 @@ func (g *global) orgShow() error {
 	if o == nil {
 		return usage("this home runs no organisation (borg org create)")
 	}
-	fmt.Fprintf(g.stdout, "org     %s\nhall    %s\nname    %s\nopaque  %v\n", st.Identity, o.Hall, termsafe.Text(o.Name), o.Opaque)
+	fmt.Fprintf(g.stdout, "org     %s\nhall    %s\nname    %s\nopaque  %v\n", st.Identity, o.Hall, field(o.Name), o.Opaque)
 	for _, t := range o.Tokens {
 		fmt.Fprintf(g.stdout, "seq     %d %s height %d\n", t.Seq, t.Txid, t.Height)
 	}
 	if p := o.Pending; p != nil {
-		fmt.Fprintf(g.stdout, "pending %s %s (the next command finishes it)\n", termsafe.Text(p.What), p.Txid)
+		fmt.Fprintf(g.stdout, "pending %s %s (the next command finishes it)\n", field(p.What), p.Txid)
 	}
 	now := time.Now()
 	signer := signerHex(st.Identity)
@@ -354,7 +363,7 @@ func (g *global) orgShow() error {
 				st = "in the roll, EXPIRED"
 			}
 		}
-		fmt.Fprintf(g.stdout, "grant   %s %s %s %s until %s: %s\n", gr.Txid, gr.Subject, termsafe.Text(gr.Role), termsafe.Text(gr.Scope), gr.Expiry, st)
+		fmt.Fprintf(g.stdout, "grant   %s %s %s %s until %s: %s\n", gr.Txid, gr.Subject, field(gr.Role), field(gr.Scope), gr.Expiry, st)
 	}
 	for i := range o.Groups {
 		gr := &o.Groups[i]
@@ -368,7 +377,7 @@ func (g *global) orgShow() error {
 			seq = t.Seq
 		}
 		ep, held := currentEpoch(gr)
-		line := fmt.Sprintf("group   %s %s seq %d epoch %d, %d member(s)", gr.ID, termsafe.Text(gr.Name), seq, ep, len(members))
+		line := fmt.Sprintf("group   %s %s seq %d epoch %d, %d member(s)", gr.ID, field(gr.Name), seq, ep, len(members))
 		if !held {
 			line += "; KEY NOT HELD: the epoch was begun by another instance (borg org sync opens it)"
 		}
@@ -442,7 +451,7 @@ func (g *global) reportSync(out io.Writer, rep *engine.SyncReport) {
 		if m.Current {
 			cur = ", the CURRENT epoch: this home wraps it to nobody until it opens it or the group rotates"
 		}
-		fmt.Fprintf(out, "missing group %s epoch %d%s: %s\n", m.Group, m.Epoch, cur, termsafe.Text(m.Why))
+		fmt.Fprintf(out, "missing group %s epoch %d%s: %s\n", m.Group, m.Epoch, cur, field(m.Why))
 	}
 	if rep.Coins+rep.Spent > 0 {
 		fmt.Fprintf(out, "sync    pool: %d coin(s) added (change of the tokens taken), %d removed (spent by another instance)\n", rep.Coins, rep.Spent)
@@ -489,7 +498,7 @@ func (g *global) orgSync(ctx context.Context, retire bool) error {
 	}
 	g.reportSync(g.stdout, rep)
 	o := h.st.Org
-	fmt.Fprintf(g.stdout, "org     %s %s in %s: seq %d, %d grant(s), %d group(s)\n", h.st.Identity, termsafe.Text(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
+	fmt.Fprintf(g.stdout, "org     %s %s in %s: seq %d, %d grant(s), %d group(s)\n", h.st.Identity, field(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
 	// What the home owes now that it holds the chain: a wrap to a member
 	// another home added, when this one holds the epoch's key. A home with
 	// no coin yet makes them with its next command.
@@ -525,7 +534,7 @@ func (g *global) orgSigner(ctx context.Context) error {
 			return err
 		}
 		if slices.ContainsFunc(members, func(m []byte) bool { return string(m) == string(sk) }) {
-			fmt.Fprintf(g.stdout, "group   %s %s: a member already\n", gr.ID, termsafe.Text(gr.Name))
+			fmt.Fprintf(g.stdout, "group   %s %s: a member already\n", gr.ID, field(gr.Name))
 			continue
 		}
 		res, err := r.eng.GroupChange(ctx, gr.ID, engine.Change{What: "group " + gr.ID + " (add the signer key)"})
@@ -858,7 +867,7 @@ func cmdGrant(ctx context.Context, g *global, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(g.stdout, "grant   %s to %s, %s, %s, until %s\n", gr.Txid, gr.Subject, termsafe.Text(gr.Role), termsafe.Text(gr.Scope), gr.Expiry)
+		fmt.Fprintf(g.stdout, "grant   %s to %s, %s, %s, until %s\n", gr.Txid, gr.Subject, field(gr.Role), field(gr.Scope), gr.Expiry)
 		if err := r.eng.OrgTransition(ctx, []*state.Grant{r.h.st.Org.GrantByTxid(gr.Txid)}, nil, "organisation token (admit)"); err != nil {
 			return lost(err)
 		}
@@ -953,6 +962,9 @@ func cmdGroup(ctx context.Context, g *global, args []string) error {
 		if l := len(pos[1]); l < 1 || l > borgrec.MaxName {
 			return usage("a group's name is 1 to %d bytes", borgrec.MaxName)
 		}
+		if err := plainName("the group's name", pos[1]); err != nil {
+			return err
+		}
 		var raw [][]byte
 		for _, m := range members {
 			b, _, err := parseKey("-member", m)
@@ -978,7 +990,7 @@ func cmdGroup(ctx context.Context, g *global, args []string) error {
 		if members, _, err := engine.Members(gr); err == nil {
 			n = len(members)
 		}
-		fmt.Fprintf(g.stdout, "group   %s\nname    %s\nseq     0 %s epoch 0, %d member(s), wrapped to each\n", gr.ID, termsafe.Text(gr.Name), t.Txid, n)
+		fmt.Fprintf(g.stdout, "group   %s\nname    %s\nseq     0 %s epoch 0, %d member(s), wrapped to each\n", gr.ID, field(gr.Name), t.Txid, n)
 		return nil
 	case len(pos) == 1 && pos[0] == "list":
 		return g.groupList(ctx)
@@ -999,7 +1011,7 @@ func (g *global) groupList(ctx context.Context) error {
 			for i := range st.Org.Groups {
 				gr := &st.Org.Groups[i]
 				members, _, _ := engine.Members(gr)
-				fmt.Fprintf(g.stdout, "%s  %s  %d member(s)\n", gr.ID, termsafe.Text(gr.Name), len(members))
+				fmt.Fprintf(g.stdout, "%s  %s  %d member(s)\n", gr.ID, field(gr.Name), len(members))
 			}
 			return nil
 		}
@@ -1018,7 +1030,7 @@ func (g *global) groupList(ctx context.Context) error {
 			g.say("group %s: %v", id, err)
 			continue
 		}
-		fmt.Fprintf(g.stdout, "%s  %s  seq %d epoch %d, %d member(s)\n", id, termsafe.Text(gv.Token.Name), gv.Token.Seq, gv.Token.Epoch, len(gv.Members))
+		fmt.Fprintf(g.stdout, "%s  %s  seq %d epoch %d, %d member(s)\n", id, field(gv.Token.Name), gv.Token.Seq, gv.Token.Epoch, len(gv.Members))
 	}
 	if len(errs) > 0 {
 		return incomplete("%d host(s) could not be asked", len(errs))
@@ -1079,7 +1091,7 @@ func (g *global) groupShow(ctx context.Context, name string) error {
 	}
 	problem := g.reportChain("group "+gid, gv.ChainView)
 	tok := gv.Token
-	fmt.Fprintf(g.stdout, "group   %s %s\nlatest  seq %d %s epoch %d (begun at seq %d), %d member(s)\n", gid, termsafe.Text(tok.Name), tok.Seq,
+	fmt.Fprintf(g.stdout, "group   %s %s\nlatest  seq %d %s epoch %d (begun at seq %d), %d member(s)\n", gid, field(tok.Name), tok.Seq,
 		gv.Latest().Txid, tok.Epoch, tok.EpochSeq, len(gv.Members))
 	if tok.RotateOnJoin || tok.RotateEvery > 0 {
 		fmt.Fprintf(g.stdout, "policy  rotateOnJoin %v, rotateEvery %ds (informative)\n", tok.RotateOnJoin, tok.RotateEvery)

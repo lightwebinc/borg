@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/funding"
 
+	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/state"
 )
 
@@ -23,6 +25,12 @@ each sweep is persisted, settled, waited for until it mines (one block a
 tree) and published to the plane and to every host named. A run that stops
 part way is finished by running kill again: a tree already swept is passed
 over.
+
+Work an earlier command left unfinished (an object a host has not taken, a
+transition not yet mined) does not stop it: that work is reported and left
+for the next command. An output the chain already shows spent is left out
+of the sweep, and the transaction that spends it is taken as its sweep and
+published as one: another instance of the tooling swept it.
 
 What it does not do: the organisation's and the groups' chain tokens are
 mined and stay, and readers go on reading them (each member then holds no
@@ -110,7 +118,9 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 		fmt.Fprintf(g.stdout, "%d tree(s) to sweep; nothing was sent (pass -yes)\n", len(trees))
 		return nil
 	}
-	r, err := g.openOrg(ctx, false)
+	// Work an earlier command left unfinished does not stop the kill
+	// switch: it is reported and left.
+	r, err := g.openOrgFor(ctx, false, true)
 	if err != nil {
 		return err
 	}
@@ -122,7 +132,18 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 	trees := killTrees(r.h.st, func(txid string, vout uint32) bool { return r.eng.SweptBy(txid, vout) != nil })
 	failed := 0
 	for _, t := range trees {
+		// A sweep refused because another transaction spends one of its
+		// inputs (its fee coin, or an output swept since the node was
+		// asked) is built again without that input.
 		sw, err := r.eng.Retract(ctx, o.Hall, t.txid, t.vouts)
+		for try := 0; try < 2; try++ {
+			var again *engine.SweepRefusedError
+			if !errors.As(err, &again) {
+				break
+			}
+			g.say("%v", err)
+			sw, err = r.eng.Retract(ctx, o.Hall, t.txid, t.vouts)
+		}
 		if err != nil {
 			failed++
 			g.say("%s tree %s: NOT SWEPT: %v", t.kind, t.txid, err)
@@ -135,6 +156,16 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 	}
 	if failed > 0 {
 		return refused("%d of %d tree(s) not swept; run borg kill -confirm KILL -yes again", failed, len(trees))
+	}
+	// An output another transaction spends that has not mined yet is
+	// neither swept nor sweepable: the next run takes that spend as its
+	// sweep once it mines.
+	if rest := killTrees(r.h.st, func(txid string, vout uint32) bool { return r.eng.SweptBy(txid, vout) != nil }); len(rest) > 0 {
+		n := 0
+		for _, t := range rest {
+			n += len(t.vouts)
+		}
+		return incomplete("%d output(s) of %d tree(s) are spent by a transaction that has not mined yet or that the node could not show; run borg kill -confirm KILL -yes again", n, len(rest))
 	}
 	fmt.Fprintf(g.stdout, "killed  %d tree(s) swept: every grant and wrap they funded is retracted at every honest host, and every grant revoked\n", len(trees))
 	g.say("a sweep is not erasure: the chains stay, a copy anyone kept stays a copy, and an epoch key a member opened stays opened")

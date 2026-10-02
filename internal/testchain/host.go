@@ -49,6 +49,16 @@ type Host struct {
 	// Drop, when set, is asked about each submission; true discards it
 	// unseen, as a plane that lost the object would.
 	Drop func(tx *transaction.Transaction) bool
+	// Rewrite, when set, rewrites the answer to an ls_borg question on
+	// /lookup: a host that withholds, adds or repeats outputs.
+	Rewrite func(q *borgrec.Question, outs []Output) []Output
+	// Stale answers every token, carrier and sweep under a proof that names
+	// another block than the one the chain mined it in: a host whose stored
+	// proofs a reorganisation left behind.
+	Stale bool
+	// HistoryPage, when set, is the most tokens a history page holds here,
+	// in place of the class's 64.
+	HistoryPage int
 	// Submits counts submissions; Refused counts refusals by reason.
 	Submits int
 	Refused map[string]int
@@ -309,6 +319,12 @@ func (h *Host) lookup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	h.mu.Lock()
+	rewrite := h.Rewrite
+	h.mu.Unlock()
+	if rewrite != nil {
+		outs = rewrite(qq, outs)
+	}
 	writeJSON(w, map[string]any{"type": "output-list", "outputs": outs})
 }
 
@@ -417,7 +433,7 @@ func (h *Host) Answer(q *borgrec.Question) ([]Output, error) {
 	toks := func(rs []*tokRow) []Output {
 		out := []Output{}
 		for _, t := range limit(rs, n) {
-			out = append(out, Output{Beef: t.stored})
+			out = append(out, Output{Beef: h.stale(t.stored, false)})
 		}
 		return out
 	}
@@ -428,7 +444,7 @@ func (h *Host) Answer(q *borgrec.Question) ([]Output, error) {
 			if a := m["after"]; a != "" && c.txid <= a {
 				continue
 			}
-			out = append(out, Output{Beef: c.beef})
+			out = append(out, Output{Beef: h.stale(c.beef, true)})
 		}
 		return limit(out, n)
 	}
@@ -547,7 +563,7 @@ func (h *Host) Answer(q *borgrec.Question) ([]Output, error) {
 			}
 			for _, x := range s.spent {
 				if x == m["spent"] {
-					out = append(out, Output{Beef: s.beef})
+					out = append(out, Output{Beef: h.stale(s.beef, false)})
 				}
 			}
 		}
@@ -572,9 +588,42 @@ func (h *Host) Answer(q *borgrec.Question) ([]Output, error) {
 			}
 			return rs[i].txid < rs[j].txid
 		})
+		if h.HistoryPage > 0 {
+			rs = limit(rs, h.HistoryPage)
+		}
 		return toks(rs), nil
 	}
 	return nil, fmt.Errorf("class %s is not answered here", q.Class.Name)
+}
+
+// stale rewrites a stored BEEF's proof to name another block when Stale is
+// set: the subject's own proof, or with parent its funding parent's.
+func (h *Host) stale(beef []byte, parent bool) []byte {
+	if !h.Stale {
+		return beef
+	}
+	_, tx, _, err := guard.ParseBEEF(beef, 8<<20)
+	if err != nil || tx == nil {
+		return beef
+	}
+	target := tx
+	if parent {
+		if len(tx.Inputs) == 0 || tx.Inputs[0].SourceTransaction == nil {
+			return beef
+		}
+		target = tx.Inputs[0].SourceTransaction
+	}
+	if target.MerklePath == nil {
+		return beef
+	}
+	mp := *target.MerklePath
+	mp.BlockHeight += 3
+	target.MerklePath = &mp
+	out, err := tx.AtomicBEEF(false)
+	if err != nil {
+		return beef
+	}
+	return out
 }
 
 // Plane stands in for the multicast plane: a facade that delivers each

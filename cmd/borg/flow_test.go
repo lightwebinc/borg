@@ -310,8 +310,10 @@ func TestHistoryPaysThe402(t *testing.T) {
 
 // A host gives each session a budget of signed responses and refuses a
 // request over it 429 without a signature. The command waits as the host
-// says and asks once more; what it made for the refused request is
-// refunded, so one answer is one payment; refused twice, it says so.
+// says and asks once more, while it has paid nothing; refused twice, it
+// says so. A refusal of the request that carried the payment is not asked
+// again: that would take a second payment, and the first left this process,
+// so it is kept as made and its coin is not reused.
 func TestHistoryWaitsOutALimitedSession(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -325,24 +327,29 @@ func TestHistoryWaitsOutALimitedSession(t *testing.T) {
 	if !strings.Contains(r.stdout, "paid 7 sat") || !strings.Contains(r.stderr, "waiting 1s and asking once more") || len(h.paid.Payments) != 1 {
 		t.Fatalf("history, the question limited: %d payments\n%s\n%s", len(h.paid.Payments), r.stdout, r.stderr)
 	}
-	// The paid request is refused: its payment was never taken, and the second is the one kept.
+	// The paid request is refused: the payment left this process, so it is
+	// kept as made, broadcast by its payer, and not paid a second time.
+	sent := h.chain.Sent
 	h.paid.Limit(2)
-	r = h.must("bob", "history", "-chain", o.group)
-	if !strings.Contains(r.stdout, "paid 7 sat") || !strings.Contains(r.stderr, "waiting 1s and asking once more") || len(h.paid.Payments) != 2 {
-		t.Fatalf("history, the payment limited: %d payments\n%s\n%s", len(h.paid.Payments), r.stdout, r.stderr)
-	}
-	if !strings.Contains(r.stdout, h.paid.Payments[1].Txid) {
-		t.Fatalf("the payment kept is not the one the host took:\n%s", r.stdout)
+	r = h.run("bob", "", "history", "-chain", o.group)
+	h.want(r, exitIncomplete, "refused the paid request for its session's budget (429)")
+	if !strings.Contains(r.stderr, "it is kept as made and its coins are not reused") || strings.Contains(r.stderr, "asking once more") ||
+		len(h.paid.Payments) != 1 || h.chain.Sent != sent+1 {
+		t.Fatalf("history, the payment limited: %d payments at the host, %d sent\n%s\n%s", len(h.paid.Payments), h.chain.Sent-sent, r.stdout, r.stderr)
 	}
 	// Refused twice: the command stops, and nothing was paid.
 	h.paid.Limit(1, 2)
 	h.want(h.run("bob", "", "history", "-chain", o.group), exitIncomplete, "(429) twice; ask again later")
-	if len(h.paid.Payments) != 2 {
+	if len(h.paid.Payments) != 1 {
 		t.Fatalf("payments %d", len(h.paid.Payments))
 	}
-	// And the wallet still pays: nothing it made for a refused request is stranded.
+	// And the wallet still pays, on a coin the payment it kept did not
+	// spend.
 	h.paid.Limit()
-	h.must("bob", "history", "-chain", o.group)
+	r = h.must("bob", "history", "-chain", o.group)
+	if !strings.Contains(r.stdout, "paid 7 sat") || len(h.paid.Payments) != 2 {
+		t.Fatalf("history after: %d payments\n%s\n%s", len(h.paid.Payments), r.stdout, r.stderr)
+	}
 }
 
 // A reader enumerates a group's members from the wraps of its current
@@ -412,8 +419,7 @@ func TestHostileNamesAreFiltered(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	o := h.orgWithGroup()
-	r := h.must("org", "group", "create", "ops\x1b]0;owned\x07\x1b[31m", "-member", o.alice)
-	ops := groupLine.FindStringSubmatch(r.stdout)[1]
+	ops := h.namedGroup("ops\x1b]0;owned\x07\x1b[31m", o.alice)
 	for _, args := range [][]string{{"group", "show", ops}, {"open", ops}, {"member-of", o.alice}, {"group", "list"}} {
 		r := h.must("alice", args...)
 		if strings.ContainsAny(r.stdout+r.stderr, "\x1b\x07") {
