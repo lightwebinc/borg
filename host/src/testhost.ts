@@ -7,7 +7,7 @@ import { Engine } from '@bsv/overlay'
 import { Transaction, type ChainTracker } from '@bsv/sdk'
 import type { Module, TopicManager } from '@lightwebinc/bcommon'
 import { LookupService } from './borgrec.js'
-import { DefaultBudget } from './budget.js'
+import { DefaultBudget, DefaultResponseBudget } from './budget.js'
 import { MemoryJournal } from './journal.js'
 import { borgModule, type Config } from './module.js'
 import { Chain } from './testmint.js'
@@ -49,6 +49,7 @@ export const config: Config = {
   prices: new Map(),
   sessions: { max: 100, ttlSeconds: 600 },
   handshakes: DefaultBudget,
+  responses: DefaultResponseBudget,
 }
 
 /** A module and its engine, with storage handed over as the host does. */

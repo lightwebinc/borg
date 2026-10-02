@@ -5,9 +5,9 @@
  */
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
-import { request, type Server } from 'node:http'
+import { createServer, request, type IncomingHttpHeaders, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -20,13 +20,15 @@ import {
   Transaction,
   Utils,
   createNonce,
+  type CreateActionArgs,
+  type CreateActionResult,
   type PeerSession,
   type WalletInterface,
 } from '@bsv/sdk'
-import type { BudgetConfig } from './budget.js'
+import type { BudgetConfig, ResponseBudgetConfig } from './budget.js'
 import { MemoryJournal } from './journal.js'
 import { borgModule } from './module.js'
-import { BoundedSessions, LedgerReceiver, LookupFront, MemoryReceiver, PaymentProtocol, parsePrices, termsDocument, type ReceivedPayment } from './paid.js'
+import { BoundedSessions, LedgerReceiver, LookupFront, MemoryReceiver, PaymentProtocol, parsePrices, spentOutpoints, termsDocument, type ReceivedPayment } from './paid.js'
 import { decodeContext } from './merkle.js'
 import { config, engineOf, hall, topic } from './testhost.js'
 import { Chain, OrgSim, Party, PayingWallet, fromNowhere } from './testmint.js'
@@ -58,7 +60,7 @@ after(() => {
 })
 
 /** A module with one organisation of two tokens, engine and storage, and its terms route on a free port. */
-async function rig(prices: string, sessions?: { max: number; ttlSeconds: number }, budget?: BudgetConfig): Promise<Rig> {
+async function rig(prices: string, sessions?: { max: number; ttlSeconds: number }, budget?: BudgetConfig, responses?: ResponseBudgetConfig): Promise<Rig> {
   const host = new FakeHost()
   const chain = new Chain(95000)
   const m = borgModule(host, { ...config, prices: parsePrices(prices) }, [topic], new MemoryJournal(), chain.tracker)
@@ -80,7 +82,7 @@ async function rig(prices: string, sessions?: { max: number; ttlSeconds: number 
     signatures++
     return await sign(args)
   }
-  const front = new LookupFront({ ls: m.ls, host, prices: parsePrices(prices), wallet, receiver, headers: chain.tracker, sessions, budget })
+  const front = new LookupFront({ ls: m.ls, host, prices: parsePrices(prices), wallet, receiver, headers: chain.tracker, sessions, budget, responses })
   const server = await front.listen(0, '127.0.0.1')
   servers.push(server)
   return {
@@ -153,6 +155,8 @@ test('the terms document, free questions without authentication, and refusals as
   assert.equal((await fetch(`${r.url}/nosuch`)).status, 404)
   const priced = await fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, history: r.org, chain: 'org' } }))
   assert.equal(priced.status, 401, 'a priced class is asked over BRC-104')
+  // A class and its -after form are priced together: the walk cannot be had page by page for nothing.
+  assert.equal((await fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, history: r.org, chain: 'org', after: '0' } }))).status, 401)
   assert.equal((await fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org } }, { 'x-bsv-auth-nonce': 'x' }))).status, 400)
 
   const none = await rig('')
@@ -163,7 +167,7 @@ test('the terms document, free questions without authentication, and refusals as
 })
 
 test('over BRC-104: a free question is answered and signed; a priced one is answered 402, paid, and answered', async () => {
-  const r = await rig('history=5')
+  const r = await rig('history=5,history-after=5')
   const af = new AuthFetch(r.wallet as unknown as WalletInterface)
   const free = await af.fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org } }))
   assert.equal(free.status, 200)
@@ -188,7 +192,7 @@ test('over BRC-104: a free question is answered and signed; a priced one is answ
 })
 
 test('a payment is refused unless the prefix is the server\'s, output 0 pays the price to the derived key, and it verifies; it buys one question', async () => {
-  const r = await rig('history=5')
+  const r = await rig('history=5,history-after=5')
   const af = new AuthFetch(r.wallet as unknown as WalletInterface)
   const ask = async (payment: string): Promise<{ status: number; code?: string }> => {
     const res = await af.fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, history: r.org, chain: 'org' } }, { 'x-bsv-payment': payment }))
@@ -220,18 +224,23 @@ test('a payment is refused unless the prefix is the server\'s, output 0 pays the
   assert.equal(r.receiver.payments.length, 1)
 })
 
-test('the payment ledger keeps every accepted payment across a restart and refuses its txids again', () => {
+test('the payment ledger keeps every accepted payment across a restart and refuses its txids and its coins again', () => {
   const dir = mkdtempSync(join(tmpdir(), 'borg-ledger-'))
   try {
-    const p: ReceivedPayment = { txid: 'ab'.repeat(32), beef: [1, 1, 1, 1], outputIndex: 0, satoshis: 5, derivationPrefix: 'AA==', derivationSuffix: 'AQ==', senderIdentityKey: payeeKey, class: 'history' }
+    const p: ReceivedPayment = { txid: 'ab'.repeat(32), beef: [1, 1, 1, 1], outputIndex: 0, satoshis: 5, derivationPrefix: 'AA==', derivationSuffix: 'AQ==', senderIdentityKey: payeeKey, class: 'history', inputs: [`${'dd'.repeat(32)}.0`] }
     const a = new LedgerReceiver(dir)
-    assert.equal(a.claim(p), true)
-    assert.equal(a.claim(p), false)
+    assert.equal(a.claim(p), 'accepted')
+    assert.equal(a.claim(p), 'replayed')
     a.close()
     const b = new LedgerReceiver(dir)
-    assert.equal(b.claim(p), false, 'claimed before the restart')
-    assert.equal(b.claim({ ...p, txid: 'cd'.repeat(32) }), true)
+    assert.equal(b.claim(p), 'replayed', 'claimed before the restart')
+    assert.equal(b.claim({ ...p, txid: 'cd'.repeat(32) }), 'conflict', 'another transaction spending the coin the first one spent')
+    assert.equal(b.claim({ ...p, txid: 'cd'.repeat(32), inputs: [`${'ee'.repeat(32)}.1`] }), 'accepted')
+    assert.equal(b.claim({ ...p, txid: 'ef'.repeat(32), inputs: [] }), 'conflict', 'a payment that names no coin is not one')
     b.close()
+    const c = new LedgerReceiver(dir)
+    assert.equal(c.claim({ ...p, txid: '12'.repeat(32), inputs: [`${'ee'.repeat(32)}.1`, `${'ff'.repeat(32)}.0`] }), 'conflict', 'the coins are remembered across a restart')
+    c.close()
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -266,7 +275,7 @@ test('the BRC-104 session store is bounded: a cap that forgets the least recentl
 })
 
 test('the terms route keeps at most its bound of sessions; a client whose session went shakes hands again', async () => {
-  const r = await rig('history=5', { max: 2, ttlSeconds: 600 }, { perSec: 100, burst: 100, perAddressPerSec: 100, addressBurst: 100 })
+  const r = await rig('history=5,history-after=5', { max: 2, ttlSeconds: 600 }, { perSec: 100, burst: 100, perAddressPerSec: 100, addressBurst: 100 })
   const ask = { service: 'ls_borg', query: { hall, org: r.org } }
   const clients = [0, 1, 2].map(() => new AuthFetch(new ProtoWallet(PrivateKey.fromRandom()) as unknown as WalletInterface))
   for (const c of clients) assert.equal((await c.fetch(`${r.url}/lookup`, post(ask))).status, 200)
@@ -303,7 +312,7 @@ async function shake(url: string, localAddress: string): Promise<{ status: numbe
 }
 
 test('a handshake flood is refused 429 before any signature; a real client still pays its 402 within the budget', async () => {
-  const r = await rig('history=5', undefined, { perSec: 0.2, burst: 5, perAddressPerSec: 0.1, addressBurst: 2 })
+  const r = await rig('history=5,history-after=5', undefined, { perSec: 0.2, burst: 5, perAddressPerSec: 0.1, addressBurst: 2 })
   // One address floods: its own burst is answered, the rest refused at once.
   const started = Date.now()
   const flood = await Promise.all(Array.from({ length: 50 }, () => shake(r.url, '127.0.0.2')))
@@ -337,7 +346,7 @@ test('a handshake flood is refused 429 before any signature; a real client still
 })
 
 test('a malformed handshake inside the budget is counted failed and costs no signature', async () => {
-  const r = await rig('history=5')
+  const r = await rig('history=5,history-after=5')
   const bad = await fetch(`${r.url}/.well-known/auth`, post({ messageType: 'general' }))
   assert.equal(bad.status, 400)
   assert.equal(r.host.count('borg_handshakes_total', { result: 'failed' }), 1)
@@ -345,11 +354,131 @@ test('a malformed handshake inside the budget is counted failed and costs no sig
 })
 
 test('the terms route answers as the engine does: a member answer carries its inclusion path as context', async () => {
-  const r = await rig('history=5')
+  const r = await rig('history=5,history-after=5')
   const res = await fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org, member: r.client.hex } }))
   assert.equal(res.status, 200)
   const body = (await res.json()) as { outputs: Array<{ beef: number[]; context?: number[] }> }
   assert.equal(body.outputs.length, 1)
   const ctx = decodeContext(Uint8Array.from(body.outputs[0]!.context!))
   assert.deepEqual([ctx.seq, ctx.index, ctx.size], [1, 0, 1])
+})
+
+test('one coin pays once: conflicting unbroadcast payments that spend it buy one answer, not one each', async () => {
+  const r = await rig('history=5,history-after=5')
+  // A wallet that pays every question from the same coin: each payment is a
+  // different transaction, each verifies, and at most one can ever be mined.
+  class OneCoin extends PayingWallet {
+    readonly same = this.coin()
+    override async createAction(args: CreateActionArgs): Promise<CreateActionResult> {
+      const tx = await this.pay((args.outputs ?? []).map((o) => ({ satoshis: o.satoshis, lockingScript: o.lockingScript })), this.same)
+      return { tx: tx.toAtomicBEEF(), txid: tx.id('hex') }
+    }
+  }
+  const af = new AuthFetch(new OneCoin(r.client.key, r.chain) as unknown as WalletInterface)
+  const statuses: number[] = []
+  const codes: Array<string | undefined> = []
+  for (let i = 0; i < 4; i++) {
+    const res = await quietly(async () => await af.fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, history: r.org, chain: 'org' } })))
+    statuses.push(res.status)
+    codes.push(res.status === 200 ? undefined : ((await res.json()) as { code?: string }).code)
+  }
+  assert.deepEqual(statuses, [200, 409, 409, 409])
+  assert.deepEqual(codes, [undefined, 'ERR_PAYMENT_CONFLICT', 'ERR_PAYMENT_CONFLICT', 'ERR_PAYMENT_CONFLICT'])
+  assert.equal(r.receiver.payments.length, 1)
+  assert.equal(new Set(r.receiver.payments.flatMap((p) => p.inputs)).size, 1)
+  assert.equal(r.host.count('borg_payments_total', { result: 'replayed' }), 3)
+})
+
+test('the ledger reads the coins of a line written before lines carried them, from its transaction', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'borg-ledger-'))
+  try {
+    const chain = new Chain(96000)
+    const wallet = new PayingWallet(PrivateKey.fromRandom(), chain)
+    const coin = wallet.coin()
+    const lock = new P2PKH().lock(payee.toAddress()).toHex()
+    const first = await wallet.pay([{ satoshis: 5, lockingScript: lock }], coin)
+    const second = await wallet.pay([{ satoshis: 6, lockingScript: lock }], coin)
+    const line = { txid: first.id('hex'), beef: Utils.toBase64(first.toAtomicBEEF()), outputIndex: 0, satoshis: 5, derivationPrefix: 'AA==', derivationSuffix: 'AQ==', senderIdentityKey: payeeKey, class: 'history', at: 1 }
+    writeFileSync(join(dir, 'payments.jsonl'), JSON.stringify(line) + '\n')
+    const ledger = new LedgerReceiver(dir)
+    const p: ReceivedPayment = { txid: second.id('hex'), beef: second.toAtomicBEEF(), outputIndex: 0, satoshis: 6, derivationPrefix: 'AA==', derivationSuffix: 'AQ==', senderIdentityKey: payeeKey, class: 'history', inputs: spentOutpoints(second) }
+    assert.deepEqual(spentOutpoints(second), [`${coin.id('hex')}.0`])
+    assert.equal(ledger.claim(p), 'conflict')
+    ledger.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+/** A server in front of the route that keeps each request as it arrived, to send it again. */
+async function recording(r: Rig): Promise<{ url: string; port: number; requests: Array<{ method: string; url: string; headers: IncomingHttpHeaders; body: Buffer[] }> }> {
+  const requests: Array<{ method: string; url: string; headers: IncomingHttpHeaders; body: Buffer[] }> = []
+  const server = createServer((req, res) => {
+    const body: Buffer[] = []
+    requests.push({ method: req.method ?? 'GET', url: req.url ?? '/', headers: { ...req.headers }, body })
+    req.on('data', (c: Buffer) => body.push(c))
+    r.front.handler(req, res)
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  servers.push(server)
+  const port = (server.address() as AddressInfo).port
+  return { url: `http://127.0.0.1:${port}`, port, requests }
+}
+
+test('a signed request sent again byte for byte is refused before any signature', async () => {
+  const r = await rig('history=5,history-after=5')
+  const rec = await recording(r)
+  const af = new AuthFetch(r.wallet as unknown as WalletInterface)
+  assert.equal((await af.fetch(`${rec.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org } }))).status, 200)
+  const sent = rec.requests.find((x) => x.url === '/lookup' && x.headers['x-bsv-auth-request-id'] !== undefined)!
+  const before = r.signatures()
+  const replay = async (): Promise<number> =>
+    await new Promise((resolve, reject) => {
+      const q = request({ host: '127.0.0.1', port: rec.port, path: sent.url, method: sent.method, headers: sent.headers }, (res) => {
+        res.resume()
+        res.on('end', () => resolve(res.statusCode ?? 0))
+      })
+      q.on('error', reject)
+      q.end(Buffer.concat(sent.body))
+    })
+  const statuses = new Set<number>()
+  for (let i = 0; i < 50; i++) statuses.add(await replay())
+  // And at once, while none of them is yet answered.
+  for (const s of await Promise.all(Array.from({ length: 20 }, replay))) statuses.add(s)
+  assert.deepEqual([...statuses], [401])
+  assert.equal(r.signatures(), before, 'no signature for a replay')
+  assert.equal(r.host.count('borg_requests_total', { result: 'replayed' }), 70)
+  // The session itself goes on.
+  assert.equal((await af.fetch(`${rec.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org } }))).status, 200)
+})
+
+test('a session has a budget of signed responses: over it a request is refused 429 and nothing is signed', async () => {
+  const r = await rig('history=5,history-after=5', undefined, undefined, { perSec: 0.5, burst: 3 })
+  const af = new AuthFetch(r.wallet as unknown as WalletInterface)
+  const ask = async (): Promise<number> => {
+    try {
+      return (await quietly(async () => await af.fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org } })))).status
+    } catch {
+      // The SDK's client raises on a response the server did not sign.
+      return 429
+    }
+  }
+  const statuses: number[] = []
+  for (let i = 0; i < 6; i++) statuses.push(await ask())
+  assert.deepEqual(statuses, [200, 200, 200, 429, 429, 429])
+  assert.equal(r.signatures(), 4, 'the handshake and three responses')
+  assert.equal(r.host.count('borg_requests_total', { result: 'limited' }), 3)
+  // Another session has its own budget.
+  const other = new AuthFetch(new ProtoWallet(PrivateKey.fromRandom()) as unknown as WalletInterface)
+  assert.equal((await other.fetch(`${r.url}/lookup`, post({ service: 'ls_borg', query: { hall, org: r.org } }))).status, 200)
+  // It refills.
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  assert.equal(await ask(), 200)
+})
+
+test('a class and its -after form are priced together or not at all', () => {
+  for (const bad of ['history=5', 'history-after=5', 'history=5,history-after=0', 'history=0,history-after=5']) {
+    assert.throws(() => parsePrices(bad), /priced together/, bad)
+  }
+  for (const good of ['history=5,history-after=6', 'history=0', 'history-after=0', 'history=0,history-after=0']) parsePrices(good)
 })

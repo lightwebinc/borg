@@ -22,6 +22,7 @@
  *                         keeps; at least and by default 65536
  *   BORG_LISTEN           host:port of the terms route (paid.ts)
  *   BORG_PRICES           the classes priced, e.g. history=5,history-after=5
+ *                         (a class and its -after form together)
  *   BORG_PAYEE_KEY        the payee's private key, 64 hex characters
  *   BORG_SESSIONS         the most BRC-104 sessions the terms route keeps;
  *                         default 10000
@@ -31,6 +32,9 @@
  *                         answers, and at once; default 4 and 8 (budget.ts)
  *   BORG_HANDSHAKES_PER_ADDR_PER_SEC, BORG_HANDSHAKE_ADDR_BURST
  *                         the same for one remote address; default 1 and 4
+ *   BORG_RESPONSES_PER_SEC, BORG_RESPONSE_BURST
+ *                         the signed responses a second one BRC-104 session
+ *                         is given, and at once; default 5 and 20
  *
  * Every `tm_borg_` topic in OVERLAY_TOPICS must be a hall named here,
  * because a borg topic left to the host's default manager would admit
@@ -42,7 +46,7 @@ import { PrivateKey, ProtoWallet, type ChainTracker } from '@bsv/sdk'
 import type { Module, ModuleHost } from '@lightwebinc/bcommon'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './beef.js'
 import { LookupService, TopicPrefix, checkHall, topic } from './borgrec.js'
-import { DefaultBudget, type BudgetConfig } from './budget.js'
+import { DefaultBudget, DefaultResponseBudget, type BudgetConfig, type ResponseBudgetConfig } from './budget.js'
 import { HeaderTracker, isNativeSource } from './headers.js'
 import { FileJournal, type Journal } from './journal.js'
 import { BorgLookupService, FloorDays, MinSpendTable } from './ls_borg.js'
@@ -75,6 +79,7 @@ export interface Config {
   payeeKey?: PrivateKey
   sessions: { max: number; ttlSeconds: number }
   handshakes: BudgetConfig
+  responses: ResponseBudgetConfig
 }
 
 /** Parses BORG_HALLS. Throws on anything it cannot take exactly. */
@@ -146,6 +151,10 @@ export function parseConfig(env: NodeJS.ProcessEnv): Config {
       perAddressPerSec: rate('BORG_HANDSHAKES_PER_ADDR_PER_SEC', env['BORG_HANDSHAKES_PER_ADDR_PER_SEC'], DefaultBudget.perAddressPerSec),
       addressBurst: integer('BORG_HANDSHAKE_ADDR_BURST', env['BORG_HANDSHAKE_ADDR_BURST'], DefaultBudget.addressBurst, 1),
     },
+    responses: {
+      perSec: rate('BORG_RESPONSES_PER_SEC', env['BORG_RESPONSES_PER_SEC'], DefaultResponseBudget.perSec),
+      burst: integer('BORG_RESPONSE_BURST', env['BORG_RESPONSE_BURST'], DefaultResponseBudget.burst, 1),
+    },
   }
   const listen = env['BORG_LISTEN']?.trim()
   if (listen !== undefined && listen !== '') {
@@ -194,6 +203,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   for (const status of TokenStatuses) host.metrics.preset('borg_token_status_total', { status })
   for (const why of ['evidence', 'retention', 'table']) host.metrics.preset('borg_dropped_total', { why })
   for (const why of ['cap', 'idle']) host.metrics.preset('borg_sessions_evicted_total', { why })
+  for (const result of ['requested', 'accepted', 'refused', 'replayed']) host.metrics.preset('borg_payments_total', { result })
   host.metrics.preset('borg_retractions_total')
   const priced = new Set([...c.prices].filter(([, p]) => p > 0).map(([name]) => name))
   const ls = new BorgLookupService({
@@ -212,6 +222,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   host.metrics.gauge('borg_wraps', () => ls.wrapCount)
   host.metrics.gauge('borg_sweeps', () => ls.sweepCount)
   host.metrics.gauge('borg_outpoint_rows', () => ls.rowCount)
+  host.metrics.gauge('borg_carrier_lines', () => ls.lineCount)
   host.metrics.gauge('borg_spend_table', () => ls.tableSize)
   const tracker = headers ?? new HeaderTracker(c.headersURL)
   const topics: Record<string, BorgTopicManager> = {}
@@ -227,6 +238,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
       headers: tracker,
       sessions: c.sessions,
       budget: c.handshakes,
+      responses: c.responses,
     })
   }
   const start = async (): Promise<Server | undefined> => {
@@ -249,6 +261,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
     priced: [...priced].join(',') || 'none',
     sessions: c.listen === undefined ? 'none' : `${c.sessions.max}, idle ${c.sessions.ttlSeconds}s`,
     handshakes: c.listen === undefined ? 'none' : `${c.handshakes.perSec}/s burst ${c.handshakes.burst}, per address ${c.handshakes.perAddressPerSec}/s burst ${c.handshakes.addressBurst}`,
+    responses: c.listen === undefined ? 'none' : `${c.responses.perSec}/s burst ${c.responses.burst} a session`,
     build,
   })
   return { module: { topics, lookups: { [LookupService]: ls } }, ls, front, start }

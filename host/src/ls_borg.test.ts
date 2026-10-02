@@ -112,7 +112,7 @@ test('history pages a chain by seq, never splitting one, and is refused through 
   await submit(s.engine, o.beef)
   assert.deepEqual(await answer(s.engine, { hall, history: org.hex, chain: 'org' }), [id(o.tx)])
   // Priced: the engine's own route refuses it.
-  const priced = borgModule(new FakeHost(), { ...config, prices: new Map([['history', 5]]) }, [topic], new MemoryJournal(), chain.tracker).ls
+  const priced = borgModule(new FakeHost(), { ...config, prices: new Map([['history', 5], ['history-after', 5]]) }, [topic], new MemoryJournal(), chain.tracker).ls
   await priced.restore([], s.storage)
   await assert.rejects(priced.lookup({ service: LookupService, query: q }), /priced/)
 })
