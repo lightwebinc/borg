@@ -708,6 +708,16 @@ does so after losing a concurrent change (section 7.3), whenever its spend
 source shows one of its latest tokens spent, and once when it starts on a
 new machine.
 
+Two consequences follow where more than one instance can sign, and both are
+part of this contract. The signer key is a member of every group, so every
+roll and every group carries one member more than its people, and each
+epoch's key is wrapped once more. And no instance can know what another did
+since its last command, so each command first asks whether one of its
+latest tokens is spent or a host lists a group it lacks, and catches up
+before it builds anything; a command therefore costs those questions, and
+the reads of a catch-up whenever another instance has made a change. With
+one instance neither applies.
+
 What catching up cannot bring back: the key of an epoch the signer key was
 not a member of (the members of that epoch hold it; a rotation begins one
 the instance holds); a grant issued and not yet admitted to the roll; and
@@ -1022,6 +1032,13 @@ terms at `GET <base>/ls_borg/terms`, where `<base>` is the origin of
 The document is informative; the 402's headers are what a client pays
 against, and a host that serves no terms (404) charges for nothing. No price
 is ever in a record.
+
+The payment is the payer's own transaction, and a host broadcasts nothing
+(section 11.1). The payer therefore broadcasts its own payment once the host
+has accepted it, so that it mines whether or not the payee has settled; the
+payee broadcasts it again when it settles, which is harmless. Until it is
+mined the payer could spend the same coins elsewhere, which is the payee's
+risk and the reason a payee settles promptly.
 
 ## 11. The host
 

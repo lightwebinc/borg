@@ -5,9 +5,11 @@ host. Once one record using it is on a public host, readers verify against it
 for as long as anyone reads that record, so changing it afterwards is a new
 identifier or a new record version, never an edit.
 
-**Status: signed, every row but one.** Key id `signer` (section 1) is
-proposed: it was added with the catch-up of spec section 7.4 and changes no
-record, host rule or reader rule. The four rows of section 2 that waited
+**Status: signed, every row.** Key id `signer` (section 1) was signed with
+the two consequences spec sections 7.4 and 10 state: where more than one
+instance can sign, the signer key is a member of every group and each
+command first catches up; and a payer broadcasts its own payment for a
+priced question. The four rows of section 2 that waited
 for the transaction vectors (carrier shape, chain-token shape, script
 canonicality and sweep) and the carrier-input half of the signatures row
 were signed against the 95 transaction vectors, with the wording of spec
@@ -32,7 +34,7 @@ and no basket starts with `borg`.
 | Key id | `grant` | a grant carrier's record output and field signature, and the outputs of trees that fund grants | signed |
 | Key id | `chain` | the outputs of trees that pay for a chain's first token; never a carrier's | signed |
 | Key id | `fund` | the embedded wallet's funding key | signed |
-| Key id | `signer` | the organisation's signer key: a member key every instance of the organisation's tooling derives, which a wrap is addressed to like any member's (spec section 7.4). No host or reader rule reads it | proposed |
+| Key id | `signer` | the organisation's signer key: a member key every instance of the organisation's tooling derives, which a wrap is addressed to like any member's (spec section 7.4). No host or reader rule reads it | signed |
 | Tag prefix | `bo` (`62 6f`) | owned by borg | signed |
 | Tag | `bo` `0x01` | organisation token, first field | signed |
 | Tag | `bo` `0x02` | funding-tree output, its one field | signed |
