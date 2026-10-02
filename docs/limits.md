@@ -60,12 +60,16 @@ or a member's client ([usage.md](usage.md)).
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
 | Hosts named (`hosts`) | none | 16 | A reader asks every host it names; a unicast publisher uploads every object to each | Unicast warns above 5: past that the plane is what removes the cost |
-| Quorum (`quorum`) | `all` | the host count | A quorum no host set can meet would refuse every publish | Unicast only, for carriers; warns below a majority. A token or a sweep always needs every host named, on the plane too |
+| Quorum (`quorum`) | `all` | the host count | A quorum no host set can meet would refuse every publish | For carriers, in both modes: in unicast the hosts that took one, on the plane the hosts that answer it by lookup. Unicast warns below a majority. A token or a sweep always needs every host named |
 | Tries per submission | 4, waiting 1, 2 and 4 s | fixed | A host that fails four tries is reported missed; the object stays persisted and the next command resends it, tokens in order | Plane: the facade, and each host named for mined objects; unicast: each host |
-| Wait for the plane to deliver a wrap | 3.5 s a host (0.5, 1 and 2 s between lookups) | fixed | The plane delivers in well under a second; a host still without the wrap is offered it directly | Plane only |
+| Wait for the plane to deliver an object | 3.5 s a host (0.5, 1 and 2 s between lookups) | fixed | The plane delivers in well under a second; a host still without it is offered it directly. Fewer hosts than the quorum answering it leaves it in the outbox | Plane only |
 | Request timeout (`timeout`) | 15 s | 1 s to 5 min | Bounds every request, so one host holds an object up for at most four timeouts and 7 s | Same |
 | Answers | 8 a question, 64 a page | spec | Bounds an answer | Same |
-| Pages a client reads per question | until an answer is short | 64 pages (4096 outputs) | Each page is a lookup and up to 64 verifications | Same |
+| Pages a client reads per question | until an answer is short | 64 pages (4096 outputs), 128 outputs taken from one page, 256 MiB held from one host's walk | Each page is a lookup and up to 64 verifications. A page over the contract's is cut, and a host that answers a full page that does not move past its cursor is asked no further; either is reported as truncated | Same |
+| One lookup answer | as answered | 16 MiB | A full page of the largest objects the plane carries fits several times over; a larger answer is an error, not read | Same |
+| Tokens taken from one answer to a seq | as answered | 16 | A host keeps at most 8 a seq; what a hostile one adds is not read | Same |
+| How far a chain is walked | from seq 0 while each seq links to the one before | the chain itself | A seq a host claims as the latest ends the walk early and never sizes anything; verified tokens above the end are reported (`WITHHELD`) | Same |
+| Rollback memory of a reader | `open`: the latest token of the group this home verified. The commands that need no home: none | none | The `reader` package keeps no state; a caller gives it a `Floor` ([packages.md](packages.md)). A reader with no memory relies on `WITHHELD` and on naming more than one host | Same |
 | Object a reader takes | as answered | 1 MiB | No borg object is near it | Same |
 | Writer freshness (`freshness`) | 60 s | 600 s | A writer keys content under the latest epoch it verified this recently (spec section 6.5). A transition that begins an epoch pauses writers for about a block | Same |
 | Revocation check age, for anything that moves value | 60 s | the reader's resolution lifetime | BRC-169 section 4.2 | Same |
@@ -80,14 +84,26 @@ or a member's client ([usage.md](usage.md)).
 | Sweeps per revocation | one per grant tree the grants sit on | one a block | A sweep spends outputs of one tree | Same |
 | Sweeps per `kill` | one per grant tree and per record tree the home holds | one a block | Every output of the tree in one transaction; a tree at the cap of 1000 outputs is within every host's floor of 1024 sweep inputs | Same |
 | Wait for a sweep, a token or a tree to mine | 10 min | fixed | Past the wait it stays persisted and the next command waits again | Same |
+| Outputs the chain already shows spent | left out of the sweep; the spender, once mined, is taken as their sweep | none | A sweep naming a spent output is refused whole, for good. One node question an output | Same |
+| Tries to build a sweep an input of which another transaction took | 3 | fixed | The fee coin, or an output swept since the node was asked | Same |
 | Wait for a fee coin | up to the same 10 min, only when every coin is change not yet mined | fixed | A tree minted ahead can take the last proven coin; its change becomes spendable when it mines | Same |
+
+### Coins
+
+| Limit | Default | Hard cap | Why | Plane and unicast |
+| --- | --- | --- | --- | --- |
+| Coin taken by a run that stopped before it recorded the spend | found by the next command from the pool the state recorded, and put back when the node shows it unspent | none | The pool and the state are two files; the state records the pool before a coin leaves it | Same |
+| Coin taken while a funding tree was minted, when the run stopped after the tree was sent and before it was recorded | reported as spent by a transaction the home does not record; the tree's outputs are not recovered by the tooling | open | The tree is built and sent inside bcommon's `producer.Trees`, which gives the caller no hook between signing and sending. The coin is spent on the chain, by a tree this home holds no record of | Same |
 
 ### Paying and settling
 
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
 | Payments one coin can make to one host | one | none | Two unbroadcast payments spending one coin both verify and only one can mine: the host refuses the second (409). A payer's next payment spends the change of its last, which is another coin | Not on the plane |
-| `borg history` refused for its session's budget (429) | waits as the host says, 1 to 30 s, and asks once more | one retry | A second refusal ends the command, exit 3; nothing was paid for a refused request | Not on the plane |
+| `borg history` refused for its session's budget (429) | waits as the host says, 1 to 30 s, and asks once more, while it has paid nothing | one retry | A second refusal ends the command, exit 3. A 429 on the request that carried the payment is not asked again (that would take a second payment): the payment is kept as made, exit 3 | Not on the plane |
+| Payments for one priced question | one | one | The SDK's client pays every 402 again, up to three times; the command refuses a second payment, and a host that asks for one is refused (exit 1) | Not on the plane |
+| A payment that was sent and not answered | kept as made: recorded before it is sent, broadcast, its coin never returned to the pool | fixed | The host holds a valid transaction that spends the coin; a coin given back would be spent twice | Not on the plane |
+| What one command pays in all (`-budget`) | 16000 sat | the flag | `history -all` pays one question a page; the pages and prices are the host's, their sum the command's | Not on the plane |
 | Price the client pays for one priced question (`-max-sats`) | 1000 sat | the flag | A price is per question (one page); a host that asks more is asked by the user, never paid by default | Not on the plane: the terms route is HTTP |
 | A payer's unmined payments in a row | each spends the change of the last | 16 | A payment is mined only when someone broadcasts it. The change of the payer's own unmined payment is spendable by its next payment, which carries that payment in its BEEF; past 16 the payer waits for a block. For anything but a payment the change waits until it mines | Not on the plane |
 | Coins a payer needs | one | none | See the row above. A payer that asks more than 16 priced questions a block holds several coins (`fund` more than once, or several payments to the fund address) | Not on the plane |

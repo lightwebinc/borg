@@ -226,7 +226,10 @@ revokes the whole roll and retracts every grant and wrap at every honest
 host, one block a tree, and cannot be undone. The chains stay (they are
 mined), every member is then without a current grant, and epoch keys
 members already opened stay opened. Use it when the organisation's key or
-home is lost to someone else, or to end the organisation.
+home is lost to someone else, or to end the organisation. It does not wait
+for work an earlier command left unfinished, and an output another home
+already swept is passed over, its sweep taken as done. If it says outputs
+are spent by a transaction not yet mined, run it again after a block.
 
 ## 10. A host that missed something: `fill`
 
@@ -311,9 +314,9 @@ coins and the same funding trees. If you did, run `borg org sync
 
 | | Plane (`mode = plane`, `facade`) | Unicast (`mode = unicast`) |
 | --- | --- | --- |
-| A grant or a wrap | submitted once to the facade; every subscribed host receives it | submitted to each host; counts once `quorum` hosts took it |
+| A grant or a wrap | submitted once to the facade; every subscribed host receives it; counts once `quorum` hosts answer it by lookup | submitted to each host; counts once `quorum` hosts took it |
 | A token or a sweep | to the facade and to every host named | to every host; needs all of them |
-| A host that was down | repaired by the plane within its window; a wrap is also looked for at each host and offered directly | misses what was sent meanwhile; `fill` repairs it |
+| A host that was down | repaired by the plane within its window; every object is also looked for at each host and offered directly | misses what was sent meanwhile; `fill` repairs it |
 | Object size | kept small: at most 4 packets by default | one HTTP request an object, up to the record bounds |
 | Cost that grows with hosts | none | every object uploaded once per host |
 | Priced questions | not on the plane: the terms route is HTTP | the same |
@@ -324,9 +327,13 @@ Either way a reader asks every host it names and compares the answers.
 
 The free questions answer everything a member needs. A host may price the
 bulk walk of a chain: `borg history -chain <org|group id>` pays its 402
-from the home's coin (at most `-max-sats`). One coin is enough for several
-questions in a row: each payment spends the change of the one before, up
-to 16 unmined at once ([limits.md](limits.md)). A host's operator settles
+from the home's coin (at most `-max-sats`), one page, or every page with
+`-all` (at most `-budget` in all, 16000 sat unless you say otherwise).
+One question is paid for once: a host that asks for a second payment is
+refused, and a payment that was sent is kept as made even when the host
+does not answer, so its coin is never spent twice. One coin is enough for
+several questions in a row: each payment spends the change of the one
+before, up to 16 unmined at once ([limits.md](limits.md)). A host's operator settles
 what it was paid with `borg payee settle <payments.jsonl>` from the payee's
 home, on a schedule.
 
@@ -357,7 +364,7 @@ or failed, each group's rotation debt, and whether every endpoint answers.
 | --- | --- | --- |
 | 0 | done; everything asked verified | nothing. A disagreement between hosts that did not affect the answer is still printed |
 | 1 | refused: the evidence contradicts what was asked | read the message: it names the host, the token or the reason |
-| 2 | usage, configuration, transport, a quorum not met, or a price over `-max-sats` | fix the named setting; what was persisted is published by the next command |
+| 2 | usage, configuration, transport, a quorum not met, a price over `-max-sats` or `-budget`, or a transition a leg refused that may still mine | fix the named setting; what was persisted is sent or published by the next command |
 | 3 | incomplete: it proves nothing either way | ask again, ask other hosts, or `fill` |
 
 Exit 1, by message:
@@ -381,8 +388,18 @@ Exit 2, by message:
 
 - `fee input: ... no spendable output`: fund the home (`borg fund`). If it
   says coins are change not yet mined, wait for a block.
-- `1 of 2 host(s) took it and the quorum is 2`: a host did not take an
-  object. It is kept, and the next command publishes it first.
+- `1 of 2 host(s) took it and the quorum is 2`, or on the plane `1 of 2
+  host(s) named answer it and 2 must`: a host did not take an object, or
+  does not answer it. It is kept, and the next command publishes it first.
+- `refused (...), and its predecessor is not spent by another transaction:
+  it is kept`: a settlement leg refused a transition that nothing beat.
+  It may be mining already. Run the command again; it is sent and waited
+  for again, with the same key.
+- `which the node could not show`: something spends the transition's
+  predecessor and the node cannot show it yet. Nothing is discarded; run
+  the command again.
+- `a name is one line of plain text`: the name holds a line break or a
+  control character.
 - `the transition breaks the host's rules` or `would be reported`: the
   tooling will not build what a host would refuse or an index would flag.
   The message names the rule.
@@ -393,6 +410,13 @@ Exit 3, by message:
   withholding. `borg fill`.
 - `an older state`: the hosts answer an older chain than your home
   verified. Ask other hosts.
+- `WITHHELD`: the hosts answer a later token of the chain and not one
+  between: what was read may be an older state. Ask other hosts, or
+  `borg fill` from a host that holds the whole chain.
+- `the chain is not read to its end`: `history -all` reached its
+  `-budget`. Give it a larger one, or read the rest with `-after`.
+- `refused the paid request for its session's budget (429)`: the payment
+  was sent and is kept; ask again later.
 - `no host answers a wrap`: the organisation has not published your wrap
   yet (it follows the token by a block where several homes sign). Ask
   again shortly.

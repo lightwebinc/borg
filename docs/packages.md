@@ -27,18 +27,61 @@ any tag.
 - Epoch keys: `EpochID`, `WrapRecord`, `DecodeWrap`, `Entry`, `CheckEntry`,
   `ParseEntry`, `CheckEpochToken`, `Unwrap`, `ReleaseKeyID`.
 - Tokens: `ReadToken`, `StoredToken`, `ChainToken`.
+- The signer key (spec section 7.4): `SignerKey`, which anyone derives
+  from the organisation's public key, and `SignerPrivate`, which only the
+  organisation's identity key derives. An application run from the
+  organisation's home opens the group's epoch keys with it, through the
+  wraps the organisation makes to its own signer key.
 - The registry values (protocol name, key ids, tags, magics, derivations,
   topic prefix and lookup service), `CheckHall`, the bounds (`Max*`, `Min*`,
   `*Len`), the `Err*` values and `Reason`.
 
 **`reader`**
 
-- `Client`, with `Client.Chain`, `Client.Group`, `Client.Open` and
-  `Client.Wraps`.
-- `ChainView`, `GroupView`, `NewGroupView`.
+- `Client`, with `Client.Chain`, `Client.Group`, `Client.Open`,
+  `Client.Wraps`, `Client.Recipients`, `Client.GroupsAll` and `Client.Ask`
+  (one question to one host, the answer bounded by `Client.MaxAnswer`).
+- `Client.Token`, `Client.Carrier` and `Client.Sweep`: the three checks
+  below against the client's headers, with a proof a host stored that no
+  longer verifies replaced by the transaction's current proof from
+  `Client.Source` (a `ChainSource`; bcommon's `nodeapi.Asset` is one).
+- `ChainView` (with `Beyond`: the verified tokens above the chain read),
+  `GroupView`, `NewGroupView`.
 - `Latest`, `Fresh`, `Spends`.
-- `VerifyToken`, `VerifyCarrier`.
+- `VerifyToken`, `VerifyCarrier`, `VerifySweep`.
+- `Floor` and `RollbackError`: see below.
+- `SubjectID`, `ParseGroup`, `GroupHex`.
 - What those return: `Tok`, `Car`, `Opened`, `Refusal`.
+
+
+### What `reader` does not do
+
+`reader` keeps no state between calls: it reads no file, and remembers
+nothing it verified. Every token it returns is verified against the
+caller's headers and linked from seq 0, so what it returns is a true
+chain; it may not be the whole chain. Hosts that all withhold the latest
+tokens answer an older state, every token of which verifies.
+
+- `ChainView.Beyond` reports verified tokens the hosts answered above the
+  end of the chain read. That catches a token withheld in the middle. It
+  does not catch hosts that withhold everything from some seq on.
+- Only the caller's own memory catches that. A caller that has somewhere
+  to keep it sets `Client.Floor`: `Chain` then asks it for the seq and
+  txid of the latest token the caller verified of the chain, refuses with
+  a `*RollbackError` a chain that ends below that seq, sets
+  `ChainView.Replaced` when the token at that seq is another one (a
+  reorganisation, or a fork: the caller decides), and hands it the latest
+  token read. The implementation must persist what it is handed before the
+  caller acts on the chain, and must not lower a seq on its own.
+- A caller with no `Floor` has no rollback memory for a group's chain. It
+  should name more than one host, treat `Beyond` as incomplete, and where
+  it keys new content on the chain's latest token, hold that token to a
+  spend source first (`Latest`).
+
+`Chain` walks seq by seq and stops at the first seq nothing links to, so
+its work is bounded by the chain and by `Client.MaxPages`, never by a seq
+a host names. An answer is at most `Client.MaxAnswer` bytes (16 MiB by
+default), and at most 16 tokens are taken from one answer to a seq.
 
 ## Versions
 
@@ -64,7 +107,7 @@ and needs credentials for it:
 ```console
 $ go env -w GOPRIVATE='github.com/lightwebinc/*'
 $ git config --global url."ssh://git@github.com/lightwebinc/".insteadOf "https://github.com/lightwebinc/"
-$ go get github.com/lightwebinc/borg@v0.1.0
+$ go get github.com/lightwebinc/borg@v0.1.1
 ```
 
 `GOPRIVATE` turns off the proxy and the checksum database for the matching

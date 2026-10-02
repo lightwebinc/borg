@@ -76,12 +76,12 @@ variables.
 | `group list` | optional | nothing, or a reader's settings with `-org` | the organisation's groups: the home's own record, or another organisation's from the hosts |
 | `group show <group>` | optional | a reader's settings | the group's chain folded from seq 0, and its members enumerated from the current epoch's wraps; stray and incomplete wraps reported |
 | `epoch rotate <group>` | yes, the organisation's | a publisher's | a new epoch with the same members (rotation debt removed first) |
-| `kill -confirm KILL [-yes]` | yes, the organisation's | with `-yes` a publisher's | the kill switch: one sweep per grant tree and record tree the home holds. Every grant revoked, every grant and wrap retracted. Without `-yes` it lists the sweeps and sends nothing |
+| `kill -confirm KILL [-yes]` | yes, the organisation's | with `-yes` a publisher's | the kill switch: one sweep per grant tree and record tree the home holds. Every grant revoked, every grant and wrap retracted. Without `-yes` it lists the sweeps and sends nothing. Work an earlier command left unfinished does not stop it |
 | `open <group>` | yes | a reader's settings | opens every epoch key this home's key can open, keeps each, and says which it cannot and why; `-write` adds the writer's evidence; `-show-key` prints the current key |
 | `roll` | optional | a reader's settings | the roll from every host, every grant verified and judged, the root of each host's answer compared with the latest token's |
 | `member <key>` | optional | a reader's settings | whether the key is a current member, and its grants; for this home's own key, each grant is kept whole in the home and opened through its keyring |
 | `member-of <key>` | optional | a reader's settings | the groups whose members include the key, each group's chain folded here |
-| `history` | yes, funded | a reader's settings, `history_host`, `asset`, `settle` | the priced question: pays the host's 402 from the pool and prints every token of a chain (`-chain org` or a group id) |
+| `history` | yes, funded | a reader's settings, `history_host`, `asset`, `settle` | the priced question: pays the host's 402 from the pool and prints every token of a chain (`-chain org` or a group id), one page, or every page with `-all`. One payment a question, at most `-max-sats`, and at most `-budget` in all |
 | `fill [group...]` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the organisation's chain, the roll's grants, and each group's chain and wraps (spec section 12); signs nothing |
 | `terms [URL]` | no | `history_host` or URL | prints a host's terms document |
 | `payee key -out FILE` | yes | nothing | writes `BORG_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
@@ -127,7 +127,7 @@ ignored.
 | `object_bound` | `1048576` | the plane's object bound in bytes, at most 8388608; a carrier whose BEEF is larger is not published |
 | `org` | none | the organisation a reader reads: its identity key |
 | `originator` | `borg` | the BRC-100 originator presented to the wallet |
-| `quorum` | `all` | mode `unicast`: how many hosts must take a carrier for it to count as published: `all`, `majority`, `one`, or a number up to the host count. A token or a sweep always needs every host |
+| `quorum` | `all` | how many of `hosts` must hold a carrier (a grant or a wrap) for it to count as published: `all`, `majority`, `one`, or a number up to the host count. In unicast a host that took it counts; on the plane a host that answers it by lookup does. A token or a sweep always needs every host |
 | `rpc` | none | the node's JSON-RPC URL (`fund`) |
 | `rpc_pass`, `rpc_user` | `bitcoin` | the node's basic auth, also for `settle = rpc:` |
 | `settle` | none | the settlement leg for what is mined (funding trees, tokens, sweeps, a payment a payee takes): `tcp:<host:port>`, `rpc:<url>` or `arcade:<url>` |
@@ -177,8 +177,8 @@ history_host = https://terms.host-a.example.com
 | --- | --- |
 | 0 | done, or everything asked verified (the hosts may still disagree about a chain a key was read from; that is reported) |
 | 1 | refused: a host answered something that does not verify (it is not used), a key this home cannot open (not a member of the current epoch), a grant that is not current, a transition another one beat to the chain (`lost`), a catch-up that found a fork, or a sweep or payment the network refuses |
-| 2 | usage, configuration, local or transport error, a quorum not met, or a price over `-max-sats`; what was persisted is published by the next command |
-| 3 | incomplete: the hosts disagree, a host could not be asked, no host answered what was asked, a host answers an older state than this home verified, no spend source could give positive evidence, a removal is due (`org due`), or a catch-up could not reproduce the roll or open the current epoch's key. It proves nothing either way |
+| 2 | usage, configuration, local or transport error, a quorum not met, a price over `-max-sats` or `-budget`, or a transition or sweep a leg refused that may still mine (it is kept); what was persisted is sent or published by the next command |
+| 3 | incomplete: the hosts disagree, a host could not be asked, no host answered what was asked, a host answers an older state than this home verified, verified tokens exist above the chain read (`WITHHELD`), a budget ran out before a chain was read to its end, no spend source could give positive evidence, a removal is due (`org due`), or a catch-up could not reproduce the roll or open the current epoch's key. It proves nothing either way |
 
 ## A home
 
@@ -192,7 +192,25 @@ a member, the epoch keys it opened, the grants to it it read (whole: the
 certificate, never a summary), and the latest token of each chain it
 verified. **The home holds secrets**: the
 identity key and every epoch key. Back it up as one, and keep it at 0700.
-One command at a time uses a home; a second is refused (exit 2).
+One command at a time uses a home; a second is refused (exit 2). The lock
+is taken before the wallet is opened: the coin pool is read whole and
+written back whole, so a pool read before the lock could put back coins
+another command spent.
+
+A coin leaves `wallet.json` the moment it is taken, before the transaction
+that spends it is recorded in `state.json`. While a command that spends is
+running, the state records the pool as it stood (`taking`); a command that
+ends clears it. The next command after one that stopped in between asks
+the node about a coin in that record that neither file accounts for: one
+the node shows unspent goes back in the pool, one it shows spent is
+reported, and one it cannot answer for is looked at again next time. A
+coin taken while a funding tree was being minted is the exception: see
+[limits.md](limits.md).
+
+An organisation's and a group's name is one line of plain text: `org
+create` and `group create` refuse a name with a line break or a character
+a terminal would act on. A name another tool wrote is printed on one line,
+filtered.
 
 A home is one identity. An organisation is an identity key: the home that
 runs `org create` is the organisation, and its key signs every grant
@@ -221,7 +239,33 @@ is discarded with its key (exit 1). Then, after `delay`, the token is
 published with its parent, each with its minimal proof, to the facade and
 to every host named (in unicast to every host), and confirmed at each
 host by a lookup. Every token and sweep must reach every host named; a
-carrier in unicast needs the quorum.
+carrier needs the quorum.
+
+**A transition or a sweep is given up only on the node's word that
+another transaction spends one of its inputs.** A settlement leg's refusal
+alone decides nothing: it is also how a second submission of a transaction
+the network already took is answered. While the node shows the
+predecessor (and the fee coin) unspent, spent by this very transaction, or
+cannot say, the transition stays persisted with its key and the next
+command sends it and waits again (exit 2). The same holds for a spender
+the node names and cannot show: it may be this transition under another
+txid, so nothing is discarded until it is read. A sweep is marked failed,
+and its fee coin given back, on the same evidence only.
+
+**Proofs after a reorganisation.** The proof a home keeps of a token or a
+funding tree is the one the node gave when it mined. Before a token is
+built on, published as a parent, or a tree's output is spent, the kept
+proof is checked against `header_url`; one that no longer verifies is
+replaced by the transaction's current proof from `asset`, in the home too
+(spec section 11.5). A header source that fails is an error, never a
+verdict.
+
+**Unfinished work.** Every engine command first finishes what the home
+persisted: a sweep, the outbox, a transition, then the tokens and wraps it
+owes. Each is tried whatever became of the one before, so one object a
+host will not take does not keep a mined transition from being adopted or
+a token from the hosts. The command then stops on the first failure
+(exit 2), except `kill`, which goes on.
 
 The tooling refuses to build what a host would refuse or an index would
 report: every transition is checked against the host's transition rules
@@ -254,10 +298,12 @@ before making them makes them next time: every engine command finishes
 what the home owes first.
 
 **Grants.** A grant is published before the organisation token that
-admits it. No free class answers a grant before the roll holds it, so in
-unicast a host's answer that admits nothing for a new grant is counted,
+admits it. No free class answers a grant before the roll holds it, so a
+host's answer that admits nothing for a new grant is counted,
 and once the admitting token is published each host is asked for it by
-the `member` class and offered it again where it lacks it.
+the `member` class and offered it again where it lacks it. A grant fewer
+hosts than the `quorum` then answer is not published: it goes back to the
+outbox (exit 2), and the next command publishes it.
 
 **Revocation.** `grant revoke` revokes by the roll (an organisation token
 revoking the grants' commitments) and by a mined sweep of their
@@ -333,6 +379,17 @@ retracts the grants and the wraps. The home's trees are then spent: a
 later grant mints a new one. A run that stops is finished by running it
 again.
 
+Work an earlier command left unfinished (an object a host has not taken,
+a transition not yet mined) does not stop it: that work is reported and
+left for the next command. Before a tree is swept the node is asked what
+spends each output: one another transaction already spends is left out,
+and once that transaction is mined it is recorded as the sweep it is and
+published as one (another home of the organisation swept it, or an
+earlier run gave up on a sweep that mined all the same). An output whose
+spender has not mined yet is left for the next run (exit 3). A sweep
+refused because another transaction took one of its inputs is built again
+without it, twice at most.
+
 It does not end the chains: tokens are mined and stay, and readers go on
 reading them with every member lacking a current grant. It does not take
 back an epoch key a member opened, or a copy anyone kept. It reaches the
@@ -344,17 +401,29 @@ sync`).
 Every reading command asks every host in `hosts` and checks every answer
 against `header_url`: a token by its record, its lock and field signature
 and its proof; a carrier by the host's own admission rules and SPV through
-its funding parent; a sweep by its proof. A chain is read by asking each
-host the latest class and then every seq from 0, so the reader folds it
-itself: the canonical chain runs by spends from the first-mined seq 0
+its funding parent; a sweep by its proof. A proof a host stored that no
+longer verifies (a reorganisation mined the transaction again elsewhere)
+is replaced by the transaction's current proof from `asset`, when one is
+configured, and verified against `header_url` like any other; without
+`asset` such an answer is refused as unmined. A chain is read by asking
+each host the latest class and then every seq from 0, so the reader folds
+it itself: the canonical chain runs by spends from the first-mined seq 0
 token, and a host that lacks a token another host answered is reported
-(`DISAGREES`), never merged silently. A chain that folds to a mismatch is
+(`DISAGREES`), never merged silently. A seq is asked for only once the one
+before it is on the chain, so the walk is bounded by the chain, never by a
+seq a host claims. Verified tokens the hosts answer above where the walk
+ended are reported (`WITHHELD`, exit 3): a token between was withheld, or
+the organisation signed a stray one, and what was read may be an older
+state. A chain that folds to a mismatch is
 unusable from that token on (fail closed); `commitment-reuse` and
 `rejoin-unrotated` are shown as inconsistent.
 
 A home remembers the latest token of each chain it verified, and refuses
 (exit 3) a host set that answers an older one: a host can withhold a
-newer token, and only a reader that remembers can tell.
+newer token, and only a reader that remembers can tell. `open` reads
+through that memory; the commands that need no home (`roll`, `member`,
+`member-of`, `group show`) have none, and rely on `WITHHELD` and on asking
+more than one host.
 
 **`open <group>`** applies the member's checks of spec section 6.4 to
 every epoch: the token that began it (from the canonical chain), a wrap
@@ -383,10 +452,14 @@ some host still answers, is submitted as another host answered it. Everything is
 went to. Anyone who reads the hall can run it; it needs no coin.
 
 On the plane the organisation's own tooling does part of this as it
-publishes: a wrap is submitted once to the facade, then looked for at every
-host in `hosts` (the `wrap` class, for up to 3.5 s), and offered directly to
-a host the plane did not deliver it to. Grants are confirmed the same way
-once the roll admits them, and tokens and sweeps always go to every host.
+publishes: an object is submitted once to the facade, then looked for at
+every host in `hosts` (for up to 3.5 s), and offered directly to a host
+the plane did not deliver it to. The facade's answer is not a host's: it
+says "nothing admitted" for a duplicate and for a refusal alike. So a
+wrap counts as published only once `quorum` hosts answer it, and a token
+or a sweep once every host does; until then it stays in the outbox (exit
+2) and the next command publishes it. Grants are confirmed the same way
+once the roll admits them.
 
 ## The spend index
 
@@ -419,22 +492,42 @@ own node keeps that to itself (spec section 16.12).
 
 `history` asks the host's terms route (`history_host`, or `-at`) over
 BRC-104 for every token of a chain (`-chain org` or a group id, `-after
-SEQ` for the next page). The host answers 402 with its price; the command
-pays it from the pool with a BRC-29 payment as output 0 (BRC-105, through
-the SDK's `AuthFetch`), unless the price is over `-max-sats` (default
-1000), and verifies every token answered.
+SEQ` for the next page, `-all` for every page from there on). The host
+answers 402 with its price; the command pays it from the pool with a
+BRC-29 payment as output 0 (BRC-105, through the SDK's `AuthFetch`),
+unless the price is over `-max-sats` (default 1000), and verifies every
+token answered.
+
+**One question is paid for once.** The SDK answers every 402 with a new
+payment; the command does not. A host that answers 402 again after a
+payment was sent is refused (exit 1), and handed nothing more. The
+payment is recorded in the home before it is sent, and from then on it is
+made: the host holds a valid transaction that spends the coin. A host
+that takes it and does not answer (a 500, a dropped connection, a 429 on
+the paid request) is reported, the payment is kept and broadcast, and its
+coin is never given back to the pool, where the next payment would spend
+it a second time.
+
+**A budget for the whole command.** `-max-sats` bounds one question,
+`-budget` (default 16000) everything the command pays. With `-all` each
+page is one paid question; when the budget cannot cover the next page the
+command stops and says the chain was not read to its end (exit 3). A page
+holds at most 64 tokens, an answer at most 16 MiB, and a page that holds
+tokens at or below the cursor it was asked after is refused.
 
 The payment is this home's own transaction. The host records it and its
 payee broadcasts it when it settles; this home also hands it to `settle`
-once the host has accepted it, so it mines whenever the payee runs. Its
+once it was sent, answered or not, so it mines whenever the payee runs. Its
 change is spendable by this home's next payment at once: that payment
 spends the unmined change and carries the payment it came from in its
 BEEF, which the host verifies through. Up to 16 unmined payments may follow
 one another this way, so a home with one coin is not held to one priced
 question per block; for anything but a payment, the change is spendable
-once the payment mines. A coin is handed out once, and a payment the host
-did not accept gives it back: no coin is spent twice. `terms` prints what a host
-prices; a free class with a price is reported and never paid.
+once the payment mines. A coin is handed out once, and only a payment
+that was never made (the price was over the bound, or nothing could be
+signed) leaves its coin in the pool: no coin is spent twice. `terms`
+prints what a host prices; a free class with a price is reported and
+never paid.
 
 ## A host's payee
 
