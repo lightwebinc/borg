@@ -370,7 +370,9 @@ func (e *Engine) merge(ctx context.Context, what string, local []state.Token, ca
 			if local[i].Txid == t.Txid {
 				continue
 			}
-			if tx, err := rebuild(&local[i]); err == nil && borgrec.Mined(ctx, tx, e.Legs.Headers) {
+			// Mined under the proof the home kept, or under the node's
+			// current one when a reorganisation left the kept one stale.
+			if tx, err := rebuild(&local[i]); err == nil && e.minedNow(ctx, tx) {
 				return nil, 0, 0, syncRefused("%s: this home holds %s at seq %d, mined, and the hosts answer %s: a fork; nothing is merged", what, Short(local[i].Txid), i, Short(t.Txid))
 			}
 			e.note("%s: this home's seq %d %s is no longer in the chain (a reorganisation); it and what followed are dropped", what, i, Short(local[i].Txid))
@@ -390,6 +392,13 @@ func (e *Engine) merge(ctx context.Context, what string, local []state.Token, ca
 		added++
 	}
 	return local, added, dropped, nil
+}
+
+// minedNow reports whether tx is mined in the publisher's headers, under
+// the proof it carries or the node's current one.
+func (e *Engine) minedNow(ctx context.Context, tx *transaction.Transaction) bool {
+	_, err := e.current(ctx, tx)
+	return err == nil
 }
 
 // syncGrants takes every grant of the roll the home does not hold, and

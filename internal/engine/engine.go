@@ -105,6 +105,10 @@ type Options struct {
 	Signers int
 	// Entries is the most wrap entries one wrap record carries.
 	Entries int
+	// PlaneNeed is, in mode plane, how many of the hosts named must answer
+	// a carrier by lookup for it to count as published; zero is all of
+	// them. A mined object always needs every host.
+	PlaneNeed int
 }
 
 // Legs are the endpoints a publisher talks to. Objects go to exactly one of
@@ -274,8 +278,13 @@ func FeeError(err error) error {
 
 // Start reads the chain tip for coinbase maturity, collects the proofs of
 // change the pool holds back, and finishes whatever a previous run
-// persisted and did not finish: a sweep, a transition, the wraps it owed,
-// and every object not confirmed published.
+// persisted and did not finish: a sweep, every object not confirmed
+// published, a transition, and the tokens and wraps it owed. Each piece of
+// work is tried whatever became of the one before it: one that cannot
+// finish (a host that is down, a transition another beat to the chain)
+// does not keep the rest from the chain or the hosts. The first failure is
+// returned, a *LostError only when nothing else failed; the others are
+// noted.
 func (e *Engine) Start(ctx context.Context) error {
 	h, err := e.Legs.Asset.BestHeader(ctx)
 	if err != nil {
@@ -283,19 +292,45 @@ func (e *Engine) Start(ctx context.Context) error {
 	}
 	e.payer.Tip = h.Height
 	CollectChange(ctx, e.Pool, e.Legs.Asset)
-	var refusedErr *SweepRefusedError
-	if err := e.FinishSweep(ctx); errors.As(err, &refusedErr) {
-		e.note("%v", err)
-	} else if err != nil {
+	// What a run that stopped took from the pool and never recorded goes
+	// back; from here every save records the pool before a coin is taken.
+	Journal(e.St, e.Pool, Reconcile(ctx, e.St, e.Pool, e.Legs.Asset, e.note))
+	if err := e.St.Save(); err != nil {
 		return err
 	}
-	if err := e.Resume(ctx); err != nil {
-		return err
+	var first error
+	var lost *LostError
+	keep := func(err error) {
+		var l *LostError
+		var refusedErr *SweepRefusedError
+		switch {
+		case err == nil:
+		case errors.As(err, &refusedErr):
+			e.note("%v", err)
+		case errors.As(err, &l) && lost == nil:
+			lost = l
+		case !errors.As(err, &l) && first == nil:
+			first = err
+		default:
+			e.note("%v", err)
+		}
 	}
-	if err := e.FinishTransition(ctx); err != nil {
-		return err
+	for _, step := range []func(context.Context) error{e.FinishSweep, e.Resume, e.FinishTransition, e.Owed} {
+		keep(step(ctx))
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	return e.Owed(ctx)
+	if first != nil {
+		if lost != nil {
+			e.note("%v", lost)
+		}
+		return first
+	}
+	if lost != nil {
+		return lost
+	}
+	return nil
 }
 
 // CollectChange gives every unproven coin in the pool its proof, once its
@@ -315,20 +350,30 @@ func CollectChange(ctx context.Context, pool *bwallet.Pool, asset *nodeapi.Asset
 }
 
 // Resume publishes every object a previous run persisted: the same bytes,
-// so a host that already holds one answers a duplicate.
+// so a host that already holds one answers a duplicate. Every object is
+// tried; one that cannot be published stays in the outbox, and the first
+// failure is returned.
 func (e *Engine) Resume(ctx context.Context) error {
-	for len(e.St.Outbox) > 0 {
-		p := e.St.Outbox[0]
+	var first error
+	for _, p := range slices.Clone(e.St.Outbox) {
 		e.note("%s %s: publishing what a previous run persisted", p.Kind, reader.Short(p.Txid))
 		if err := e.publish(ctx, p); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			if first == nil {
+				first = err
+			} else {
+				e.note("%v", err)
+			}
+			continue
 		}
 		e.St.Done(p.Txid)
 		if err := e.St.Save(); err != nil {
 			return err
 		}
 	}
-	return nil
+	return first
 }
 
 // Close collects a tree still being minted ahead, so its change reaches the
@@ -343,6 +388,8 @@ func (e *Engine) Close(ctx context.Context) error {
 			ts.Ahead = producer.Index(ts.Ahead, p)
 		}
 	}
+	// The run ended: nothing is being taken.
+	Unjournal(e.St)
 	return e.St.Save()
 }
 
@@ -350,7 +397,9 @@ func (e *Engine) Close(ctx context.Context) error {
 // spends and the output, the tree's proof cut to the minimal one a host
 // admits.
 func (e *Engine) spend(ctx context.Context, kind string) (*transaction.Transaction, uint32, error) {
-	e.promoteAhead(kind)
+	if err := e.promoteAhead(kind); err != nil {
+		return nil, 0, err
+	}
 	t := e.trees[kind]
 	if e.hasAhead(kind) || kind == state.TreeChain {
 		t.Ahead = 0
@@ -365,6 +414,8 @@ func (e *Engine) spend(ctx context.Context, kind string) (*transaction.Transacti
 		if err := e.prove(ctx, kind, tree); err != nil {
 			return nil, 0, err
 		}
+	} else if err := e.reproveTree(ctx, tree); err != nil {
+		return nil, 0, err
 	}
 	mp, err := Minimal(tree.MerklePath, tree.TxID())
 	if err != nil {
@@ -384,18 +435,24 @@ func (e *Engine) hasAhead(kind string) bool {
 	return false
 }
 
-func (e *Engine) promoteAhead(kind string) {
+func (e *Engine) promoteAhead(kind string) error {
 	ts := e.St.Set(kind)
 	if ts.Tree != nil && ts.Tree.Remaining() > 0 {
-		return
+		return nil
 	}
 	for _, t := range ts.Ahead {
 		if t.IdentityKeyHex == e.Signer.IdentityHex() && t.Remaining() > 0 {
-			_ = treeState{e, kind}.Adopt(t)
+			// Adopt saves the home: a tree that is the current one only in
+			// memory would have its outputs spent with nothing recording
+			// which.
+			if err := (treeState{e, kind}).Adopt(t); err != nil {
+				return fmt.Errorf("switching to %s funding tree %s: %w", kind, Short(t.Txid), err)
+			}
 			e.note("switching to %s funding tree %s, minted ahead by an earlier run", kind, t.Txid)
-			return
+			return nil
 		}
 	}
+	return nil
 }
 
 // prove waits for a funding tree's proof: a carrier spends only a mined
@@ -422,6 +479,56 @@ func (e *Engine) prove(ctx context.Context, kind string, tree *transaction.Trans
 		}
 	}
 	return e.St.Save()
+}
+
+// reproveTree holds a funding tree's kept proof to the publisher's headers
+// and, when a reorganisation left it stale, replaces it with the node's
+// current one, in the home too: a carrier or a first token carrying a
+// proof of an orphaned block is refused by every host.
+func (e *Engine) reproveTree(ctx context.Context, tree *transaction.Transaction) error {
+	id := tree.TxID().String()
+	changed, err := e.current(ctx, tree)
+	if err != nil {
+		return fmt.Errorf("funding tree %s: %w", Short(id), err)
+	}
+	if !changed {
+		return nil
+	}
+	mp := tree.MerklePath
+	e.note("funding tree %s: its kept proof named a block that is no longer in the header source's chain; the node's current proof, at height %d, replaces it", Short(id), mp.BlockHeight)
+	e.kept.Prove(id, mp)
+	for _, kind := range state.TreeKinds {
+		ts := e.St.Trees[kind]
+		if ts == nil {
+			continue
+		}
+		fix := func(t *funding.Tree) {
+			if t != nil && t.Txid == id {
+				t.BumpHex, t.Height, t.BeefHex = mp.Hex(), mp.BlockHeight, ""
+			}
+		}
+		fix(ts.Tree)
+		for i := range ts.Trees {
+			fix(&ts.Trees[i])
+		}
+		for i := range ts.Ahead {
+			fix(&ts.Ahead[i])
+		}
+	}
+	return e.St.Save()
+}
+
+// treeTx is a funding tree the home keeps, under a proof that verifies
+// against the publisher's headers.
+func (e *Engine) treeTx(ctx context.Context, txid string) (*transaction.Transaction, error) {
+	tree, err := e.kept.Tx(txid)
+	if err != nil {
+		return nil, err
+	}
+	if tree.MerklePath == nil {
+		return nil, fmt.Errorf("funding tree %s has no proof yet", Short(txid))
+	}
+	return tree, e.reproveTree(ctx, tree)
 }
 
 // markSpent records that vout of the current tree of kind is used.
@@ -500,25 +607,45 @@ func (e *Engine) publish(ctx context.Context, p state.Pending) error {
 			return fmt.Errorf("%s: a mined object reaches every host named, off the plane too: %w; it is persisted and the next command publishes it", what, err)
 		}
 	}
-	if p.Kind == state.KindWrap {
-		e.confirmOnPlane(ctx, what, topic, beef, confirm)
+	if g := e.grant(p.Txid); p.Kind == state.KindGrant && g != nil && !g.Admitted {
+		// No free class answers a grant before the roll admits it: it is
+		// confirmed, and offered again to a host that lacks it, once the
+		// token that admits it is published (ConfirmGrants).
+		return nil
+	}
+	// The facade's answer is not a host's: it says "nothing admitted" for a
+	// duplicate and for a refusal alike, and the plane can lose an object on
+	// the way to any host. An object counts as published only once a lookup
+	// at the hosts named answers it: a mined object at every one, a carrier
+	// at the quorum. Until then it stays in the outbox.
+	held, missing := e.confirmOnPlane(ctx, what, topic, beef, confirm)
+	if rd := e.Legs.Reader; rd != nil && confirm != nil {
+		need := e.Opts.PlaneNeed
+		if p.Mined() || need <= 0 || need > len(rd.Hosts) {
+			need = len(rd.Hosts)
+		}
+		if held < need {
+			return fmt.Errorf("%s: %d of %d host(s) named answer it and %d must (%s lack it or could not be asked); it is persisted and the next command publishes it", what, held, len(rd.Hosts), need, strings.Join(missing, ", "))
+		}
 	}
 	return nil
 }
 
-// confirmOnPlane confirms a wrap at every host the publisher names, once
-// the facade took it, and offers it again, directly, to a host the plane
-// did not deliver it to (spec section 12). A wrap is answered by a free
-// class as soon as a host holds it, so a host that still lacks it after
-// PlaneWait was missed: the plane repairs loss within its window, and a
-// wrap nobody confirms would leave one host unable to answer a member. A
-// direct copy that races the plane's is a duplicate and harmless. A host
-// that cannot be asked, or does not take it, is noted and left to fill.
-func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []byte, confirm unicast.Confirm) {
+// confirmOnPlane confirms an object at every host the publisher names,
+// once the facade took it, and offers it again, directly, to a host the
+// plane did not deliver it to (spec section 12). An object is answered by a
+// free class as soon as a host holds it, so a host that still lacks it
+// after PlaneWait was missed: the plane repairs loss within its window, and
+// a wrap nobody confirms would leave one host unable to answer a member. A
+// direct copy that races the plane's is a duplicate and harmless. It
+// returns how many hosts answer the object, and those that do not.
+func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []byte, confirm unicast.Confirm) (int, []string) {
 	rd := e.Legs.Reader
 	if rd == nil || confirm == nil {
-		return
+		return 0, nil
 	}
+	n := 0
+	var missing []string
 	for _, host := range rd.Hosts {
 		held, asked := false, true
 		for i := 0; ; i++ {
@@ -536,16 +663,24 @@ func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []
 				break
 			}
 		}
-		if held || !asked {
+		if held {
+			n++
+			continue
+		}
+		if !asked {
+			missing = append(missing, host)
 			continue
 		}
 		set := &unicast.Set{Hosts: []string{host}, Need: 1, Retries: Retries, HTTP: rd.HTTP, Note: e.Note}
 		if err := set.Send(ctx, what, topic, beef, 1, confirm).Err(); err != nil {
-			e.note("%s: host %s lacks it after the plane's delivery and did not take it directly: %v (borg fill offers it again)", what, host, err)
+			e.note("%s: host %s lacks it after the plane's delivery and did not take it directly: %v", what, host, err)
+			missing = append(missing, host)
 			continue
 		}
 		e.note("%s: host %s lacked it after the plane's delivery; offered directly and confirmed", what, host)
+		n++
 	}
+	return n, missing
 }
 
 func (e *Engine) submitFacade(ctx context.Context, what, topic string, beef []byte) error {
@@ -616,6 +751,23 @@ func (e *Engine) grant(txid string) *state.Grant {
 		return nil
 	}
 	return e.St.Org.GrantByTxid(txid)
+}
+
+// carrierNeed is how many of the hosts named must hold a carrier for it to
+// count as published: the quorum, in either mode.
+func (e *Engine) carrierNeed() int {
+	rd := e.Legs.Reader
+	if rd == nil {
+		return 0
+	}
+	need := e.Opts.PlaneNeed
+	if e.Legs.Hosts != nil {
+		need = e.Legs.Hosts.Need
+	}
+	if need <= 0 || need > len(rd.Hosts) {
+		need = len(rd.Hosts)
+	}
+	return need
 }
 
 // queue persists p in the outbox and publishes it, removing it once

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
@@ -92,15 +93,6 @@ func (e *Engine) ownToken(txid string) (*transaction.Transaction, error) {
 		}
 	}
 	return nil, fmt.Errorf("%s is not a token of this home's", txid)
-}
-
-// parentOf is the transaction a token's predecessor input spends: the
-// token before it, or at seq 0 the chain tree.
-func (e *Engine) parentOf(txid string) (*transaction.Transaction, error) {
-	if tx, err := e.ownToken(txid); err == nil {
-		return tx, nil
-	}
-	return e.kept.Tx(txid)
 }
 
 // currentGrant is the subject's current grant by the organisation's own
@@ -457,7 +449,7 @@ func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant
 	if err != nil {
 		return err
 	}
-	parent, err := rebuild(last)
+	parent, err := e.tokenTx(ctx, last)
 	if err != nil {
 		return err
 	}
@@ -760,7 +752,7 @@ func (e *Engine) GroupChange(ctx context.Context, gid string, c Change) (*Change
 	if err != nil {
 		return nil, err
 	}
-	parent, err := rebuild(last)
+	parent, err := e.tokenTx(ctx, last)
 	if err != nil {
 		return nil, err
 	}
@@ -898,43 +890,63 @@ func (e *Engine) FinishTransition(ctx context.Context) error {
 	return e.adopt(ctx, tr, tx, mp, h, payer)
 }
 
-// lostOrCopy settles a transition the network will not mine: the
-// predecessor's spender is read from the node; a mined spender carrying
-// the same record is this transition re-encoded and is adopted; anything
-// else won, and this one is discarded.
+// lostOrCopy settles a transition a leg refused: the predecessor's spender
+// is read from the node. Another transaction that spends it is read: a
+// mined one carrying the same record is this transition re-encoded and is
+// adopted; any other won, and this one is discarded. A spender the node
+// cannot show settles nothing, and the transition is kept. A predecessor
+// that is unspent, or spent by this very transaction, is beaten by nobody:
+// the transition is kept, unless another transaction spends its fee coin.
 func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why string, payer *producer.Payer) error {
 	by, err := e.Legs.Asset.Spender(ctx, tr.Parent, tr.ParentVout)
 	if err != nil {
 		return fmt.Errorf("%s: refused (%s), and the node could not say what spends its predecessor: %w (the next command looks again)", tr.What, why, err)
 	}
 	if by != "" && by != tr.Txid {
-		if raw, err := e.Legs.Asset.TxRaw(ctx, by); err == nil {
-			if other, err := guard.ParseTransaction(raw, guard.DefaultBound); err == nil && other.TxID().String() == by {
-				if t, err := borgrec.ReadToken(other); err == nil && hex.EncodeToString(t.Record) == tr.Record {
-					mp, h, perr := e.Legs.Asset.Proof(ctx, by)
-					if perr != nil {
-						return fmt.Errorf("%s: a copy of it, %s, spends its predecessor and has not mined yet (the next command looks again)", tr.What, Short(by))
-					}
-					e.note("%s: a copy with another txid, %s, carrying the same record, was mined in its place: the same transition", tr.What, Short(by))
-					other.MerklePath = mp
-					return e.adopt(ctx, tr, other, mp, h, payer)
-				}
+		// Another transaction spends the predecessor. Whether it won, or is
+		// this transition re-encoded, is settled only by reading it: a node
+		// that cannot show it settles nothing, and the transition is kept.
+		if _, herr := reader.Hash(by); herr != nil {
+			return fmt.Errorf("%s: the node names a spender of its predecessor that is not a transaction id; it is kept, and the next command looks again", tr.What)
+		}
+		raw, err := e.Legs.Asset.TxRaw(ctx, by)
+		if err != nil {
+			return fmt.Errorf("%s: its predecessor is spent by %s, which the node could not show (%v): whether that is this transition under another txid is not known yet; it is kept, and the next command looks again", tr.What, Short(by), err)
+		}
+		other, err := guard.ParseTransaction(raw, guard.DefaultBound)
+		if err != nil || other.TxID().String() != by {
+			return fmt.Errorf("%s: its predecessor is spent by %s, and the node answered other bytes for it; it is kept, and the next command looks again", tr.What, Short(by))
+		}
+		if t, err := borgrec.ReadToken(other); err == nil && hex.EncodeToString(t.Record) == tr.Record {
+			mp, h, perr := e.Legs.Asset.Proof(ctx, by)
+			if perr != nil {
+				return fmt.Errorf("%s: a copy of it, %s, spends its predecessor and has not mined yet (the next command looks again)", tr.What, Short(by))
 			}
+			e.note("%s: a copy with another txid, %s, carrying the same record, was mined in its place: the same transition", tr.What, Short(by))
+			other.MerklePath = mp
+			return e.adopt(ctx, tr, other, mp, h, payer)
 		}
 	}
 	feeLost := false
-	if by == "" {
-		// The predecessor is unspent, so no transition beat this one. If
-		// its fee coin is spent by another transaction (another instance of
-		// the tooling held the same coin), these bytes can never mine: the
-		// transition is discarded like a lost one, and built again.
+	if by == "" || by == tr.Txid {
+		// The predecessor is unspent, or spent by this very transaction
+		// (the node took it, and it has not mined yet): no transition beat
+		// this one, whatever a leg answered. Only if its fee coin is spent
+		// by ANOTHER transaction (another instance of the tooling held the
+		// same coin) can these bytes never mine: the transition is then
+		// discarded like a lost one, and built again. Anything else keeps
+		// it persisted, to be sent and waited for again.
+		kept := fmt.Errorf("%s %s: refused (%s), and its predecessor is not spent by another transaction: it is kept, and the next command sends it and waits again", tr.What, Short(tr.Txid), why)
 		f := tr.Fee
 		if f == nil {
-			return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+			return kept
 		}
 		spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
 		if err != nil || spent == "" || spent == tr.Txid {
-			return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+			return kept
+		}
+		if _, herr := reader.Hash(spent); herr != nil {
+			return kept
 		}
 		by, feeLost = spent, true
 	}
@@ -999,9 +1011,62 @@ func (e *Engine) adopt(ctx context.Context, tr *state.Transition, tx *transactio
 		return err
 	}
 	if tr.Kind == state.KindOrgToken && len(tr.Grants) > 0 {
-		e.ConfirmGrants(ctx, tr.Grants)
+		// The wraps the transition owes are made whatever a host lacks.
+		if err := e.ConfirmGrants(ctx, tr.Grants); err != nil {
+			if oerr := e.Owed(ctx); oerr != nil {
+				e.note("%v", oerr)
+			}
+			return err
+		}
 	}
 	return e.Owed(ctx)
+}
+
+// tokenTx rebuilds a mined token of the home's own under a proof that
+// verifies against the publisher's headers, replacing a kept proof a
+// reorganisation left stale with the node's current one, in the home too
+// (spec section 11.5).
+func (e *Engine) tokenTx(ctx context.Context, t *state.Token) (*transaction.Transaction, error) {
+	tx, err := rebuild(t)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := e.current(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if changed {
+		e.note("token %s: its kept proof named a block that is no longer in the header source's chain; the node's current proof, at height %d, replaces it", Short(t.Txid), tx.MerklePath.BlockHeight)
+		t.BumpHex, t.Height = tx.MerklePath.Hex(), tx.MerklePath.BlockHeight
+		if err := e.St.Save(); err != nil {
+			return nil, err
+		}
+	}
+	return tx, nil
+}
+
+// parentTx is the transaction a token's predecessor input spends, under a
+// proof that verifies against the publisher's headers: the token before it
+// in its chain, or at seq 0 the chain tree.
+func (e *Engine) parentTx(ctx context.Context, ts []state.Token, t *state.Token) (*transaction.Transaction, error) {
+	for i := range ts {
+		if ts[i].Txid == t.Parent {
+			return e.tokenTx(ctx, &ts[i])
+		}
+	}
+	return e.treeTx(ctx, t.Parent)
+}
+
+// tokensOf are the tokens of the chain a token of kind and group is in.
+func (e *Engine) tokensOf(kind, group string) []state.Token {
+	o := e.St.Org
+	if kind == state.KindGroupToken {
+		if g := o.Group(group); g != nil {
+			return g.Tokens
+		}
+		return nil
+	}
+	return o.Tokens
 }
 
 // tokenRef finds a token of the home's own chains.
@@ -1054,24 +1119,26 @@ func (e *Engine) publishToken(ctx context.Context, kind, group, txid string) err
 	if err != nil {
 		return err
 	}
-	tx, err := rebuild(t)
+	// A token just mined waits for its block to reach the header source;
+	// one whose kept proof a reorganisation left stale takes the node's
+	// current proof.
+	tx, err := e.tokenTx(ctx, t)
 	if err != nil {
-		return err
+		if tx, err = rebuild(t); err != nil {
+			return err
+		}
+		if err := e.inHeaders(ctx, kind, tx); err != nil {
+			return err
+		}
 	}
-	parent, err := e.parentOf(t.Parent)
+	parent, err := e.parentTx(ctx, e.tokensOf(kind, group), t)
 	if err != nil {
-		return err
-	}
-	if parent.MerklePath == nil {
-		return fmt.Errorf("token %s: its parent %s has no proof", Short(txid), Short(t.Parent))
+		return fmt.Errorf("token %s: its parent %s: %w", Short(txid), Short(t.Parent), err)
 	}
 	for _, x := range []*transaction.Transaction{tx, parent} {
 		if x.MerklePath, err = Minimal(x.MerklePath, x.TxID()); err != nil {
 			return err
 		}
-	}
-	if err := e.inHeaders(ctx, kind, tx); err != nil {
-		return err
 	}
 	beef, err := borgrec.TokenBEEF(tx, parent)
 	if err != nil {
@@ -1092,42 +1159,66 @@ func (e *Engine) publishToken(ctx context.Context, kind, group, txid string) err
 // ConfirmGrants asks every host named whether it answers each grant now
 // that the roll admits it, and offers the grant again to a host that lacks
 // it (spec section 12: anyone who holds an object may submit it to a host
-// that lacks it).
-func (e *Engine) ConfirmGrants(ctx context.Context, commitments []string) {
+// that lacks it). A grant fewer hosts than the quorum answer is not
+// published: it goes back to the outbox, and the next command publishes it.
+func (e *Engine) ConfirmGrants(ctx context.Context, commitments []string) error {
 	o := e.St.Org
 	rd := e.Legs.Reader
 	if rd == nil || o == nil {
-		return
+		return nil
 	}
+	var first error
 	for _, c := range commitments {
 		g := o.GrantByCommitment(c)
 		if g == nil {
 			continue
 		}
 		q := reader.Query{"hall": o.Hall, "org": e.orgHex(), "member": g.Subject}
+		held := 0
+		var missing []string
 		for _, host := range rd.Hosts {
 			ok, err := rd.Held(ctx, host, q, g.Txid)
 			if ok {
+				held++
 				continue
 			}
 			if err != nil {
 				e.note("grant %s: host %s could not be asked: %v", Short(g.Txid), host, err)
+				missing = append(missing, host)
 				continue
 			}
 			beef, err := e.grantBEEF(g)
 			if err != nil {
 				e.note("grant %s: %v", Short(g.Txid), err)
+				missing = append(missing, host)
 				continue
 			}
 			set := &unicast.Set{Hosts: []string{host}, Need: 1, Retries: Retries, HTTP: rd.HTTP, Note: e.Note}
 			confirm := func(ctx context.Context, h string) (bool, error) { return rd.Held(ctx, h, q, g.Txid) }
 			if err := set.Send(ctx, "grant "+Short(g.Txid), borgrec.Topic(o.Hall), beef, 1, confirm).Err(); err != nil {
 				e.note("grant %s: host %s lacks it and did not take it again: %v", Short(g.Txid), host, err)
+				missing = append(missing, host)
 				continue
 			}
 			e.note("grant %s: host %s lacked it; offered again and confirmed", Short(g.Txid), host)
+			held++
+		}
+		if need := e.carrierNeed(); held < need {
+			if !e.St.Queued(g.Txid) {
+				e.St.Outbox = append(e.St.Outbox, state.Pending{Kind: state.KindGrant, Hall: o.Hall, Txid: g.Txid, Beef: g.Beef, Org: e.orgHex(), Member: g.Subject})
+				if err := e.St.Save(); err != nil {
+					return err
+				}
+			}
+			err := fmt.Errorf("grant %s: %d of %d host(s) named answer it and %d must (%s lack it or could not be asked); it is persisted and the next command publishes it", Short(g.Txid), held, len(rd.Hosts), need, strings.Join(missing, ", "))
+			if first == nil {
+				first = err
+			} else {
+				e.note("%v", err)
+			}
 		}
 	}
+	return first
 }
 
 // grantBEEF is a grant's carrier as it was published.
