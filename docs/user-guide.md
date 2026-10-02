@@ -96,6 +96,13 @@ group's) moves once a block ([limits.md](limits.md)). If a command stops
 part way (a host down, the network slow, the machine switched off), what
 it built is kept in the home and the next command finishes it first.
 
+The same holds for a funding tree. If a command stops while it is minting
+one, the next command that publishes asks the node what became of it and
+tells you: `funding tree ... is recovered` when the tree reached the chain
+(nothing is lost), or `... never reached the chain: its fee coin ... is
+unspent and back in the pool` when it did not. You have nothing to do; if
+the node cannot be asked, the command says so and the next one asks again.
+
 What it costs: each change is one mined transaction of about 2.5 KB, a
 few hundred satoshis at 1 satoshi a byte. Each grant and each batch of
 wraps rides a funding output of one satoshi and is never mined; the tree

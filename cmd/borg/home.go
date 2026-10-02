@@ -803,6 +803,9 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 		}
 		fmt.Fprintf(out, "tree        %s: %s %d of %d left\n", kind, ts.Tree.Txid, ts.Tree.Remaining(), ts.Tree.Count)
 	}
+	for _, p := range st.UnsettledTrees() {
+		fmt.Fprintf(out, "tree        %s: %s signed for coin %s and not recorded as minted; the next command that publishes asks the node what became of it\n", field(p.Kind), p.Tree.Txid, p.Coin.Outpoint())
+	}
 	if o := st.Org; o != nil {
 		fmt.Fprintf(out, "org         %s in %s: seq %d, %d grant(s), %d group(s)\n", field(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
 		if p := o.Pending; p != nil {

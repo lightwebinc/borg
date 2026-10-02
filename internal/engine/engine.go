@@ -10,8 +10,11 @@
 // trees, record trees (which fund wraps) and chain trees (which pay for a
 // chain's first token), each under its own derived key. Grant and record
 // trees are minted ahead, so the next is on its way before the current runs
-// out. A funding tree is never published to a hall: every carrier carries
-// its own, and a chain's first token carries its chain tree.
+// out. A tree is recorded with its fee coin before it reaches the
+// settlement leg (Trees.Prepare), and a command that finds the record of a
+// tree never adopted settles it before it spends (RecoverTrees). A funding
+// tree is never published to a hall: every carrier carries its own, and a
+// chain's first token carries its chain tree.
 //
 // Every object is persisted in the home's state before it is sent: a
 // carrier with the funding output it spends marked used, a transition with
@@ -190,7 +193,8 @@ func New(st *state.State, signer *bwallet.Signer, pool *bwallet.Pool, legs Legs,
 		}
 		e.trees[kind] = &producer.Trees{Payer: e.payer, State: treeState{e, kind}, Identity: signer.IdentityHex(),
 			Count: count, Sats: o.TreeSats, Funder: "pool", Lock: lock, Change: signer.FundScript,
-			Facade: unicast.Kept(), Topic: "tm_borg_kept", Ahead: ahead}
+			Facade: unicast.Kept(), Topic: "tm_borg_kept", Ahead: ahead,
+			Prepare: func(tree funding.Tree, coin bwallet.Output) error { return e.prepareTree(k, tree, coin) }}
 	}
 	return e, nil
 }
@@ -249,6 +253,9 @@ func (t treeState) Adopt(tr funding.Tree) error {
 	ts.Tree = &tr
 	ts.Trees = append(ts.Trees, tr)
 	ts.Ahead = slices.DeleteFunc(ts.Ahead, func(a funding.Tree) bool { return a.Txid == tr.Txid })
+	// The tree is recorded as adopted: its record as a tree signed and not
+	// yet adopted goes in the same save.
+	t.e.St.DropPendingTree(tr.Txid)
 	return t.e.St.Save()
 }
 
@@ -296,6 +303,11 @@ func (e *Engine) Start(ctx context.Context) error {
 	// back; from here every save records the pool before a coin is taken.
 	Journal(e.St, e.Pool, Reconcile(ctx, e.St, e.Pool, e.Legs.Asset, e.note))
 	if err := e.St.Save(); err != nil {
+		return err
+	}
+	// A tree a run signed and stopped short of adopting is settled before
+	// anything is spent.
+	if err := e.RecoverTrees(ctx); err != nil {
 		return err
 	}
 	var first error
@@ -440,7 +452,16 @@ func (e *Engine) promoteAhead(kind string) error {
 	if ts.Tree != nil && ts.Tree.Remaining() > 0 {
 		return nil
 	}
+	var held *funding.Tree
+	if lib := e.trees[kind]; lib != nil {
+		held = lib.Prepared()
+	}
 	for _, t := range ts.Ahead {
+		// A tree the library holds, minted ahead or recovered in this run,
+		// is switched to by the library, which then lets go of it.
+		if held != nil && held.Txid == t.Txid {
+			continue
+		}
 		if t.IdentityKeyHex == e.Signer.IdentityHex() && t.Remaining() > 0 {
 			// Adopt saves the home: a tree that is the current one only in
 			// memory would have its outputs spent with nothing recording
