@@ -7,8 +7,8 @@
  * this service indexes in memory and rebuilds from storage on start. The
  * journal (journal.ts) holds what the host keeps for its life beside them:
  * every carrier any hall admitted with the funding outpoint it spent, every
- * drop, every spend of such an outpoint by an admitted sweep, and the first
- * sight of every token. Spends of outpoints no carrier used live only in a
+ * drop, every spend of such an outpoint by an admitted sweep, the first
+ * sight of every token, and every held sweep whose tombstone was spent. Spends of outpoints no carrier used live only in a
  * bounded table, oldest dropped first, so a stranger's chain of mined
  * sweeps costs the host that table and nothing more.
  *
@@ -89,6 +89,12 @@ interface ChainIdx {
   status: Map<string, TokenStatus>
   /** The fold after a token, kept for tokens with no successor yet. */
   states: Map<string, OrgFold | GroupFold>
+  /**
+   * Tokens a full seq turned away while they were pending, by the txid they
+   * name as their predecessor: txid -> output and seq. They stay in the
+   * engine's storage, and are read again once that predecessor is decided.
+   */
+  turned: Map<string, Map<string, { vout: number; seq: number }>>
 }
 
 /** A grant or wrap carrier the host holds. */
@@ -108,7 +114,8 @@ interface CarrierEntry {
 /** A sweep tombstone the host holds. */
 interface SweepEntry {
   txid: string
-  hall: string
+  /** Every hall the sweep was admitted in: one mined sweep may be published to several topics. */
+  halls: Set<string>
   spent: string[]
   height: number
   offset: number
@@ -217,11 +224,19 @@ export class BorgLookupService implements LookupService {
   /** Spends of outpoints no carrier used: outpoint -> sweep txid -> spend, oldest first. */
   private readonly table = new Map<string, Map<string, Spend>>()
 
+  /** Held sweeps whose tombstone an admitted transaction spent, by txid, with the halls it happened in: storage no longer hands them over, so the journal names them. */
+  private readonly spentSweeps = new Map<string, Set<string>>()
+  /** Tokens to read again from storage: their predecessor is decided now. */
+  private readonly reread: Array<{ hall: string; txid: string; vout: number }> = []
+
   /** Outputs dropped from the index and still to be deleted from storage. */
   private readonly pending = new Map<string, { txid: string; vout: number; topic: string }>()
   private storage: Storage | undefined
-  /** While restoring, chains are folded once at the end rather than at each token. */
+  /** While restoring, chains are folded and bounded once at the end rather than at each token. */
   private restoring = false
+  /** The restore in flight: an admission waits for it. */
+  private inflight: Promise<number> | undefined
+  private warnedNoDelete = false
   /** A held carrier's txid -> its commitment. */
   private readonly carrierByTxid = new Map<string, string>()
 
@@ -262,6 +277,10 @@ export class BorgLookupService implements LookupService {
   }
   get rowCount(): number {
     return this.rows.size
+  }
+  /** Carriers ever admitted: one journal line, and one entry in memory, each, for the host's life. */
+  get lineCount(): number {
+    return this.lines.size
   }
   get tableSize(): number {
     return this.table.size
@@ -305,7 +324,16 @@ export class BorgLookupService implements LookupService {
         if (!this.tokenSeen.has(l.txid)) this.tokenSeen.set(l.txid, l.at)
         break
       }
+      case 'w': {
+        addTo(this.spentSweeps, l.txid, l.hall)
+        break
+      }
     }
+  }
+
+  private queueDelete(txid: string, vout: number, hall: string): void {
+    const t = topic(hall)
+    this.pending.set(`${t}|${txid}.${vout}`, { txid, vout, topic: t })
   }
 
   private write(l: Line): void {
@@ -414,10 +442,46 @@ export class BorgLookupService implements LookupService {
     }
   }
 
-  /** Every token of the chain whose status was pending, decided again. */
+  /**
+   * Every token of the chain whose status was pending, decided again. A
+   * token a full seq turned away while it was pending is queued to be read
+   * again once the predecessor it names is decided, when it is that
+   * predecessor's next seq; one at any other seq stays pending for good and
+   * is let go.
+   */
   private refold(ch: ChainIdx): void {
     for (const [txid, s] of [...ch.status]) if (s === 'pending') ch.status.delete(txid)
     for (const t of ch.byTxid.values()) this.tokenStatusIn(ch, t)
+    for (const [prev, m] of [...ch.turned]) {
+      const p = ch.byTxid.get(prev)
+      if (p === undefined || ch.status.get(prev) === 'pending') continue
+      ch.turned.delete(prev)
+      for (const [txid, t] of m) if (t.seq === p.seq + 1) this.reread.push({ hall: ch.hall, txid, vout: t.vout })
+    }
+  }
+
+  /**
+   * Holds a seq to its bound: tokens that are not pending before pending
+   * ones, then the lowest txids. So what is kept is a function of what the
+   * host holds, and a token on a predecessor no host has cannot take the
+   * place of one on the chain. A pending token turned away is remembered by
+   * its predecessor.
+   */
+  private bound(ch: ChainIdx, seq: number): void {
+    const at = ch.bySeq.get(seq)
+    if (at === undefined || at.length <= MaxPerSeq) return
+    const pending = new Map(at.map((t) => [t.txid, this.tokenStatusIn(ch, t) === 'pending']))
+    const order = [...at].sort((a, b) => Number(pending.get(a.txid)) - Number(pending.get(b.txid)) || cmp(a.txid, b.txid))
+    for (const t of order.slice(MaxPerSeq)) {
+      this.host.log('ls_borg kept no more tokens at this seq', { hall: ch.hall, txid: t.txid, seq })
+      if (pending.get(t.txid) === true && t.prev !== '') {
+        let m = ch.turned.get(t.prev)
+        if (m === undefined) ch.turned.set(t.prev, (m = new Map()))
+        m.set(t.txid, { vout: t.vout, seq: t.seq })
+      }
+      this.forgetToken(ch, t)
+    }
+    this.refold(ch)
   }
 
   /** The highest token that is not pending, the first mined among several. */
@@ -460,7 +524,13 @@ export class BorgLookupService implements LookupService {
 
   // ---- admission
 
-  outputAdmittedByTopic(payload: OutputAdmittedByTopic): void {
+  /**
+   * Indexes an admitted output. The index is changed before the first
+   * await; what follows reads back tokens whose predecessor is decided now
+   * and deletes what was dropped from storage. An admission that meets a
+   * restore in flight waits for it, so that it is decided as any other.
+   */
+  async outputAdmittedByTopic(payload: OutputAdmittedByTopic): Promise<void> {
     if (payload.mode !== 'whole-tx') return
     const hall = this.hallOf(payload.topic)
     if (hall === undefined) return
@@ -471,8 +541,28 @@ export class BorgLookupService implements LookupService {
       this.host.log('ls_borg ignored an admission whose BEEF did not parse', { topic: payload.topic })
       return
     }
+    while (this.inflight !== undefined) await this.inflight.catch(() => {})
     this.index(hall, tx, payload.outputIndex, 0)
     this.enforceTable()
+    await this.drain()
+    await this.flush()
+  }
+
+  /** Reads back, as the engine stores them, the tokens a full seq turned away whose predecessor has since been decided. */
+  private async drain(): Promise<void> {
+    const storage = this.storage
+    if (storage === undefined) return
+    while (this.reread.length > 0) {
+      const r = this.reread.shift()!
+      if (this.holdsToken(r.txid)) continue
+      const o = await storage.findOutput(r.txid, r.vout, topic(r.hall), undefined, true)
+      if (o?.beef === undefined) continue
+      try {
+        this.index(r.hall, Transaction.fromBEEF(o.beef, o.txid), r.vout, o.score ?? 0)
+      } catch (e) {
+        this.host.log('ls_borg could not read a token again', { txid: r.txid, err: String(e) })
+      }
+    }
   }
 
   outputEvicted(txid: string, outputIndex: number): void {
@@ -480,7 +570,8 @@ export class BorgLookupService implements LookupService {
   }
 
   outputNoLongerRetainedInHistory(txid: string, outputIndex: number, t: string): void {
-    if (this.hallOf(t) !== undefined) this.forget(txid, outputIndex)
+    const hall = this.hallOf(t)
+    if (hall !== undefined) this.forget(txid, outputIndex, hall)
   }
 
   private hallOf(t: string): string | undefined {
@@ -497,6 +588,13 @@ export class BorgLookupService implements LookupService {
   private index(hall: string, tx: Transaction, vout: number, score: number): boolean {
     const out = tx.outputs[vout]
     if (out === undefined) return false
+    // A held sweep whose tombstone this transaction spends leaves the unspent
+    // rows storage hands a restore: the journal names it from now on.
+    for (const i of tx.inputs) {
+      const src = srcTxid(i)
+      if (src === undefined || i.sourceOutputIndex !== 0) continue
+      if (this.sweeps.get(src)?.halls.has(hall) === true && this.spentSweeps.get(src)?.has(hall) !== true) this.write({ k: 'w', txid: src, hall })
+    }
     const script = Uint8Array.from(out.lockingScript.toBinary())
     const txid = tx.id('hex')
     const kind = classify(script)
@@ -536,7 +634,7 @@ export class BorgLookupService implements LookupService {
       }
     }
     if (this.rows.get(op)!.dropped.has(c)) {
-      this.pending.set(`${txid}.0`, { txid, vout: 0, topic: topic(hall) })
+      this.queueDelete(txid, 0, hall)
       return false
     }
     this.carriers.set(c, e)
@@ -565,22 +663,12 @@ export class BorgLookupService implements LookupService {
     const key = this.chainKey(hall, org, group)
     let ch = this.chains.get(key)
     if (ch === undefined) {
-      ch = { kind: t.org !== undefined ? 'org' : 'group', hall, org, group, bySeq: new Map(), byTxid: new Map(), children: new Map(), status: new Map(), states: new Map() }
+      ch = { kind: t.org !== undefined ? 'org' : 'group', hall, org, group, bySeq: new Map(), byTxid: new Map(), children: new Map(), status: new Map(), states: new Map(), turned: new Map() }
       this.chains.set(key, ch)
       if (group !== '') addTo(this.groupsByOrg, `${hall}|${org}`, group)
     }
     if (!this.tokenSeen.has(txid)) this.write({ k: 't', txid, vout, hall, at: this.now() })
     if (ch.byTxid.has(txid)) return true
-    const at = ch.bySeq.get(rec.seq) ?? []
-    if (at.length >= MaxPerSeq) {
-      // The lowest txids are kept, so the set does not depend on arrival order.
-      const highest = at[at.length - 1]!
-      if (txid > highest.txid) {
-        this.host.log('ls_borg kept no more tokens at this seq', { hall, txid, seq: rec.seq })
-        return false
-      }
-      this.forgetToken(ch, highest)
-    }
     const { height, offset } = place(tx)
     const e: TokenEntry = {
       txid,
@@ -600,8 +688,12 @@ export class BorgLookupService implements LookupService {
     ch.bySeq.set(rec.seq, list)
     ch.byTxid.set(txid, e)
     if (e.prev !== '') addTo(ch.children, e.prev, txid)
-    if (!this.restoring) this.refold(ch)
-    return true
+    if (this.restoring) return true
+    this.refold(ch)
+    // The seq's bound is applied with every status known, so the set kept
+    // does not depend on arrival order.
+    this.bound(ch, rec.seq)
+    return ch.byTxid.has(txid)
   }
 
   private forgetToken(ch: ChainIdx, t: TokenEntry): void {
@@ -616,27 +708,34 @@ export class BorgLookupService implements LookupService {
 
   private indexSweep(hall: string, tx: Transaction, score: number): boolean {
     const txid = tx.id('hex')
-    const { height, offset } = place(tx)
-    const spent: string[] = []
-    for (const input of tx.inputs) {
-      const src = srcTxid(input)
-      if (src === undefined) continue
-      const op = outpoint(src, input.sourceOutputIndex)
-      spent.push(op)
-      const r = this.rows.get(op)
-      if (r !== undefined) {
-        if (!r.sweeps.has(txid)) {
-          this.write({ k: 's', op, s: txid, hall, h: height, at: this.now() })
-          this.host.metrics.inc('borg_retractions_total')
+    let e = this.sweeps.get(txid)
+    if (e === undefined) {
+      const { height, offset } = place(tx)
+      const spent: string[] = []
+      for (const input of tx.inputs) {
+        const src = srcTxid(input)
+        if (src === undefined) continue
+        const op = outpoint(src, input.sourceOutputIndex)
+        spent.push(op)
+        const r = this.rows.get(op)
+        if (r !== undefined) {
+          if (!r.sweeps.has(txid)) {
+            this.write({ k: 's', op, s: txid, hall, h: height, at: this.now() })
+            this.host.metrics.inc('borg_retractions_total')
+          }
+        } else {
+          let m = this.table.get(op)
+          if (m === undefined) this.table.set(op, (m = new Map()))
+          if (!m.has(txid)) m.set(txid, { hall, h: height, at: this.now() })
         }
-      } else {
-        let m = this.table.get(op)
-        if (m === undefined) this.table.set(op, (m = new Map()))
-        if (!m.has(txid)) m.set(txid, { hall, h: height, at: this.now() })
       }
+      this.sweeps.set(txid, (e = { txid, halls: new Set(), spent, height, offset, score }))
     }
-    this.sweeps.set(txid, { txid, hall, spent, height, offset, score })
-    for (const op of spent) addTo(this.sweepsByOp, `${hall}|${op}`, txid)
+    // The same mined sweep admitted in another hall answers there too.
+    if (!e.halls.has(hall)) {
+      e.halls.add(hall)
+      for (const op of e.spent) addTo(this.sweepsByOp, `${hall}|${op}`, txid)
+    }
     return true
   }
 
@@ -656,18 +755,18 @@ export class BorgLookupService implements LookupService {
       for (const s of spends.keys()) {
         const e = this.sweeps.get(s)
         if (e === undefined || this.sweepLive(e)) continue
+        for (const h of e.halls) this.queueDelete(s, 0, h)
         this.forget(s, 0)
-        this.pending.set(`${s}.0`, { txid: s, vout: 0, topic: topic(e.hall) })
         this.host.metrics.inc('borg_dropped_total', { why: 'table' })
       }
     }
   }
 
-  /** Removes a held output from the index; its rows stay. */
-  private forget(txid: string, vout: number): void {
+  /** Removes a held output from the index, in one hall or in all; its rows stay. */
+  private forget(txid: string, vout: number, hall?: string): void {
     const c = vout === 0 ? this.carrierByTxid.get(txid) : undefined
     const e = c === undefined ? undefined : this.carriers.get(c)
-    if (e !== undefined) {
+    if (e !== undefined && (hall === undefined || e.hall === hall)) {
       this.carriers.delete(e.c)
       this.carrierByTxid.delete(txid)
       if (e.kind === 'g') {
@@ -680,10 +779,14 @@ export class BorgLookupService implements LookupService {
     }
     const s = this.sweeps.get(txid)
     if (s !== undefined && vout === 0) {
-      this.sweeps.delete(txid)
-      for (const op of s.spent) removeFrom(this.sweepsByOp, `${s.hall}|${op}`, txid)
+      for (const h of hall === undefined ? [...s.halls] : [hall]) {
+        if (!s.halls.delete(h)) continue
+        for (const op of s.spent) removeFrom(this.sweepsByOp, `${h}|${op}`, txid)
+      }
+      if (s.halls.size === 0) this.sweeps.delete(txid)
     }
     for (const ch of this.chains.values()) {
+      if (hall !== undefined && ch.hall !== hall) continue
       const t = ch.byTxid.get(txid)
       if (t !== undefined && t.vout === vout) this.forgetToken(ch, t)
     }
@@ -698,7 +801,7 @@ export class BorgLookupService implements LookupService {
     if (r.dropped.has(c)) return
     this.write({ k: 'd', op: l.op, c, w: this.winnerOf(l.op) === c })
     this.forget(l.txid, 0)
-    this.pending.set(`${l.txid}.0`, { txid: l.txid, vout: 0, topic: topic(l.hall) })
+    this.queueDelete(l.txid, 0, l.hall)
     this.host.metrics.inc('borg_dropped_total', { why })
     this.host.log('ls_borg dropped a carrier', { txid: l.txid, outpoint: l.op, why })
   }
@@ -782,10 +885,20 @@ export class BorgLookupService implements LookupService {
     return n
   }
 
-  /** Deletes dropped outputs from storage, when the host's storage can. */
+  /**
+   * Deletes dropped outputs from storage. It runs after every admission and
+   * after retention, so a dropped output is gone at once. A store that
+   * cannot delete keeps what was dropped; the queue is not kept for it.
+   */
   async flush(): Promise<void> {
-    const del = this.storage?.deleteOutput?.bind(this.storage)
-    if (del === undefined) return
+    if (this.storage === undefined || this.pending.size === 0) return
+    const del = this.storage.deleteOutput?.bind(this.storage)
+    if (del === undefined) {
+      if (!this.warnedNoDelete) this.host.log('ls_borg cannot delete dropped outputs: the storage has no deleteOutput', {})
+      this.warnedNoDelete = true
+      this.pending.clear()
+      return
+    }
     for (const [k, p] of [...this.pending]) {
       try {
         await del(p.txid, p.vout, p.topic)
@@ -963,13 +1076,25 @@ export class BorgLookupService implements LookupService {
    * journal names that the unspent rows did not carry (a token its successor
    * spent, say), and then each held token's predecessors, read through the
    * input that spends them from the token as the engine stores it (the token
-   * alone, without its parent). Sweeps are taken in storage's order, so the
+   * alone, without its parent). A held sweep whose tombstone was spent is
+ * among those the journal names (its `w` line). Sweeps are taken in storage's order, so the
    * bounded table keeps the newest. Statuses are functions of what is held,
    * so the order storage returns rows in changes nothing else. A storage
    * failure propagates: a restore that skipped a sweep would answer
    * retracted carriers.
    */
   async restore(outputs: Output[], storage: RestoreStorage): Promise<number> {
+    while (this.inflight !== undefined) await this.inflight.catch(() => {})
+    // Marked in flight before any of it runs, so nothing is admitted into a half-cleared index.
+    this.inflight = Promise.resolve().then(async () => await this.restoreAll(outputs, storage))
+    try {
+      return await this.inflight
+    } finally {
+      this.inflight = undefined
+    }
+  }
+
+  private async restoreAll(outputs: Output[], storage: RestoreStorage): Promise<number> {
     for (const m of [
       this.rows,
       this.lines,
@@ -986,9 +1111,11 @@ export class BorgLookupService implements LookupService {
       this.sweepsByOp,
       this.table,
       this.pending,
+      this.spentSweeps,
     ]) {
       m.clear()
     }
+    this.reread.length = 0
     const journal = this.journal.load()
     for (const l of journal) this.apply(l)
     const full = storage as Storage
@@ -1003,10 +1130,10 @@ export class BorgLookupService implements LookupService {
     }
     const named: Array<{ topic: string; txid: string; vout: number }> = []
     for (const l of journal) {
-      if (l.k === 'c' || l.k === 's' || l.k === 't') {
+      if (l.k === 'c' || l.k === 's' || l.k === 't' || l.k === 'w') {
         const hall = l.hall
         if (!this.halls.has(hall)) continue
-        if (l.k === 'c') named.push({ topic: topic(hall), txid: l.txid, vout: 0 })
+        if (l.k === 'c' || l.k === 'w') named.push({ topic: topic(hall), txid: l.txid, vout: 0 })
         else if (l.k === 's') named.push({ topic: topic(hall), txid: l.s, vout: 0 })
         else named.push({ topic: topic(hall), txid: l.txid, vout: l.vout })
       }
@@ -1070,8 +1197,13 @@ export class BorgLookupService implements LookupService {
       if (t !== undefined && t.prev !== '') walk.push({ hall: t.hall, tx, prev: t.prev })
     }
     this.restoring = false
-    for (const ch of this.chains.values()) this.refold(ch)
+    // Each seq's bound is applied once, here, when every token's status is known.
+    for (const ch of this.chains.values()) {
+      this.refold(ch)
+      for (const seq of [...ch.bySeq.keys()].sort((a, b) => a - b)) this.bound(ch, seq)
+    }
     this.enforceTable()
+    await this.drain()
     await this.flush()
     return indexed
   }

@@ -11,12 +11,16 @@
  *   {"k":"d","op":"...","c":"<C>","w":true}
  *   {"k":"s","op":"...","s":"<sweep txid>","hall":"...","h":<height>,"at":<s>}
  *   {"k":"t","txid":"<txid>","vout":<n>,"hall":"...","at":<s>}
+ *   {"k":"w","txid":"<sweep txid>","hall":"..."}
  *
  * `c` lines are every carrier any hall admitted (`kind` `g` a grant, `w` a
  * wrap) with the funding outpoint it spent; `d` lines are drops, `w` when
  * the dropped carrier was its outpoint's winner; `s` lines are admitted
  * sweeps' spends of outpoints a carrier spent (spends of any other outpoint
- * live only in the bounded table, never here); `t` lines are chain tokens.
+ * live only in the bounded table, never here); `t` lines are chain tokens; a
+ * `w` line names a held sweep whose tombstone an admitted transaction spent,
+ * which storage no longer hands a restore among its unspent rows. A journal
+ * written before `w` lines existed holds none and loads as it always did.
  * Commitments are in hash byte order and txids in display order, both
  * lowercase hex; `at` is the host's time of first sight in Unix seconds.
  */
@@ -57,7 +61,13 @@ export interface TokenLine {
   at: number
 }
 
-export type Line = CarrierLine | DropLine | SweepLine | TokenLine
+export interface SpentSweepLine {
+  k: 'w'
+  txid: string
+  hall: string
+}
+
+export type Line = CarrierLine | DropLine | SweepLine | TokenLine | SpentSweepLine
 
 /** Where the rows live. `append` is durable when it returns. */
 export interface Journal {
@@ -90,6 +100,8 @@ function isLine(v: unknown): v is Line {
       return s('op') && s('s') && s('hall') && n('h') && n('at')
     case 't':
       return s('txid') && n('vout') && s('hall') && n('at')
+    case 'w':
+      return s('txid') && s('hall')
   }
   return false
 }
