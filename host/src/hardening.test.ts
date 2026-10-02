@@ -85,13 +85,28 @@ test('a journal written before spent sweeps were named restores as it did', asyn
 test('a token turned away from a full seq while it was pending is read again once its predecessor is decided', async () => {
   const chain = new Chain(92000)
   const s = await setup({ chain })
-  const org = new OrgSim(hall, 'bound org', chain)
-  const [o0, o1, o2, o3] = [await org.orgToken([]), await org.orgToken([]), await org.orgToken([]), await org.orgToken([])]
-  // The organisation's own tokens at seq 2, each on a parent no host admits, until eight have a txid below the real one's.
-  const spare = fundingTree(org.party, KeyChain, 200, chain)
+  // The real token at seq 2 has to sort above eight others at its seq, and a txid is as good as drawn at random. So
+  // the organisation's chain is minted again, on new trees, until that token's txid is in the upper half of them all:
+  // a rogue then sorts below it at least every second time.
+  const real = async () => {
+    for (let tries = 0; tries < 64; tries++) {
+      const org = new OrgSim(hall, 'bound org', chain)
+      const tokens = [await org.orgToken([]), await org.orgToken([]), await org.orgToken([]), await org.orgToken([])] as const
+      if (id(tokens[2].tx) >= '8') return { org, tokens }
+    }
+    throw new Error('64 chains were minted and none has a seq 2 token whose txid is in the upper half')
+  }
+  const {
+    org,
+    tokens: [o0, o1, o2, o3],
+  } = await real()
+  // The organisation's own tokens at seq 2, each on a parent no host admits and on a tree of its own, so there is
+  // always another to mint, until eight have a txid below the real one's.
   const rogues: Array<{ beef: Uint8Array; txid: string }> = []
   for (let n = 0; rogues.filter((r) => r.txid < id(o2.tx)).length < 8; n++) {
-    const x = await token(org.party, TagOrg, encodeOrg({ ...o1.rec, prev: fromHex((n + 1).toString(16).padStart(64, '0')) }), KeyOrg, [{ src: spare, vout: n, keyID: KeyChain }])
+    assert.ok(n < 512, `512 rogue tokens were minted and fewer than eight have a txid below the real one's ${id(o2.tx)}`)
+    const spare = fundingTree(org.party, KeyChain, 1, chain)
+    const x = await token(org.party, TagOrg, encodeOrg({ ...o1.rec, prev: fromHex((n + 1).toString(16).padStart(64, '0')) }), KeyOrg, [{ src: spare, vout: 0, keyID: KeyChain }])
     chain.mine(x)
     const y = await token(org.party, TagOrg, encodeOrg({ ...o2.rec, prev: commitment(x) }), KeyOrg, [{ src: x, vout: 0, keyID: KeyOrg }])
     chain.mine(y)
