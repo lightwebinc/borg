@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/cbor"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Organisation record keys.
@@ -45,7 +46,7 @@ type Org struct {
 // Validate applies every rule that needs only the record itself, in the
 // refusal order of spec section 3.1.
 func (o *Org) Validate() error {
-	if err := checkExtra(o.Extra, okLast, okLast+1); err != nil {
+	if err := record.CheckExtra(o.Extra, okLast, okLast+1); err != nil {
 		return err
 	}
 	if err := CheckHall(o.Hall); err != nil {
@@ -54,22 +55,22 @@ func (o *Org) Validate() error {
 	if err := CheckOrgKey(o.Org); err != nil {
 		return err
 	}
-	if err := inRange(o.Seq, 0, MaxSafe, "seq"); err != nil {
+	if err := record.InRange(o.Seq, 0, MaxSafe, "seq"); err != nil {
 		return err
 	}
 	if err := checkName(o.Name); err != nil {
 		return err
 	}
-	if len(o.Admit) > MaxDelta || sortedDistinct32(o.Admit) != nil {
+	if len(o.Admit) > MaxDelta || record.Ascending32(o.Admit) != nil {
 		return fmt.Errorf("%w: admit", ErrList)
 	}
-	if len(o.Revoke) > MaxDelta || sortedDistinct32(o.Revoke) != nil {
+	if len(o.Revoke) > MaxDelta || record.Ascending32(o.Revoke) != nil {
 		return fmt.Errorf("%w: revoke", ErrList)
 	}
-	if err := inRange(o.Count, 0, MaxRoll, "count"); err != nil {
+	if err := record.InRange(o.Count, 0, MaxRoll, "count"); err != nil {
 		return err
 	}
-	if err := inRange(o.Created, 1, MaxTime, "created"); err != nil {
+	if err := record.InRange(o.Created, 1, MaxTime, "created"); err != nil {
 		return err
 	}
 	return o.cross()
@@ -105,14 +106,14 @@ func (o *Org) Encode() ([]byte, error) {
 		{Key: uint64(OKSeq), Val: o.Seq},
 		{Key: uint64(OKPrev), Val: append([]byte(nil), o.Prev[:]...)},
 		{Key: uint64(OKName), Val: o.Name},
-		{Key: uint64(OKAdmit), Val: values32(o.Admit)},
-		{Key: uint64(OKRevoke), Val: values32(o.Revoke)},
+		{Key: uint64(OKAdmit), Val: record.Values32(o.Admit)},
+		{Key: uint64(OKRevoke), Val: record.Values32(o.Revoke)},
 		{Key: uint64(OKCount), Val: o.Count},
 		{Key: uint64(OKRoll), Val: append([]byte(nil), o.Roll[:]...)},
 		{Key: uint64(OKOpaque), Val: o.Opaque},
 		{Key: uint64(OKCreated), Val: o.Created},
 	}
-	return encodeRecord(m, o.Extra, MaxOrgRecord)
+	return record.Encode(m, o.Extra, MaxOrgRecord)
 }
 
 // DecodeOrg parses an organisation record in the refusal order.
@@ -121,50 +122,50 @@ func DecodeOrg(p []byte) (*Org, error) {
 	if err != nil {
 		return nil, err
 	}
-	o := &Org{Extra: f.extra}
-	if o.Hall, err = f.text(OKHall); err != nil {
+	o := &Org{Extra: f.Extra}
+	if o.Hall, err = f.Text(OKHall); err != nil {
 		return nil, err
 	}
 	if err := CheckHall(o.Hall); err != nil {
 		return nil, err
 	}
-	if o.Org, err = f.bytesN(OKOrg, -1); err != nil {
+	if o.Org, err = f.BytesN(OKOrg, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckOrgKey(o.Org); err != nil {
 		return nil, err
 	}
-	if o.Seq, err = f.uint(OKSeq, 0, MaxSafe); err != nil {
+	if o.Seq, err = f.Uint(OKSeq, 0, MaxSafe); err != nil {
 		return nil, err
 	}
-	b, err := f.bytesN(OKPrev, 32)
+	b, err := f.BytesN(OKPrev, 32)
 	if err != nil {
 		return nil, err
 	}
 	copy(o.Prev[:], b)
-	if o.Name, err = f.text(OKName); err != nil {
+	if o.Name, err = f.Text(OKName); err != nil {
 		return nil, err
 	}
 	if err := checkName(o.Name); err != nil {
 		return nil, err
 	}
-	if o.Admit, err = f.list32(OKAdmit, MaxDelta); err != nil {
+	if o.Admit, err = f.List32(OKAdmit, MaxDelta); err != nil {
 		return nil, err
 	}
-	if o.Revoke, err = f.list32(OKRevoke, MaxDelta); err != nil {
+	if o.Revoke, err = f.List32(OKRevoke, MaxDelta); err != nil {
 		return nil, err
 	}
-	if o.Count, err = f.uint(OKCount, 0, MaxRoll); err != nil {
+	if o.Count, err = f.Uint(OKCount, 0, MaxRoll); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(OKRoll, 32); err != nil {
+	if b, err = f.BytesN(OKRoll, 32); err != nil {
 		return nil, err
 	}
 	copy(o.Roll[:], b)
-	if o.Opaque, err = f.boolean(OKOpaque); err != nil {
+	if o.Opaque, err = f.Bool(OKOpaque); err != nil {
 		return nil, err
 	}
-	if o.Created, err = f.uint(OKCreated, 1, MaxTime); err != nil {
+	if o.Created, err = f.Uint(OKCreated, 1, MaxTime); err != nil {
 		return nil, err
 	}
 	if err := o.cross(); err != nil {

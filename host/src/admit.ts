@@ -9,7 +9,7 @@
  * section 11.1): the previous coins decide only retention.
  */
 import { Hash, PublicKey, type ChainTracker, type Transaction, type TransactionOutput } from '@bsv/sdk'
-import { LockTime, MaxSequence, bytesEqual, readerLockingKey, unlockingRefusal, verifyFieldSignature } from '@lightwebinc/bcommon'
+import { BeefRefusal, LockTime, MaxSequence, bytesEqual, readerLockingKey, tokenShape, unlockingRefusal, verifyFieldSignature } from '@lightwebinc/bcommon'
 import {
   KeyChain,
   KeyGrant,
@@ -31,7 +31,7 @@ import {
   type WrapRecord,
   decodeWrap,
 } from './borgrec.js'
-import { DefaultMaxBEEF, DefaultMaxSweepInputs, anyTxidOnly, mergedPath, minimalPath, readWire, subjectTx, type BeefEntry, type WireBEEF } from './beef.js'
+import { DefaultMaxBEEF, DefaultMaxSweepInputs, anyTxidOnly, minimalPath, readWire, subjectTx, type BeefEntry, type WireBEEF } from './beef.js'
 import { checkCertificate, checkReveal, checkRevocation } from './epoch.js'
 import { classify, firstPush, fundingScript, isFundingShape, pushDropScript, pushFields, type Kind } from './script.js'
 import { concat, fromHex, toHex } from './util.js'
@@ -246,23 +246,12 @@ async function checkCarrier(w: WireBEEF, tx: Transaction, claim: 'grant' | 'wrap
 
 /** A token's rule 2: the token and its parent, each proven minimally, never Atomic. */
 function tokenBEEFRule(w: WireBEEF, tx: Transaction): BeefEntry {
-  if (w.atomic || anyTxidOnly(w) || w.entries.length !== 2) throw new Refusal('beef', 'a token is a BEEF V1 or V2 of exactly the token and its parent')
-  const txid = tx.id('hex')
-  const self = w.byTxid.get(txid)
-  const parent = w.entries.find((e) => e.txid !== txid)
-  if (self === undefined || parent?.tx === undefined || self.bump < 0 || parent.bump < 0) throw new Refusal('beef', 'the token and its parent, each proven')
-  if (!tx.inputs.some((i) => srcTxid(i) === parent.txid)) throw new Refusal('beef', 'no input spends the other transaction')
-  if (w.bumps.length === 2) {
-    if (w.bumps[0]!.blockHeight === w.bumps[1]!.blockHeight) throw new Refusal('beef', 'two paths of one block')
-    if (self.bump === parent.bump || !minimalPath(w.bumps[self.bump]!, txid) || !minimalPath(w.bumps[parent.bump]!, parent.txid)) {
-      throw new Refusal('beef', 'two minimal paths, one each')
-    }
-  } else if (w.bumps.length === 1) {
-    if (!mergedPath(w.bumps[0]!, txid, parent.txid)) throw new Refusal('beef', 'one merged path flagging exactly both txids')
-  } else {
-    throw new Refusal('beef', `${w.bumps.length} BUMPs`)
+  try {
+    return tokenShape(w, tx)
+  } catch (e) {
+    if (e instanceof BeefRefusal) throw new Refusal('beef', e.message)
+    throw e
   }
-  return parent
 }
 
 /** One token output read well formed: fields, 1 satoshi, record, canonical lock, signature. */

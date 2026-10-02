@@ -1549,11 +1549,14 @@ a client MUST respect it.
 | Carrier ancestry and proofs | BRC-62, BRC-96 and BRC-95 BEEF; BRC-74 BUMP | exactly what the object needs, so nobody can attach anything to it; a chain token carries its proven parent in a BEEF V1 or V2, which Atomic BEEF cannot |
 | Objects on the plane | BRC-148 and BRC-149 | none |
 
-The BRC-52 certificate verifier and the BRC-369 epoch-key code are borg's
-own (Go `internal/borgrec`, TypeScript `host/src`) and stay in this
-repository until a second application (E5) needs them; they move to bcommon
-then, unchanged in behaviour and checked against the same vectors. borg pins
-bcommon v0.5.5 in both languages.
+The BRC-52 certificate verifier and the BRC-369 release code (wrapping an
+epoch key, opening a wrap and checking an entry) are borg's own (Go
+`internal/borgrec`, TypeScript `host/src`). What a second application
+shares is bcommon's, unchanged in behaviour and checked against the same
+vectors: the bounded record reader (`record`), the BEEF a chain token, a
+carrier and a sweep are admitted in (`chaintoken`), and in Go the BRC-369
+content key, its symmetric key, its commitment and the check on an opened
+key (`keyed`). borg pins bcommon v0.6.0 in both languages.
 
 ## 16. What this does not do
 

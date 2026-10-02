@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/cbor"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Group record keys.
@@ -57,7 +58,7 @@ func (g *Group) BeginsEpoch() bool { return g.EpochSeq == g.Seq }
 
 // Validate applies every rule that needs only the record itself.
 func (g *Group) Validate() error {
-	if err := checkExtra(g.Extra, gkLast, gkLast+1); err != nil {
+	if err := record.CheckExtra(g.Extra, gkLast, gkLast+1); err != nil {
 		return err
 	}
 	if err := CheckHall(g.Hall); err != nil {
@@ -66,16 +67,16 @@ func (g *Group) Validate() error {
 	if err := CheckOrgKey(g.Org); err != nil {
 		return err
 	}
-	if err := inRange(g.Seq, 0, MaxSafe, "seq"); err != nil {
+	if err := record.InRange(g.Seq, 0, MaxSafe, "seq"); err != nil {
 		return err
 	}
 	if err := checkName(g.Name); err != nil {
 		return err
 	}
-	if err := inRange(g.Epoch, 0, MaxEpoch, "epoch"); err != nil {
+	if err := record.InRange(g.Epoch, 0, MaxEpoch, "epoch"); err != nil {
 		return err
 	}
-	if err := inRange(g.EpochSeq, 0, MaxSafe, "epochSeq"); err != nil {
+	if err := record.InRange(g.EpochSeq, 0, MaxSafe, "epochSeq"); err != nil {
 		return err
 	}
 	for _, l := range [][][]byte{g.Add, g.Remove} {
@@ -91,13 +92,13 @@ func (g *Group) Validate() error {
 			return err
 		}
 	}
-	if err := inRange(g.Count, 0, MaxMembers, "count"); err != nil {
+	if err := record.InRange(g.Count, 0, MaxMembers, "count"); err != nil {
 		return err
 	}
-	if err := inRange(g.RotateEvery, 0, MaxEpoch, "rotateEvery"); err != nil {
+	if err := record.InRange(g.RotateEvery, 0, MaxEpoch, "rotateEvery"); err != nil {
 		return err
 	}
-	if err := inRange(g.Created, 1, MaxTime, "created"); err != nil {
+	if err := record.InRange(g.Created, 1, MaxTime, "created"); err != nil {
 		return err
 	}
 	return g.cross()
@@ -156,7 +157,7 @@ func (g *Group) Encode() ([]byte, error) {
 		{Key: uint64(GKRotateEvery), Val: g.RotateEvery},
 		{Key: uint64(GKCreated), Val: g.Created},
 	}
-	return encodeRecord(m, g.Extra, MaxGroupRecord)
+	return record.Encode(m, g.Extra, MaxGroupRecord)
 }
 
 // DecodeGroup parses a group record in the refusal order.
@@ -165,44 +166,44 @@ func DecodeGroup(p []byte) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := &Group{Extra: f.extra}
-	if g.Hall, err = f.text(GKHall); err != nil {
+	g := &Group{Extra: f.Extra}
+	if g.Hall, err = f.Text(GKHall); err != nil {
 		return nil, err
 	}
 	if err := CheckHall(g.Hall); err != nil {
 		return nil, err
 	}
-	if g.Org, err = f.bytesN(GKOrg, -1); err != nil {
+	if g.Org, err = f.BytesN(GKOrg, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckOrgKey(g.Org); err != nil {
 		return nil, err
 	}
-	b, err := f.bytesN(GKGroup, GroupIDLen)
+	b, err := f.BytesN(GKGroup, GroupIDLen)
 	if err != nil {
 		return nil, err
 	}
 	copy(g.Group[:], b)
-	if g.Seq, err = f.uint(GKSeq, 0, MaxSafe); err != nil {
+	if g.Seq, err = f.Uint(GKSeq, 0, MaxSafe); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(GKPrev, 32); err != nil {
+	if b, err = f.BytesN(GKPrev, 32); err != nil {
 		return nil, err
 	}
 	copy(g.Prev[:], b)
-	if g.Name, err = f.text(GKName); err != nil {
+	if g.Name, err = f.Text(GKName); err != nil {
 		return nil, err
 	}
 	if err := checkName(g.Name); err != nil {
 		return nil, err
 	}
-	if g.Epoch, err = f.uint(GKEpoch, 0, MaxEpoch); err != nil {
+	if g.Epoch, err = f.Uint(GKEpoch, 0, MaxEpoch); err != nil {
 		return nil, err
 	}
-	if g.EpochSeq, err = f.uint(GKEpochSeq, 0, MaxSafe); err != nil {
+	if g.EpochSeq, err = f.Uint(GKEpochSeq, 0, MaxSafe); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(GKCommitment, 32); err != nil {
+	if b, err = f.BytesN(GKCommitment, 32); err != nil {
 		return nil, err
 	}
 	copy(g.Commitment[:], b)
@@ -212,20 +213,20 @@ func DecodeGroup(p []byte) (*Group, error) {
 	if g.Remove, err = f.listKeys(GKRemove, MaxDelta); err != nil {
 		return nil, err
 	}
-	if g.Count, err = f.uint(GKCount, 0, MaxMembers); err != nil {
+	if g.Count, err = f.Uint(GKCount, 0, MaxMembers); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(GKMembers, 32); err != nil {
+	if b, err = f.BytesN(GKMembers, 32); err != nil {
 		return nil, err
 	}
 	copy(g.Members[:], b)
-	if g.RotateOnJoin, err = f.boolean(GKRotateOnJoin); err != nil {
+	if g.RotateOnJoin, err = f.Bool(GKRotateOnJoin); err != nil {
 		return nil, err
 	}
-	if g.RotateEvery, err = f.uint(GKRotateEvery, 0, MaxEpoch); err != nil {
+	if g.RotateEvery, err = f.Uint(GKRotateEvery, 0, MaxEpoch); err != nil {
 		return nil, err
 	}
-	if g.Created, err = f.uint(GKCreated, 1, MaxTime); err != nil {
+	if g.Created, err = f.Uint(GKCreated, 1, MaxTime); err != nil {
 		return nil, err
 	}
 	if err := g.cross(); err != nil {

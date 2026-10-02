@@ -3,7 +3,6 @@ package borgrec
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -11,10 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/wallet"
+	"github.com/lightwebinc/bcommon/keyed"
 )
 
 // WrapVersion is the BRC-78 version prefix borg writes and requires: the
@@ -24,9 +23,9 @@ var WrapVersion = []byte{0x42, 0x42, 0x10, 0x33}
 
 // Epoch-key errors, a reader's (BRC-369 section 5.3), never a host's.
 var (
-	ErrScalar     = errors.New("borgrec: epoch key is not a scalar in [1, n-1]")
-	ErrCommitment = errors.New("borgrec: epoch key does not match the commitment")
-	ErrUnwrap     = errors.New("borgrec: wrap does not decrypt")
+	ErrScalar     = keyed.ErrScalar
+	ErrCommitment = keyed.ErrCommitment
+	ErrUnwrap     = keyed.ErrUnwrap
 	ErrToken      = errors.New("borgrec: the wrap's epoch id is not the record of the token that began its epoch")
 )
 
@@ -46,43 +45,17 @@ func CheckEpochToken(groupRecord []byte, w *WrapRecord) (*Group, error) {
 	return g, nil
 }
 
-// SampleKey draws an epoch key: a scalar uniform in [1, n-1] from r
-// (crypto/rand.Reader when r is nil), never derived from anything
-// (BRC-369 section 2.1 rule 1).
-func SampleKey(r io.Reader) ([32]byte, error) {
-	if r == nil {
-		r = rand.Reader
-	}
-	for {
-		var k [32]byte
-		if _, err := io.ReadFull(r, k[:]); err != nil {
-			return k, err
-		}
-		if CheckScalar(k) == nil {
-			return k, nil
-		}
-	}
-}
+// SampleKey draws an epoch key (BRC-369 section 2.1 rule 1).
+func SampleKey(r io.Reader) ([32]byte, error) { return keyed.SampleKey(r) }
 
 // CheckScalar refuses a 32-byte big-endian value outside [1, n-1].
-func CheckScalar(k [32]byte) error {
-	v := new(big.Int).SetBytes(k[:])
-	if v.Sign() == 0 || v.Cmp(ec.S256().N) >= 0 {
-		return ErrScalar
-	}
-	return nil
-}
+func CheckScalar(k [32]byte) error { return keyed.CheckScalar(k) }
 
-// SymmetricKey is BRC-369 section 2.1 rule 3: SHA-256 of the domain string
-// and the scalar. It is never derived from the commitment.
-func SymmetricKey(k [32]byte) [32]byte {
-	return sha256.Sum256(append([]byte(DomainSymmetric), k[:]...))
-}
+// SymmetricKey is BRC-369 section 2.1 rule 3.
+func SymmetricKey(k [32]byte) [32]byte { return keyed.SymmetricKey(k) }
 
 // Commitment is BRC-369 section 2.2's digest form.
-func Commitment(k [32]byte) [32]byte {
-	return sha256.Sum256(append([]byte(DomainCommitment), k[:]...))
-}
+func Commitment(k [32]byte) [32]byte { return keyed.Commitment(k) }
 
 // EpochID is the identifier of an epoch: SHA-256 of the encoded group record
 // of the token that began it, BRC-369 section 4.2 rule 3's content id with
@@ -160,7 +133,7 @@ func WrapWithIV(orgKey *ec.PrivateKey, member *ec.PublicKey, epochID [32]byte, e
 	if err != nil {
 		return nil, err
 	}
-	ct, err := gcmSeal(sk.ToBytes(), iv, k[:])
+	ct, err := keyed.SymmetricSeal(sk.ToBytes(), iv, k[:])
 	if err != nil {
 		return nil, err
 	}
@@ -220,17 +193,7 @@ func Unwrap(ctx context.Context, w wallet.Interface, wrap []byte, org *ec.Public
 	if err != nil {
 		return k, fmt.Errorf("%w: %v", ErrUnwrap, err)
 	}
-	if len(res.Plaintext) != 32 {
-		return k, fmt.Errorf("%w: plaintext of %d bytes", ErrUnwrap, len(res.Plaintext))
-	}
-	copy(k[:], res.Plaintext)
-	if err := CheckScalar(k); err != nil {
-		return k, err
-	}
-	if Commitment(k) != commitment {
-		return k, ErrCommitment
-	}
-	return k, nil
+	return keyed.CheckOpened(res.Plaintext, commitment)
 }
 
 // HexKey is a key's lowercase hex, the spelling questions and vectors use.

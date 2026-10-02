@@ -23,12 +23,12 @@ import (
 	"github.com/lightwebinc/bcommon/lookup"
 	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/producer"
+	"github.com/lightwebinc/bcommon/purse"
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/internal/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/limits"
-	"github.com/lightwebinc/borg/internal/purse"
 	"github.com/lightwebinc/borg/internal/reader"
 	"github.com/lightwebinc/borg/internal/state"
 )
@@ -694,7 +694,7 @@ func cmdHistory(ctx context.Context, g *global, args []string) error {
 		Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json"}, Body: body})
 	if err != nil {
 		p.Refund()
-		return fmt.Errorf("history at %s: %w", base, err)
+		return fmt.Errorf("history at %s: %w", base, payWords(err, *maxSats))
 	}
 	defer resp.Body.Close()
 	ans, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))

@@ -14,6 +14,9 @@ import (
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/cbor"
+	"github.com/lightwebinc/bcommon/chaintoken"
+	"github.com/lightwebinc/bcommon/keyed"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Grant record keys.
@@ -58,18 +61,8 @@ type Grant struct {
 }
 
 // CheckDER refuses a signature that is not the one strict, low-S DER
-// encoding of its (r, s): re-serializing the parsed value must give back the
-// same bytes.
-func CheckDER(sig []byte) error {
-	if len(sig) < 8 || len(sig) > 72 {
-		return ErrSignature
-	}
-	s, err := ec.ParseDERSignature(sig)
-	if err != nil || !bytes.Equal(s.Serialize(), sig) {
-		return ErrSignature
-	}
-	return nil
-}
+// encoding of its (r, s) (bcommon chaintoken.CheckDER).
+func CheckDER(sig []byte) error { return chaintoken.CheckDER(sig) }
 
 func checkNames(m map[string][]byte, what string) error {
 	if len(m) != len(GrantFieldNames) {
@@ -118,7 +111,7 @@ func (g *Grant) Validate() error {
 	if g.Reveal != nil {
 		defined++
 	}
-	if err := checkExtra(g.Extra, mkLast, defined); err != nil {
+	if err := record.CheckExtra(g.Extra, mkLast, defined); err != nil {
 		return err
 	}
 	if err := CheckHall(g.Hall); err != nil {
@@ -181,7 +174,7 @@ func (g *Grant) Encode() ([]byte, error) {
 	if g.Reveal != nil {
 		m = append(m, cbor.Pair{Key: uint64(MKReveal), Val: textMap(g.Reveal)})
 	}
-	return encodeRecord(m, g.Extra, MaxGrantRecord)
+	return record.Encode(m, g.Extra, MaxGrantRecord)
 }
 
 // DecodeGrant parses a grant record in the refusal order. It checks the
@@ -193,34 +186,34 @@ func DecodeGrant(p []byte) (*Grant, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := &Grant{Extra: f.extra}
-	if g.Hall, err = f.text(MKHall); err != nil {
+	g := &Grant{Extra: f.Extra}
+	if g.Hall, err = f.Text(MKHall); err != nil {
 		return nil, err
 	}
 	if err := CheckHall(g.Hall); err != nil {
 		return nil, err
 	}
-	if g.Org, err = f.bytesN(MKOrg, -1); err != nil {
+	if g.Org, err = f.BytesN(MKOrg, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckOrgKey(g.Org); err != nil {
 		return nil, err
 	}
-	if g.Subject, err = f.bytesN(MKSubject, -1); err != nil {
+	if g.Subject, err = f.BytesN(MKSubject, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckIdentity(g.Subject); err != nil {
 		return nil, err
 	}
-	b, err := f.bytesN(MKSerial, 32)
+	b, err := f.BytesN(MKSerial, 32)
 	if err != nil {
 		return nil, err
 	}
 	copy(g.Serial[:], b)
-	if _, err := f.need(MKRevocation); err != nil {
+	if _, err := f.Need(MKRevocation); err != nil {
 		return nil, err
 	}
-	rv, err := f.array(MKRevocation, MaxKeys)
+	rv, err := f.Array(MKRevocation, MaxKeys)
 	if err != nil || len(rv) != 2 {
 		return nil, fmt.Errorf("%w: key %d", ErrType, MKRevocation)
 	}
@@ -240,7 +233,7 @@ func DecodeGrant(p []byte) (*Grant, error) {
 	if err := checkFields(g.Fields); err != nil {
 		return nil, err
 	}
-	if g.Signature, err = f.bytesN(MKSignature, -1); err != nil {
+	if g.Signature, err = f.BytesN(MKSignature, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckDER(g.Signature); err != nil {
@@ -252,7 +245,7 @@ func DecodeGrant(p []byte) (*Grant, error) {
 	if err := checkSized(g.Keyring, KeyringEntryLen, "keyring"); err != nil {
 		return nil, err
 	}
-	if _, ok := f.known[MKReveal]; ok {
+	if _, ok := f.Get(MKReveal); ok {
 		if g.Reveal, err = f.textMap(MKReveal); err != nil {
 			return nil, err
 		}
@@ -336,7 +329,7 @@ func (g *Grant) CheckReveal() (map[string]string, error) {
 	}
 	out := make(map[string]string, len(g.Fields))
 	for _, n := range GrantFieldNames {
-		pt, err := gcmOpen(g.Reveal[n], g.Fields[n])
+		pt, err := keyed.SymmetricOpen(g.Reveal[n], g.Fields[n])
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s does not decrypt", ErrReveal, n)
 		}
@@ -392,7 +385,7 @@ func BuildGrant(ctx context.Context, orgKey *ec.PrivateKey, s GrantSpec) (*Grant
 			return nil, err
 		}
 		fk := s.FieldKeys[n]
-		c, err := gcmSeal(fk[:], s.FieldIVs[n], []byte(v))
+		c, err := keyed.SymmetricSeal(fk[:], s.FieldIVs[n], []byte(v))
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +395,7 @@ func BuildGrant(ctx context.Context, orgKey *ec.PrivateKey, s GrantSpec) (*Grant
 		if err != nil {
 			return nil, err
 		}
-		if g.Keyring[n], err = gcmSeal(sk.ToBytes(), s.KeyringIVs[n], fk[:]); err != nil {
+		if g.Keyring[n], err = keyed.SymmetricSeal(sk.ToBytes(), s.KeyringIVs[n], fk[:]); err != nil {
 			return nil, err
 		}
 		if s.Reveal {

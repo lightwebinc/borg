@@ -3,17 +3,16 @@ package borgrec
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
 
-	"github.com/bsv-blockchain/go-sdk/chainhash"
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
 
 	"github.com/lightwebinc/bcommon/carrier"
+	"github.com/lightwebinc/bcommon/chaintoken"
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/pushdrop"
 )
@@ -24,7 +23,7 @@ import (
 // the label of a hall that breaks the grammar.
 var (
 	ErrShape       = errors.New("borgrec: transaction has the wrong shape")
-	ErrBEEF        = errors.New("borgrec: BEEF is not exactly what the object needs")
+	ErrBEEF        = chaintoken.ErrBEEF
 	ErrMineable    = errors.New("borgrec: carrier is mineable")
 	ErrUnlock      = errors.New("borgrec: unlocking script is not one canonical signature push")
 	ErrLock        = errors.New("borgrec: output script is not the canonical one for the owner")
@@ -65,6 +64,14 @@ func (k TxKind) String() string {
 	}
 	return "none"
 }
+
+// DefaultMaxBEEF is the BEEF bound Admit applies when a host names none: the
+// floor spec section 11.1 sets for a host's own bound.
+const DefaultMaxBEEF = chaintoken.DefaultMaxBEEF
+
+// DefaultMaxSweepInputs is the sweep input bound Admit applies when a host
+// names none: the floor spec section 11.1 sets.
+const DefaultMaxSweepInputs = 1024
 
 // Host is what admission needs beyond the submission: the topic's hall, a
 // chain tracker over the host's own block headers, the host's BEEF bound
@@ -154,11 +161,11 @@ func Admit(ctx context.Context, beef []byte, held []int, h Host) (*Admission, er
 	if bound == 0 {
 		bound = DefaultMaxBEEF
 	}
-	w, err := readWire(beef, bound)
+	w, err := chaintoken.ReadWire(beef, bound)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrBEEF, err)
+		return nil, err
 	}
-	tx := w.subjectTx()
+	tx := w.SubjectTx()
 	retain, err := retained(tx, held)
 	if err != nil {
 		return nil, err
@@ -207,8 +214,8 @@ func Admit(ctx context.Context, beef []byte, held []int, h Host) (*Admission, er
 		if !Mined(ctx, tx, h.Headers) {
 			return nil, ErrUnmined
 		}
-		if w.anyTxidOnly() || len(w.entries) != 1 || len(w.bumps) != 1 || !minimalPath(w.bumps[0], *tx.TxID()) {
-			return nil, fmt.Errorf("%w: a sweep is one transaction and its own minimal path", ErrBEEF)
+		if err := w.Alone(tx); err != nil {
+			return nil, err
 		}
 		max := h.MaxSweepInputs
 		if max == 0 {
@@ -271,34 +278,15 @@ func lockingKey(k Kind, owner []byte) *ec.PublicKey {
 	return key
 }
 
-// verifyField checks a field signature: strict low-S DER, over SHA-256 of
-// the fields concatenated, under key.
-func verifyField(key *ec.PublicKey, signed, der []byte) bool {
-	if CheckDER(der) != nil {
-		return false
-	}
-	s, err := ec.ParseDERSignature(der)
-	if err != nil {
-		return false
-	}
-	d := sha256.Sum256(signed)
-	return s.Verify(d[:], key)
-}
-
 // Mined reports whether tx carries a proof that verifies against the
-// headers. No headers means nothing is mined.
+// headers (bcommon chaintoken.Mined).
 func Mined(ctx context.Context, tx *transaction.Transaction, headers chaintracker.ChainTracker) bool {
-	if tx == nil || tx.MerklePath == nil || headers == nil {
-		return false
-	}
-	txid := chainhash.Hash(*tx.TxID())
-	ok, err := tx.MerklePath.Verify(ctx, &txid, headers)
-	return err == nil && ok
+	return chaintoken.Mined(ctx, tx, headers)
 }
 
 // checkCarrier is the carrier's rules 1 to 10; 5 to 8 in bcommon
 // carrier.Validate's order.
-func checkCarrier(w *wireBEEF, tx *transaction.Transaction, claim Kind, h Host) (*Carrier, error) {
+func checkCarrier(w *chaintoken.Wire, tx *transaction.Transaction, claim Kind, h Host) (*Carrier, error) {
 	// 1. shape.
 	if len(tx.Inputs) != 1 || len(tx.Outputs) != 1 {
 		return nil, fmt.Errorf("%w: %d inputs, %d outputs", ErrShape, len(tx.Inputs), len(tx.Outputs))
@@ -315,15 +303,11 @@ func checkCarrier(w *wireBEEF, tx *transaction.Transaction, claim Kind, h Host) 
 	}
 	// 2. beef: the carrier (unproven) and its funding tree (proven, minimally).
 	parent := *in.SourceTXID
-	if w.anyTxidOnly() || len(w.entries) != 2 || len(w.bumps) != 1 {
-		return nil, fmt.Errorf("%w: %d BUMPs and %d transactions", ErrBEEF, len(w.bumps), len(w.entries))
-	}
-	self, fund := w.byTxid[*tx.TxID()], w.byTxid[parent]
-	if self == nil || fund == nil || self.bump != -1 || fund.bump != 0 || !minimalPath(w.bumps[0], parent) {
-		return nil, fmt.Errorf("%w: not the carrier and its funding tree's minimal path", ErrBEEF)
+	if _, err := w.Carrier(tx); err != nil {
+		return nil, err
 	}
 	// 3. the record's own rules.
-	record, _ := firstPush(*out.LockingScript)
+	record, _ := pushdrop.FirstPush(*out.LockingScript)
 	c := &Carrier{Record: record, Commitment: carrier.Commitment(tx),
 		Funding: transaction.Outpoint{Txid: parent, Index: in.SourceTxOutIndex}}
 	var hall string
@@ -354,7 +338,7 @@ func checkCarrier(w *wireBEEF, tx *transaction.Transaction, claim Kind, h Host) 
 	}
 	// 7. lock.
 	key := lockingKey(claim, c.Owner)
-	fields, _ := pushFields(*out.LockingScript)
+	fields, _ := pushdrop.Fields(*out.LockingScript)
 	if len(fields) != 2 {
 		return nil, fmt.Errorf("%w: %d pushes, want the record and a signature", ErrLock, len(fields))
 	}
@@ -363,7 +347,7 @@ func checkCarrier(w *wireBEEF, tx *transaction.Transaction, claim Kind, h Host) 
 		return nil, ErrLock
 	}
 	// 8. signature.
-	if !verifyField(key, record, sig) {
+	if !chaintoken.VerifyField(key, record, sig) {
 		return nil, ErrFieldSig
 	}
 	// 9. funding: the same key as the lock.
@@ -386,21 +370,22 @@ func checkCarrier(w *wireBEEF, tx *transaction.Transaction, claim Kind, h Host) 
 }
 
 // checkToken is the token's rules 1 to 9.
-func checkToken(ctx context.Context, w *wireBEEF, tx *transaction.Transaction, at int, claim Kind, h Host) (*ChainToken, *ChainToken, [32]byte, error) {
+func checkToken(ctx context.Context, w *chaintoken.Wire, tx *transaction.Transaction, at int, claim Kind, h Host) (*ChainToken, *ChainToken, [32]byte, error) {
 	var none [32]byte
 	out := tx.Outputs[at]
 	// 1. shape: a PushDrop of two fields and a signature, of 1 satoshi.
-	fields, _ := pushFields(*out.LockingScript)
-	if len(fields) != 3 || out.Satoshis != 1 {
+	to, ok := chaintoken.ReadOutput(out, uint32(at), 2)
+	if !ok {
 		return nil, nil, none, fmt.Errorf("%w: a token is two fields, a signature and 1 satoshi", ErrShape)
 	}
+	fields := to.Fields
 	// 2. beef: the token and its parent, each proven minimally, or one
 	// merged path when both are in one block. Never an Atomic BEEF.
-	parentEntry, err := tokenBEEF(w, tx)
+	parentEntry, err := w.Token(tx)
 	if err != nil {
 		return nil, nil, none, err
 	}
-	parent := parentEntry.tx
+	parent := parentEntry.Tx
 	// 3. the record's own rules.
 	t := &ChainToken{Kind: claim, Record: fields[1], Vout: uint32(at)}
 	var hall string
@@ -422,12 +407,11 @@ func checkToken(ctx context.Context, w *wireBEEF, tx *transaction.Transaction, a
 	}
 	// 5. lock.
 	key := lockingKey(claim, org)
-	sig := fields[2]
-	if !bytes.Equal(*out.LockingScript, PushDropScript(key, fields[:2], sig)) {
+	if !to.LockedTo(*out.LockingScript, key) {
 		return nil, nil, none, ErrLock
 	}
 	// 6. signature.
-	if !verifyField(key, append(append([]byte{}, fields[0]...), fields[1]...), sig) {
+	if !to.SignedBy(key) {
 		return nil, nil, none, ErrFieldSig
 	}
 	// 7. unmined: the token's and the parent's proofs.
@@ -435,21 +419,15 @@ func checkToken(ctx context.Context, w *wireBEEF, tx *transaction.Transaction, a
 		return nil, nil, none, ErrUnmined
 	}
 	// 8. token-input.
-	ptxid := [32]byte(parentEntry.txid)
+	ptxid := [32]byte(parentEntry.Txid)
 	var pred *ChainToken
 	spendsToken, spendsChain := 0, false
-	for _, in := range tx.Inputs {
-		if *in.SourceTXID != parentEntry.txid || uint64(in.SourceTxOutIndex) >= uint64(len(parent.Outputs)) {
-			continue
-		}
-		po := parent.Outputs[in.SourceTxOutIndex]
-		if po == nil || po.LockingScript == nil {
-			continue
-		}
+	for _, sp := range chaintoken.Spends(tx, parentEntry) {
+		po := sp.Output
 		switch Classify(*po.LockingScript) {
 		case KindOrg, KindGroup:
 			spendsToken++
-			if p, err := wellFormedToken(po, in.SourceTxOutIndex, claim); err == nil {
+			if p, err := wellFormedToken(po, sp.Vout, claim); err == nil {
 				pred = p
 			}
 		case KindFunding:
@@ -510,49 +488,6 @@ func lockingKeyChain(org []byte) *ec.PublicKey {
 	return key
 }
 
-// tokenBEEF is a token's rule 2. It returns the parent's entry.
-func tokenBEEF(w *wireBEEF, tx *transaction.Transaction) (*beefEntry, error) {
-	if w.atomic || w.anyTxidOnly() || len(w.entries) != 2 {
-		return nil, fmt.Errorf("%w: a token is a BEEF V1 or V2 of exactly the token and its parent", ErrBEEF)
-	}
-	txid := *tx.TxID()
-	self := w.byTxid[txid]
-	var parent *beefEntry
-	for i := range w.entries {
-		if w.entries[i].txid != txid {
-			parent = &w.entries[i]
-		}
-	}
-	if self == nil || parent == nil || parent.tx == nil || self.bump < 0 || parent.bump < 0 {
-		return nil, fmt.Errorf("%w: the token and its parent, each proven", ErrBEEF)
-	}
-	spent := false
-	for _, in := range tx.Inputs {
-		if *in.SourceTXID == parent.txid {
-			spent = true
-		}
-	}
-	if !spent {
-		return nil, fmt.Errorf("%w: no input spends the other transaction", ErrBEEF)
-	}
-	switch len(w.bumps) {
-	case 2:
-		if w.bumps[0].BlockHeight == w.bumps[1].BlockHeight {
-			return nil, fmt.Errorf("%w: two paths of one block, which BEEF writers merge", ErrBEEF)
-		}
-		if self.bump == parent.bump || !minimalPath(w.bumps[self.bump], txid) || !minimalPath(w.bumps[parent.bump], parent.txid) {
-			return nil, fmt.Errorf("%w: two minimal paths, one each", ErrBEEF)
-		}
-	case 1:
-		if !mergedPath(w.bumps[0], txid, parent.txid) {
-			return nil, fmt.Errorf("%w: one merged path flagging exactly both txids", ErrBEEF)
-		}
-	default:
-		return nil, fmt.Errorf("%w: %d BUMPs", ErrBEEF, len(w.bumps))
-	}
-	return parent, nil
-}
-
 // wellFormedToken reads a parent's output as a token of kind k: two fields
 // and a signature, 1 satoshi, the tag, a record that decodes, the canonical
 // lock under the record's organisation and a field signature that verifies.
@@ -566,10 +501,11 @@ func wellFormedToken(o *transaction.TransactionOutput, vout uint32, k Kind) (*Ch
 // readTokenOutput is the well-formed reading of one token output.
 func readTokenOutput(o *transaction.TransactionOutput, vout uint32) (*ChainToken, error) {
 	k := Classify(*o.LockingScript)
-	fields, _ := pushFields(*o.LockingScript)
-	if (k != KindOrg && k != KindGroup) || len(fields) != 3 || o.Satoshis != 1 {
+	to, ok := chaintoken.ReadOutput(o, vout, 2)
+	if (k != KindOrg && k != KindGroup) || !ok {
 		return nil, errNoPredRead
 	}
+	fields := to.Fields
 	t := &ChainToken{Kind: k, Record: fields[1], Vout: vout}
 	var org []byte
 	var err error
@@ -585,11 +521,28 @@ func readTokenOutput(o *transaction.TransactionOutput, vout uint32) (*ChainToken
 		org = t.Group.Org
 	}
 	key := lockingKey(k, org)
-	if !bytes.Equal(*o.LockingScript, PushDropScript(key, fields[:2], fields[2])) ||
-		!verifyField(key, append(append([]byte{}, fields[0]...), fields[1]...), fields[2]) {
+	if !to.LockedTo(*o.LockingScript, key) || !to.SignedBy(key) {
 		return nil, errNoPredRead
 	}
 	return t, nil
+}
+
+// TokenBEEF assembles the BEEF a chain token is admitted in (spec sections
+// 11.1 and 11.6): bcommon chaintoken.TokenBEEF.
+func TokenBEEF(token, parent *transaction.Transaction) ([]byte, error) {
+	return chaintoken.TokenBEEF(token, parent)
+}
+
+// StoredToken reads a chain token as a host stores it: the token's
+// transaction alone, with its proof. It returns the transaction and the
+// token output's record, decoded, without the parent.
+func StoredToken(b []byte) (*transaction.Transaction, *ChainToken, error) {
+	tx, err := chaintoken.Stored(b, DefaultMaxBEEF)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrBEEF, err)
+	}
+	t, err := ReadToken(tx)
+	return tx, t, err
 }
 
 // ReadToken reads the one token a transaction holds, well formed, without

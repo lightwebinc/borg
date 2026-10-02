@@ -11,7 +11,7 @@
  * same reason.
  */
 import { Hash, PrivateKey } from '@bsv/sdk'
-import { CborError, CborMap, bytesEqual, compareBytes, decodeValue, encode, strictPublicKey, type Pair, type Value } from '@lightwebinc/bcommon'
+import { CborMap, ascending, bytesEqual, compareBytes, recordReader, strictPublicKey, strictSignature, type Pair, type RecordFields, type Value } from '@lightwebinc/bcommon'
 import { toHex } from './util.js'
 
 /** The BRC-43 protocol, security level 1, and the key ids under it. */
@@ -212,76 +212,17 @@ export const topic = (hall: string): string => TopicPrefix + hall
 
 // ---- the record reader, refusal steps 1 to 6 ----
 
-interface Fields {
-  known: Map<number, Value>
-  extra: Pair[]
-}
+type Fields = RecordFields
 
-/** Steps 1 to 5: the bound, one canonical map, at most 64 entries, integer keys, the magic. */
-function decodeRecord(b: Uint8Array, max: number, last: number, magic: Uint8Array): Fields {
-  if (b.length > max) throw new Refusal('too-large')
-  let v: Value
-  try {
-    v = decodeValue(b)
-  } catch (e) {
-    if (e instanceof CborError) throw new Refusal('cbor', e.message)
-    throw e
-  }
-  if (!(v instanceof CborMap)) throw new Refusal('cbor', 'not a map')
-  if (v.entries.length > MaxKeys) throw new Refusal('too-large', `more than ${MaxKeys} keys`)
-  const known = new Map<number, Value>()
-  const extra: Pair[] = []
-  for (const p of v.entries) {
-    if (typeof p.key !== 'bigint' || p.key < 0n) throw new Refusal('key-type')
-    if (p.key > BigInt(last)) {
-      extra.push(p)
-      continue
-    }
-    known.set(Number(p.key), p.val)
-  }
-  const m = known.get(0)
-  if (!(m instanceof Uint8Array) || !bytesEqual(m, magic)) throw new Refusal('magic')
-  return { known, extra }
-}
-
-function need(f: Fields, k: number): Value {
-  const v = f.known.get(k)
-  if (v === undefined) throw new Refusal('missing', `key ${k}`)
-  return v
-}
-
-function bytesN(f: Fields, k: number, n: number): Uint8Array {
-  const v = need(f, k)
-  if (!(v instanceof Uint8Array)) throw new Refusal('type', `key ${k}`)
-  if (n >= 0 && v.length !== n) throw new Refusal('range', `key ${k}`)
-  return v
-}
-
-function text(f: Fields, k: number): string {
-  const v = need(f, k)
-  if (typeof v !== 'string') throw new Refusal('type', `key ${k}`)
-  return v
-}
-
-function uint(f: Fields, k: number, lo: number, hi: number): number {
-  const v = need(f, k)
-  if (typeof v !== 'bigint' || v < 0n) throw new Refusal('type', `key ${k}`)
-  if (v < BigInt(lo) || v > BigInt(hi)) throw new Refusal('range', `key ${k}`)
-  return Number(v)
-}
-
-function bool(f: Fields, k: number): boolean {
-  const v = need(f, k)
-  if (typeof v !== 'boolean') throw new Refusal('type', `key ${k}`)
-  return v
-}
-
-function array(f: Fields, k: number, max: number): Value[] {
-  const v = need(f, k)
-  if (!Array.isArray(v)) throw new Refusal('type', `key ${k}`)
-  if (v.length > max) throw new Refusal('list', `key ${k}`)
-  return v
-}
+const rec = recordReader((reason, detail) => new Refusal(reason, detail))
+const decodeRecord = rec.decode
+const need = rec.need
+const bytesN = rec.bytesN
+const text = rec.text
+const uint = rec.uint
+const bool = rec.bool
+const array = rec.array
+const list32 = rec.list32
 
 function textMap(f: Fields, k: number): Map<string, Uint8Array> {
   const v = need(f, k)
@@ -303,20 +244,6 @@ function checkName(s: string): void {
   if (n < 1 || n > MaxName) throw new Refusal('name')
 }
 
-function ascending(a: Uint8Array[]): boolean {
-  for (let i = 1; i < a.length; i++) if (compareBytes(a[i - 1]!, a[i]!) >= 0) return false
-  return true
-}
-
-function list32(f: Fields, k: number, max: number): Uint8Array[] {
-  const a = array(f, k, max)
-  const out = a.map((e) => {
-    if (!(e instanceof Uint8Array) || e.length !== 32) throw new Refusal('list', `key ${k}`)
-    return e
-  })
-  if (!ascending(out)) throw new Refusal('list', `key ${k}`)
-  return out
-}
 
 function listKeys(f: Fields, k: number, max: number): Uint8Array[] {
   const a = array(f, k, max)
@@ -333,13 +260,8 @@ const zero32 = (b: Uint8Array): boolean => b.every((x) => x === 0)
 const has = (list: Uint8Array[], x: Uint8Array): boolean => list.some((y) => bytesEqual(x, y))
 
 function finish(m: Pair[], extra: Pair[], max: number, last: number): Uint8Array {
-  for (const p of extra) {
-    if (typeof p.key !== 'bigint' || p.key <= BigInt(last)) throw new Refusal('key-type')
-  }
-  if (m.length + extra.length > MaxKeys) throw new Refusal('too-large')
-  const out = encode(new CborMap([...m, ...extra]))
-  if (out.length > max) throw new Refusal('too-large')
-  return out
+  rec.checkExtra(extra, last, m.length)
+  return rec.encode(m, extra, max)
 }
 
 const k = (n: number): bigint => BigInt(n)
@@ -584,36 +506,10 @@ function checkSized(m: Map<string, Uint8Array>, size: number, what: string): voi
   for (const [n, c] of m) if (c.length !== size) throw new Refusal('fields', `${what} ${n} length`)
 }
 
-const n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n
-
-function toBig(b: Uint8Array): bigint {
-  let x = 0n
-  for (const v of b) x = (x << 8n) | BigInt(v)
-  return x
-}
-
-function strictInt(b: Uint8Array): boolean {
-  if (b.length === 0 || (b[0]! & 0x80) !== 0) return false
-  return !(b.length > 1 && b[0] === 0 && (b[1]! & 0x80) === 0)
-}
-
 /**
- * The one strict, low-S DER encoding of an (r, s), 8 to 72 bytes: the Go
- * CheckDER, which re-serializes the parsed signature and compares.
+ * The one strict, low-S DER encoding of an (r, s), 8 to 72 bytes.
  */
-export function strictDER(der: Uint8Array): boolean {
-  if (der.length < 8 || der.length > 72 || der[0] !== 0x30 || der[1] !== der.length - 2) return false
-  const lenR = der[3]!
-  if (der[2] !== 0x02 || lenR === 0 || 6 + lenR > der.length) return false
-  const lenS = der[5 + lenR]!
-  if (der[4 + lenR] !== 0x02 || lenS === 0 || 6 + lenR + lenS !== der.length) return false
-  const r = der.subarray(4, 4 + lenR)
-  const s = der.subarray(6 + lenR)
-  if (!strictInt(r) || !strictInt(s)) return false
-  const R = toBig(r)
-  const S = toBig(s)
-  return R > 0n && R < n && S > 0n && S <= n >> 1n
-}
+export const strictDER = strictSignature
 
 function grantCross(g: Grant): void {
   if (bytesEqual(g.subject, g.org) || isAnyone(g.subject)) throw new Refusal('members', 'subject is the organisation or the anyone key')

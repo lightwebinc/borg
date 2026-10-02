@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/cbor"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Wrap record keys.
@@ -63,7 +64,7 @@ func (w *WrapRecord) checkEntries() error {
 
 // Validate applies every rule that needs only the record itself.
 func (w *WrapRecord) Validate() error {
-	if err := checkExtra(w.Extra, wkLast, wkLast+1); err != nil {
+	if err := record.CheckExtra(w.Extra, wkLast, wkLast+1); err != nil {
 		return err
 	}
 	if err := CheckHall(w.Hall); err != nil {
@@ -72,7 +73,7 @@ func (w *WrapRecord) Validate() error {
 	if err := CheckOrgKey(w.Org); err != nil {
 		return err
 	}
-	if err := inRange(w.Epoch, 0, MaxEpoch, "epoch"); err != nil {
+	if err := record.InRange(w.Epoch, 0, MaxEpoch, "epoch"); err != nil {
 		return err
 	}
 	return w.checkEntries()
@@ -92,7 +93,7 @@ func (w *WrapRecord) Encode() ([]byte, error) {
 		{Key: uint64(WKEpochID), Val: append([]byte(nil), w.EpochID[:]...)},
 		{Key: uint64(WKEntries), Val: valuesBytes(w.Entries)},
 	}
-	return encodeRecord(m, w.Extra, MaxWrapRecord)
+	return record.Encode(m, w.Extra, MaxWrapRecord)
 }
 
 // DecodeWrap parses a wrap record in the refusal order.
@@ -101,32 +102,32 @@ func DecodeWrap(p []byte) (*WrapRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &WrapRecord{Extra: f.extra}
-	if w.Hall, err = f.text(WKHall); err != nil {
+	w := &WrapRecord{Extra: f.Extra}
+	if w.Hall, err = f.Text(WKHall); err != nil {
 		return nil, err
 	}
 	if err := CheckHall(w.Hall); err != nil {
 		return nil, err
 	}
-	if w.Org, err = f.bytesN(WKOrg, -1); err != nil {
+	if w.Org, err = f.BytesN(WKOrg, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckOrgKey(w.Org); err != nil {
 		return nil, err
 	}
-	b, err := f.bytesN(WKGroup, GroupIDLen)
+	b, err := f.BytesN(WKGroup, GroupIDLen)
 	if err != nil {
 		return nil, err
 	}
 	copy(w.Group[:], b)
-	if w.Epoch, err = f.uint(WKEpoch, 0, MaxEpoch); err != nil {
+	if w.Epoch, err = f.Uint(WKEpoch, 0, MaxEpoch); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(WKEpochID, 32); err != nil {
+	if b, err = f.BytesN(WKEpochID, 32); err != nil {
 		return nil, err
 	}
 	copy(w.EpochID[:], b)
-	a, err := f.array(WKEntries, MaxEntries)
+	a, err := f.Array(WKEntries, MaxEntries)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,10 @@ import (
 
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
+	"github.com/lightwebinc/bcommon/chaintoken"
+	"github.com/lightwebinc/bcommon/keyed"
 	"github.com/lightwebinc/bcommon/pushdrop"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Registry values (docs/frozen.md); frozen once the first record is
@@ -58,8 +61,8 @@ const (
 
 	// DomainSymmetric and DomainCommitment are BRC-369 section 2's domain
 	// strings, adopted verbatim.
-	DomainSymmetric  = "metanet keyed content symmetric v1"
-	DomainCommitment = "metanet keyed content commitment v1"
+	DomainSymmetric  = keyed.DomainSymmetric
+	DomainCommitment = keyed.DomainCommitment
 )
 
 // Tags and magics. The tag prefix "bo" belongs to borg.
@@ -166,21 +169,21 @@ var GrantFieldNames = []string{"expiry", "role", "scope"}
 
 // The refusals. A host counts them by Reason.
 var (
-	ErrTooLarge   = errors.New("borgrec: record exceeds its bound")
-	ErrCBOR       = errors.New("borgrec: not a canonical CBOR map")
-	ErrKeyType    = errors.New("borgrec: record key is not an unsigned integer")
-	ErrMagic      = errors.New("borgrec: wrong magic")
-	ErrMissing    = errors.New("borgrec: required key missing")
-	ErrType       = errors.New("borgrec: field has the wrong type")
-	ErrRange      = errors.New("borgrec: field out of range")
+	ErrTooLarge   = record.ErrTooLarge
+	ErrCBOR       = record.ErrCBOR
+	ErrKeyType    = record.ErrKeyType
+	ErrMagic      = record.ErrMagic
+	ErrMissing    = record.ErrMissing
+	ErrType       = record.ErrType
+	ErrRange      = record.ErrRange
 	ErrIdentity   = errors.New("borgrec: identity key is not a canonical compressed key")
 	ErrHall       = errors.New("borgrec: hall identifier breaks the grammar")
 	ErrName       = errors.New("borgrec: name is not 1 to 64 bytes of text")
-	ErrList       = errors.New("borgrec: change list is not distinct, ascending and within its bound")
+	ErrList       = record.ErrList
 	ErrChain      = errors.New("borgrec: seq, prev and epoch fields disagree")
 	ErrMembers    = errors.New("borgrec: member list names the organisation or the anyone key")
 	ErrFields     = errors.New("borgrec: grant fields, keyring or reveal are not exactly expiry, role and scope")
-	ErrSignature  = errors.New("borgrec: signature is not strict low-S DER")
+	ErrSignature  = chaintoken.ErrSignature
 	ErrEntry      = errors.New("borgrec: wrap entry does not match the record")
 	ErrRevocation = errors.New("borgrec: revocation outpoint is not the carrier's funding outpoint")
 	ErrCert       = errors.New("borgrec: grant certificate signature does not verify")
