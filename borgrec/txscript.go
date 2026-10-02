@@ -18,6 +18,6 @@ func FundingScript(key *ec.PublicKey) []byte {
 	return PushDropScript(key, [][]byte{TagFunding}, nil)
 }
 
-// IsFundingShape reports a funding-shaped script under any key: the whole
+// isFundingShape reports a funding-shaped script under any key: the whole
 // script is 0x21, 33 bytes, 0xac, 03 62 6f 02, 75 (Classify's funding).
-func IsFundingShape(s []byte) bool { return Classify(s) == KindFunding }
+func isFundingShape(s []byte) bool { return Classify(s) == KindFunding }

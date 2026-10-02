@@ -1,6 +1,6 @@
 /**
  * The topic manager's transaction rules of spec section 11.1, the twin of
- * the Go internal/borgrec/admit.go: classification, then a carrier's rules 1
+ * the Go borgrec/admit.go: classification, then a carrier's rules 1
  * to 10, a token's rules 1 to 9, or the sweep rule. A transaction is refused
  * for the first rule it breaks, with the same reason label in both
  * languages, and every refusal is thrown: a topic manager raises it rather

@@ -9,6 +9,9 @@
 // A reader that asks several hosts compares their answers and reports a
 // difference as such, never merging it silently: a host can withhold a
 // token, a grant or a wrap, and only a comparison (or a root) shows it.
+//
+// The package is importable by other modules at a tagged version
+// (docs/packages.md names the supported part of it).
 package reader
 
 import (
@@ -35,7 +38,7 @@ import (
 	"github.com/lightwebinc/bcommon/hostset"
 	"github.com/lightwebinc/bcommon/lookup"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/limits"
 )
 

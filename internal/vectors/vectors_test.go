@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 const dir = "../../testdata/vectors"

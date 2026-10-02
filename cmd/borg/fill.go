@@ -13,10 +13,10 @@ import (
 	"github.com/lightwebinc/bcommon/lookup"
 	"github.com/lightwebinc/bcommon/termsafe"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
-	"github.com/lightwebinc/borg/internal/reader"
 	"github.com/lightwebinc/borg/internal/unicast"
+	"github.com/lightwebinc/borg/reader"
 )
 
 const fillHelp = `usage: borg fill [group...]

@@ -14,11 +14,11 @@ import (
 
 	"github.com/lightwebinc/bcommon/termsafe"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/limits"
-	"github.com/lightwebinc/borg/internal/reader"
 	"github.com/lightwebinc/borg/internal/state"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // grantFlags are the flags that shape a grant.

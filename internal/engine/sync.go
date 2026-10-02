@@ -17,9 +17,9 @@ import (
 	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/producer"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
-	"github.com/lightwebinc/borg/internal/reader"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/state"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // Catching up (spec section 7.4). A home that runs an organisation is not

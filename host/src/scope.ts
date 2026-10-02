@@ -1,6 +1,6 @@
 /**
  * A grant's field values: the scope grammar and its fail-closed meaning, the
- * expiry and the role. The twin of the Go internal/borgrec/scope.go.
+ * expiry and the role. The twin of the Go borgrec/scope.go.
  */
 import { MaxRole, MaxScope, Refusal } from './borgrec.js'
 

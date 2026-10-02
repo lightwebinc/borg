@@ -12,7 +12,7 @@ import (
 	"github.com/lightwebinc/bcommon/cbor"
 	"github.com/lightwebinc/bcommon/mint"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 type admitJSON struct {

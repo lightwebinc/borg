@@ -60,9 +60,9 @@ type Grant struct {
 	Extra     cbor.Map          // integer keys above 9, preserved and ignored
 }
 
-// CheckDER refuses a signature that is not the one strict, low-S DER
-// encoding of its (r, s) (bcommon chaintoken.CheckDER).
-func CheckDER(sig []byte) error { return chaintoken.CheckDER(sig) }
+// checkDER refuses a signature that is not the one strict, low-S DER
+// encoding of its (r, s) (bcommon chaintoken.checkDER).
+func checkDER(sig []byte) error { return chaintoken.CheckDER(sig) }
 
 func checkNames(m map[string][]byte, what string) error {
 	if len(m) != len(GrantFieldNames) {
@@ -117,7 +117,7 @@ func (g *Grant) Validate() error {
 	if err := CheckHall(g.Hall); err != nil {
 		return err
 	}
-	if err := CheckOrgKey(g.Org); err != nil {
+	if err := checkOrgKey(g.Org); err != nil {
 		return err
 	}
 	if err := CheckIdentity(g.Subject); err != nil {
@@ -126,7 +126,7 @@ func (g *Grant) Validate() error {
 	if err := checkFields(g.Fields); err != nil {
 		return err
 	}
-	if err := CheckDER(g.Signature); err != nil {
+	if err := checkDER(g.Signature); err != nil {
 		return err
 	}
 	if err := checkSized(g.Keyring, KeyringEntryLen, "keyring"); err != nil {
@@ -196,7 +196,7 @@ func DecodeGrant(p []byte) (*Grant, error) {
 	if g.Org, err = f.BytesN(MKOrg, -1); err != nil {
 		return nil, err
 	}
-	if err := CheckOrgKey(g.Org); err != nil {
+	if err := checkOrgKey(g.Org); err != nil {
 		return nil, err
 	}
 	if g.Subject, err = f.BytesN(MKSubject, -1); err != nil {
@@ -236,7 +236,7 @@ func DecodeGrant(p []byte) (*Grant, error) {
 	if g.Signature, err = f.BytesN(MKSignature, -1); err != nil {
 		return nil, err
 	}
-	if err := CheckDER(g.Signature); err != nil {
+	if err := checkDER(g.Signature); err != nil {
 		return nil, err
 	}
 	if g.Keyring, err = f.textMap(MKKeyring); err != nil {

@@ -1,6 +1,6 @@
 /**
  * The epoch key (BRC-369 sections 2 and 5) and a grant's content rules: the
- * twin of the Go internal/borgrec/epoch.go and the content half of
+ * twin of the Go borgrec/epoch.go and the content half of
  * grant.go. A member unwraps its epoch key and checks it in the section 6.4
  * order; a host checks a grant's revocation outpoint, its certificate
  * signature and its reveal.

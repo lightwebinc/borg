@@ -9,7 +9,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/termsafe"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/state"
 )

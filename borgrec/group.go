@@ -64,7 +64,7 @@ func (g *Group) Validate() error {
 	if err := CheckHall(g.Hall); err != nil {
 		return err
 	}
-	if err := CheckOrgKey(g.Org); err != nil {
+	if err := checkOrgKey(g.Org); err != nil {
 		return err
 	}
 	if err := record.InRange(g.Seq, 0, MaxSafe, "seq"); err != nil {
@@ -176,7 +176,7 @@ func DecodeGroup(p []byte) (*Group, error) {
 	if g.Org, err = f.BytesN(GKOrg, -1); err != nil {
 		return nil, err
 	}
-	if err := CheckOrgKey(g.Org); err != nil {
+	if err := checkOrgKey(g.Org); err != nil {
 		return nil, err
 	}
 	b, err := f.BytesN(GKGroup, GroupIDLen)

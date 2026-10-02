@@ -1,6 +1,6 @@
 /**
  * What the index computes from admitted objects (spec section 11.2), the
- * twin of the Go internal/borgrec/chain.go: the fold of each chain from seq
+ * twin of the Go borgrec/chain.go: the fold of each chain from seq
  * 0 with each token's status, and a funding outpoint's row with each
  * carrier's status. Never an admission verdict.
  */

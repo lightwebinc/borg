@@ -25,13 +25,13 @@ import (
 	"github.com/lightwebinc/bcommon/publish"
 	"github.com/lightwebinc/bcommon/termsafe"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/config"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/limits"
-	"github.com/lightwebinc/borg/internal/reader"
 	"github.com/lightwebinc/borg/internal/state"
 	"github.com/lightwebinc/borg/internal/unicast"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // httpClient is the client for everything but submissions, which

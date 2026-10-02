@@ -9,6 +9,9 @@
 // has one encoding a reader accepts. Every decoder bounds its input before the
 // CBOR decoder runs, and the CBOR decoder bounds every declared length against
 // the bytes present before it allocates.
+//
+// The package is importable by other modules at a tagged version
+// (docs/packages.md names the supported part of it).
 package borgrec
 
 import (

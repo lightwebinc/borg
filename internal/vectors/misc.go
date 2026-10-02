@@ -11,7 +11,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/cbor"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // ---- scope-v1.json ----

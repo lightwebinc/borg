@@ -7,7 +7,7 @@ import (
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // Scenario is the story every record vector tells: an organisation grants

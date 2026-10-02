@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // ChainOrg is the chain member of a question about an organisation's own

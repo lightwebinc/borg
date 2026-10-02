@@ -24,7 +24,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/bwallet"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // Paid is a stand-in for a host's terms route (spec section 10.3):

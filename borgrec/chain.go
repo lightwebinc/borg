@@ -2,6 +2,7 @@ package borgrec
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 )
 
@@ -126,6 +127,117 @@ func (f *GroupFold) Members() [][]byte {
 	}
 	sort.Slice(out, func(i, j int) bool { return bytes.Compare(out[i], out[j]) < 0 })
 	return out
+}
+
+// Link is one token of a group's chain as a reader holds it: its record,
+// the txid of its transaction (hash byte order) and the height of its block.
+type Link struct {
+	Record []byte
+	Txid   [32]byte
+	Height uint32
+}
+
+// Epoch is one epoch a group's chain began.
+type Epoch struct {
+	Epoch uint64
+	// ID is EpochID of the record of the token that began the epoch.
+	ID [32]byte
+	// Commitment is the BRC-369 digest of the epoch's key.
+	Commitment [32]byte
+	// Seq, Txid and Height are that token's.
+	Seq    uint64
+	Txid   [32]byte
+	Height uint32
+	// Removed reports that the token removed a member.
+	Removed bool
+}
+
+// GroupChain is a group's chain folded from seq 0 (FoldGroup).
+type GroupChain struct {
+	// Tokens are the records in chain order, and Statuses the fold's status
+	// of each (GroupFold.Apply).
+	Tokens   []*Group
+	Statuses []string
+	// Epochs are the epochs the usable chain began, ascending.
+	Epochs  []Epoch
+	members [][]byte
+}
+
+// FoldGroup folds a group's chain from seq 0 with nothing but the records:
+// links are the tokens in chain order, each the successor by spend of the
+// one before. It asks no host and verifies no proof; the caller has checked
+// each token against its own headers. It refuses a chain no host would have
+// admitted (a record that does not decode, a first token that is not seq 0,
+// a transition that breaks CheckGroupTransition, a token mined below its
+// predecessor), and reports per token the status GroupFold gives. Epochs
+// come only from the usable part.
+func FoldGroup(links []Link) (*GroupChain, error) {
+	c := &GroupChain{members: [][]byte{}}
+	f := NewGroupFold()
+	for i, l := range links {
+		g, err := DecodeGroup(l.Record)
+		if err != nil {
+			return nil, err
+		}
+		if i == 0 {
+			if g.Seq != 0 {
+				return nil, fmt.Errorf("%w: the chain does not start at seq 0", ErrChain)
+			}
+		} else {
+			if err := CheckGroupTransition(c.Tokens[i-1], links[i-1].Txid, g); err != nil {
+				return nil, err
+			}
+			if l.Height < links[i-1].Height {
+				return nil, fmt.Errorf("%w: mined below its predecessor", ErrChain)
+			}
+		}
+		c.Tokens = append(c.Tokens, g)
+		status := f.Apply(g)
+		c.Statuses = append(c.Statuses, status)
+		if status == StatusMembersMismatch {
+			// Unusable from here on; the members stay those after the last
+			// usable token.
+			continue
+		}
+		c.members = f.Members()
+		if g.BeginsEpoch() {
+			c.Epochs = append(c.Epochs, Epoch{Epoch: g.Epoch, ID: EpochID(l.Record), Commitment: g.Commitment,
+				Seq: g.Seq, Txid: l.Txid, Height: l.Height, Removed: len(g.Remove) > 0})
+		}
+	}
+	return c, nil
+}
+
+// Usable is how many tokens from seq 0 fold without a mismatch: a reader
+// fails closed from the first mismatched token on.
+func (c *GroupChain) Usable() int {
+	for i, s := range c.Statuses {
+		if s == StatusMembersMismatch {
+			return i
+		}
+	}
+	return len(c.Tokens)
+}
+
+// Latest is the last usable token, or nil.
+func (c *GroupChain) Latest() *Group {
+	if n := c.Usable(); n > 0 {
+		return c.Tokens[n-1]
+	}
+	return nil
+}
+
+// Members is the member set after the last usable token, ascending.
+func (c *GroupChain) Members() [][]byte { return c.members }
+
+// EpochByNumber is epoch e of the usable chain, if the chain began it.
+func (c *GroupChain) EpochByNumber(e uint64) (Epoch, bool) {
+	for _, x := range c.Epochs {
+		if x.Epoch == e {
+			return x, true
+		}
+	}
+	return Epoch{}, false
 }
 
 // OutpointRow is the index's row for one funding outpoint (spec section

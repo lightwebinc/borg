@@ -52,7 +52,7 @@ func (o *Org) Validate() error {
 	if err := CheckHall(o.Hall); err != nil {
 		return err
 	}
-	if err := CheckOrgKey(o.Org); err != nil {
+	if err := checkOrgKey(o.Org); err != nil {
 		return err
 	}
 	if err := record.InRange(o.Seq, 0, MaxSafe, "seq"); err != nil {
@@ -132,7 +132,7 @@ func DecodeOrg(p []byte) (*Org, error) {
 	if o.Org, err = f.BytesN(OKOrg, -1); err != nil {
 		return nil, err
 	}
-	if err := CheckOrgKey(o.Org); err != nil {
+	if err := checkOrgKey(o.Org); err != nil {
 		return nil, err
 	}
 	if o.Seq, err = f.Uint(OKSeq, 0, MaxSafe); err != nil {

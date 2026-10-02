@@ -70,7 +70,7 @@ func (w *WrapRecord) Validate() error {
 	if err := CheckHall(w.Hall); err != nil {
 		return err
 	}
-	if err := CheckOrgKey(w.Org); err != nil {
+	if err := checkOrgKey(w.Org); err != nil {
 		return err
 	}
 	if err := record.InRange(w.Epoch, 0, MaxEpoch, "epoch"); err != nil {
@@ -112,7 +112,7 @@ func DecodeWrap(p []byte) (*WrapRecord, error) {
 	if w.Org, err = f.BytesN(WKOrg, -1); err != nil {
 		return nil, err
 	}
-	if err := CheckOrgKey(w.Org); err != nil {
+	if err := checkOrgKey(w.Org); err != nil {
 		return nil, err
 	}
 	b, err := f.BytesN(WKGroup, GroupIDLen)

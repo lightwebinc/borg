@@ -16,7 +16,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/guard"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/limits"
 	"github.com/lightwebinc/borg/internal/state"
 	"github.com/lightwebinc/borg/internal/testchain"

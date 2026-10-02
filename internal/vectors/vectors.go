@@ -14,7 +14,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/pushdrop"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // Names returns the file names in a stable order.

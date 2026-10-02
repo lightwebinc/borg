@@ -21,9 +21,9 @@ func CheckIdentity(k []byte) error {
 	return nil
 }
 
-// CheckOrgKey is the key rule for an organisation: a canonical identity key
+// checkOrgKey is the key rule for an organisation: a canonical identity key
 // that is not the anyone key, whose private key everyone knows.
-func CheckOrgKey(k []byte) error {
+func checkOrgKey(k []byte) error {
 	if CheckIdentity(k) != nil || IsAnyone(k) {
 		return ErrIdentity
 	}
@@ -84,9 +84,9 @@ func CheckHall(s string) error {
 	return CheckHallName(s[:cut])
 }
 
-// SplitHall returns a hall identifier's readable part and suffix. The
+// splitHall returns a hall identifier's readable part and suffix. The
 // readable part alone never identifies a hall.
-func SplitHall(s string) (name, suffix string, err error) {
+func splitHall(s string) (name, suffix string, err error) {
 	if err := CheckHall(s); err != nil {
 		return "", "", err
 	}

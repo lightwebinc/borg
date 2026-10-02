@@ -46,11 +46,11 @@ import (
 	"github.com/lightwebinc/bcommon/publish"
 	"github.com/lightwebinc/bcommon/pushdrop"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/limits"
-	"github.com/lightwebinc/borg/internal/reader"
 	"github.com/lightwebinc/borg/internal/state"
 	"github.com/lightwebinc/borg/internal/unicast"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // Profile is the embedded wallet's profile: the fund key under [1, "borg

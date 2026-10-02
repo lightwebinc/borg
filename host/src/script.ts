@@ -1,6 +1,6 @@
 /**
  * Script reading, the classifier and canonical script rebuilding, the twin
- * of the Go internal/borgrec/script.go and txscript.go. The reader is this
+ * of the Go borgrec/script.go and txscript.go. The reader is this
  * package's own rather than the SDK's, so that the Go and TypeScript codecs
  * read every byte string the same way; every script a host checks is
  * compared byte for byte with the one rebuilt here.

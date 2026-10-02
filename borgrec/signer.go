@@ -22,7 +22,7 @@ var anyone = wallet.Counterparty{Type: wallet.CounterpartyTypeAnyone}
 // key; only the organisation derives its private key.
 func SignerKey(org []byte) ([]byte, error) {
 	pub, err := ec.PublicKeyFromBytes(org)
-	if err != nil || CheckOrgKey(org) != nil {
+	if err != nil || checkOrgKey(org) != nil {
 		return nil, ErrIdentity
 	}
 	one := make([]byte, 32)

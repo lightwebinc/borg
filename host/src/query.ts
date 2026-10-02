@@ -1,6 +1,6 @@
 /**
  * The lookup question classes of ls_borg (spec section 10.2), validated as
- * parsed: the twin of the Go internal/borgrec/query.go.
+ * parsed: the twin of the Go borgrec/query.go.
  */
 import { strictPublicKey } from '@lightwebinc/bcommon'
 import { GroupIDLen, MaxEpoch, MaxSafe, Refusal, checkHall } from './borgrec.js'

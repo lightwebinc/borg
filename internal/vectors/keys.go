@@ -1,5 +1,5 @@
 // Package vectors generates the golden vectors under testdata/vectors from
-// the codec in internal/borgrec. Every value is derived from fixed stand-ins
+// the codec in borgrec. Every value is derived from fixed stand-ins
 // (public test keys, hashes of labels for anything a client draws at
 // random), so the files are reproducible byte for byte; every check the
 // generator makes (a wallet decrypts what was wrapped, a certificate

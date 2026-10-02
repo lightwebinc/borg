@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -70,23 +69,23 @@ func ReleaseKeyID(epochID [32]byte, epoch uint32) [32]byte {
 	return sha256.Sum256(append(epochID[:], e[:]...))
 }
 
-// ReleaseKeyIDString is the key id as the BRC-43 invoice carries it:
+// releaseKeyIDString is the key id as the BRC-43 invoice carries it:
 // standard padded base64.
-func ReleaseKeyIDString(epochID [32]byte, epoch uint32) string {
+func releaseKeyIDString(epochID [32]byte, epoch uint32) string {
 	id := ReleaseKeyID(epochID, epoch)
 	return base64.StdEncoding.EncodeToString(id[:])
 }
 
 // ReleaseInvoice is the BRC-43 invoice number the wrap is derived under.
 func ReleaseInvoice(epochID [32]byte, epoch uint32) string {
-	return "2-" + ReleaseProtocolName + "-" + ReleaseKeyIDString(epochID, epoch)
+	return "2-" + ReleaseProtocolName + "-" + releaseKeyIDString(epochID, epoch)
 }
 
 // releaseArgs are the BRC-100 encryption arguments for a wrap.
 func releaseArgs(epochID [32]byte, epoch uint32, counterparty *ec.PublicKey) wallet.EncryptionArgs {
 	return wallet.EncryptionArgs{
 		ProtocolID:   ReleaseProtocol,
-		KeyID:        ReleaseKeyIDString(epochID, epoch),
+		KeyID:        releaseKeyIDString(epochID, epoch),
 		Counterparty: wallet.Counterparty{Type: wallet.CounterpartyTypeOther, Counterparty: counterparty},
 	}
 }
@@ -128,7 +127,7 @@ func Wrap(ctx context.Context, w wallet.Interface, org []byte, member *ec.Public
 // (BRC-42 child keys, the raw x-coordinate of their shared point), and the
 // result decrypts through any wallet's Decrypt.
 func WrapWithIV(orgKey *ec.PrivateKey, member *ec.PublicKey, epochID [32]byte, epoch uint32, k [32]byte, iv [32]byte) ([]byte, error) {
-	sk, err := wallet.NewKeyDeriver(orgKey).DeriveSymmetricKey(ReleaseProtocol, ReleaseKeyIDString(epochID, epoch),
+	sk, err := wallet.NewKeyDeriver(orgKey).DeriveSymmetricKey(ReleaseProtocol, releaseKeyIDString(epochID, epoch),
 		wallet.Counterparty{Type: wallet.CounterpartyTypeOther, Counterparty: member})
 	if err != nil {
 		return nil, err
@@ -195,6 +194,3 @@ func Unwrap(ctx context.Context, w wallet.Interface, wrap []byte, org *ec.Public
 	}
 	return keyed.CheckOpened(res.Plaintext, commitment)
 }
-
-// HexKey is a key's lowercase hex, the spelling questions and vectors use.
-func HexKey(k []byte) string { return hex.EncodeToString(k) }

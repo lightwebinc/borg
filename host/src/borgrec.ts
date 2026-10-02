@@ -1,6 +1,6 @@
 /**
  * The byte-level contract of borg, the twin of the Go package
- * internal/borgrec: the organisation and group records that ride mined chain
+ * borgrec: the organisation and group records that ride mined chain
  * tokens, the membership grant and the epoch-key wrap that ride unmined
  * carriers, and the hall grammar. docs/spec.md is the normative text; the
  * vectors under testdata/vectors hold both codecs to the same bytes.

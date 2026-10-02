@@ -26,11 +26,11 @@ import (
 	"github.com/lightwebinc/bcommon/purse"
 	"github.com/lightwebinc/bcommon/termsafe"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/limits"
-	"github.com/lightwebinc/borg/internal/reader"
 	"github.com/lightwebinc/borg/internal/state"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // target is what a reading command reads: a hall, an organisation, and the

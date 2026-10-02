@@ -210,7 +210,7 @@ func Admit(ctx context.Context, beef []byte, held []int, h Host) (*Admission, er
 	}
 
 	// Sweep: output 0 funding-shaped under any key, and mined.
-	if len(tx.Outputs) > 0 && tx.Outputs[0] != nil && tx.Outputs[0].LockingScript != nil && IsFundingShape(*tx.Outputs[0].LockingScript) {
+	if len(tx.Outputs) > 0 && tx.Outputs[0] != nil && tx.Outputs[0].LockingScript != nil && isFundingShape(*tx.Outputs[0].LockingScript) {
 		if !Mined(ctx, tx, h.Headers) {
 			return nil, ErrUnmined
 		}

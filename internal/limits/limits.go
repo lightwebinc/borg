@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // The policy limits of docs/limits.md, as the borg command applies them.

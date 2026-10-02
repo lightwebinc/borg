@@ -7,7 +7,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/carrier"
 
-	"github.com/lightwebinc/borg/internal/borgrec"
+	"github.com/lightwebinc/borg/borgrec"
 )
 
 // genTransaction writes transaction-v1.json, every case admitted or refused
