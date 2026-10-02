@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/lightwebinc/bcommon/lookup"
+
 	"github.com/lightwebinc/borg/borgrec"
+	"github.com/lightwebinc/borg/internal/limits"
 )
 
 // ChainOrg is the chain member of a question about an organisation's own
@@ -36,9 +39,35 @@ type ChainView struct {
 	Lacks map[string][]uint64
 	// Refused are answered tokens that did not verify.
 	Refused []Refusal
-	// Forks are tokens that verified at a seq of the canonical chain but do
-	// not continue it.
+	// Forks are tokens that verified and do not continue the canonical
+	// chain: at a seq of it, or at the seq the walk stopped at.
 	Forks []*Tok
+	// Claimed are the verified tokens the hosts answered as the chain's
+	// latest.
+	Claimed []*Tok
+	// Replaced is set when a Floor remembered another token at a seq of
+	// the canonical chain than the one read now: its txid. A reorganisation
+	// displaced the remembered one, or the chain forked there.
+	Replaced string
+}
+
+// Beyond are the verified tokens of the chain at a seq above the chain
+// read, each once: a host answered them (as the latest, or at the seq the
+// walk could not link), and no chain of predecessors reaches them from the
+// first token. A token between was withheld, or the organisation signed a
+// stray one; either way what was read may be an older state than the
+// chain's latest, and a reader with no memory of its own has nothing else
+// to tell it so.
+func (v *ChainView) Beyond() []*Tok {
+	var out []*Tok
+	seen := map[string]bool{}
+	for _, t := range append(append([]*Tok(nil), v.Claimed...), v.Forks...) {
+		if t.Seq() >= uint64(len(v.Tokens)) && !seen[t.Txid] {
+			seen[t.Txid] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Latest is the canonical chain's last token, or nil.
@@ -96,9 +125,18 @@ func matches(t *Tok, chain string) bool {
 }
 
 // Chain establishes a chain of org's in hall: chain is ChainOrg or a group
-// id. Every host is asked the latest class; then every seq from 0 to the
-// highest any host answered is asked of every host, so the reader folds the
-// chain from seq 0 itself.
+// id. Every host is asked the latest class; then the chain is walked seq by
+// seq from 0, every host asked each seq, so the reader folds the chain from
+// seq 0 itself. A seq is asked for only once the one before it is on the
+// chain, and the walk ends at the highest seq any host claimed as the
+// latest or at the first seq nothing continues: the work is bounded by the
+// chain itself, never by a seq a host, or a stray token of the
+// organisation's, names. Verified tokens above where the walk ended are
+// reported (Beyond).
+//
+// With a Floor, hosts that answer the chain only below the seq the caller
+// verified before are refused with a *RollbackError, and what is verified
+// now is recorded.
 func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain string) (*ChainView, error) {
 	if c.Headers == nil {
 		return nil, ErrNoHeaders
@@ -108,6 +146,22 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 	}
 	orgHex := hex.EncodeToString(org)
 	v := &ChainView{Hall: hall, Org: org, Chain: chain, HostLatest: map[string]uint64{}, HostErr: map[string]error{}, Lacks: map[string][]uint64{}}
+	verify := func(h string, o lookup.Output, seq *uint64) *Tok {
+		t, err := c.Token(ctx, o.Beef, hall, org)
+		if err == nil && !matches(t, chain) {
+			err = errors.New("reader: the token is of another chain")
+		}
+		if err == nil && seq != nil && t.Seq() != *seq {
+			err = errors.New("reader: the token is not of the seq asked")
+		}
+		if err != nil {
+			v.Refused = append(v.Refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
+			return nil
+		}
+		return t
+	}
+	// top is the highest seq any host claimed as the chain's latest. It
+	// ends the walk; it never sizes anything.
 	var top uint64
 	found := false
 	for _, h := range c.Hosts {
@@ -116,25 +170,20 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 			v.HostErr[h] = err
 			continue
 		}
-		for _, o := range outs {
-			t, err := VerifyToken(ctx, o.Beef, hall, org, c.Headers)
-			if err == nil && !matches(t, chain) {
-				err = errors.New("reader: the token is of another chain")
-			}
-			if err != nil {
-				v.Refused = append(v.Refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
+		v.HostLatest[h] = 0
+		for _, o := range capOutputs(outs, limits.SeqAnswers) {
+			t := verify(h, o, nil)
+			if t == nil {
 				continue
 			}
 			found = true
+			v.Claimed = append(v.Claimed, t)
 			if t.Seq() >= v.HostLatest[h] {
 				v.HostLatest[h] = t.Seq()
 			}
 			if t.Seq() > top {
 				top = t.Seq()
 			}
-		}
-		if _, ok := v.HostLatest[h]; !ok && v.HostErr[h] == nil {
-			v.HostLatest[h] = 0
 		}
 	}
 	if !found {
@@ -143,83 +192,85 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 		}
 		return v, ErrNoChain
 	}
-	// Every seq of every host: candidates per seq, and which hosts hold
-	// which txid.
-	cands := make([][]*Tok, top+1)
-	holds := map[string]map[string]bool{}
+	live := map[string]bool{}
 	for _, h := range c.Hosts {
-		if v.HostErr[h] != nil {
-			continue
-		}
-		holds[h] = map[string]bool{}
-		for s := uint64(0); s <= top; s++ {
+		live[h] = v.HostErr[h] == nil
+	}
+	for s := uint64(0); s <= top; s++ {
+		var cands []*Tok
+		holds := map[string]map[string]bool{}
+		for _, h := range c.Hosts {
+			if !live[h] {
+				continue
+			}
 			outs, err := c.Ask(ctx, h, c.seqQuery(hall, orgHex, chain, s))
 			if err != nil {
-				v.HostErr[h] = err
-				break
+				v.HostErr[h], live[h] = err, false
+				continue
 			}
-			for _, o := range outs {
-				t, err := VerifyToken(ctx, o.Beef, hall, org, c.Headers)
-				if err == nil && (!matches(t, chain) || t.Seq() != s) {
-					err = errors.New("reader: the token is not of the chain and seq asked")
-				}
-				if err != nil {
-					v.Refused = append(v.Refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
+			holds[h] = map[string]bool{}
+			for _, o := range capOutputs(outs, limits.SeqAnswers) {
+				t := verify(h, o, &s)
+				if t == nil {
 					continue
 				}
 				holds[h][t.Txid] = true
 				dup := false
-				for _, x := range cands[s] {
-					if x.Txid == t.Txid {
-						dup = true
-					}
+				for _, x := range cands {
+					dup = dup || x.Txid == t.Txid
 				}
 				if !dup {
-					cands[s] = append(cands[s], t)
+					cands = append(cands, t)
 				}
 			}
 		}
-	}
-	// The canonical chain: the first-mined seq 0, then at each seq the
-	// first-mined token whose prev is the chain's last.
-	for s := uint64(0); s <= top; s++ {
+		// The canonical chain: the first-mined seq 0, then at each seq the
+		// first-mined token whose prev is the chain's last.
 		var best *Tok
-		for _, t := range cands[s] {
+		for _, t := range cands {
 			if s > 0 && t.Prev() != v.Tokens[s-1].Txid {
-				continue
-			}
-			if s == 0 && t.Token.Seq() != 0 {
 				continue
 			}
 			if best == nil || t.Before(best) {
 				best = t
 			}
 		}
-		if best == nil {
-			break
-		}
-		for _, t := range cands[s] {
+		for _, t := range cands {
 			if t != best {
 				v.Forks = append(v.Forks, t)
 			}
 		}
+		if best == nil {
+			break
+		}
 		v.Tokens = append(v.Tokens, best)
+		for h, set := range holds {
+			if !set[best.Txid] {
+				v.Lacks[h] = append(v.Lacks[h], s)
+			}
+		}
 	}
 	if len(v.Tokens) == 0 {
 		return v, fmt.Errorf("%w: no seq 0 token verifies", ErrNoChain)
 	}
-	for h, set := range holds {
-		if v.HostErr[h] != nil {
-			continue
-		}
-		for _, t := range v.Tokens {
-			if !set[t.Txid] {
-				v.Lacks[h] = append(v.Lacks[h], t.Seq())
-			}
-		}
+	for h := range v.HostErr {
+		delete(v.Lacks, h)
 	}
 	v.fold()
+	if c.Floor != nil {
+		if err := v.hold(c.Floor); err != nil {
+			return v, err
+		}
+	}
 	return v, nil
+}
+
+// capOutputs is at most n of a host's answered outputs.
+func capOutputs(outs []lookup.Output, n int) []lookup.Output {
+	if len(outs) > n {
+		return outs[:n]
+	}
+	return outs
 }
 
 func firstErr(m map[string]error) error {

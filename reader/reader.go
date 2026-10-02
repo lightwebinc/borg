@@ -54,6 +54,31 @@ type Client struct {
 	HTTP    *http.Client
 	// MaxPages bounds the pages one question reads per host.
 	MaxPages int
+	// MaxAnswer bounds the bytes taken for one answer; zero is
+	// DefaultMaxAnswer.
+	MaxAnswer int64
+	// Source, when set, is a chain source asked for a transaction's
+	// current proof when the proof a host stored no longer verifies
+	// against Headers (docs/spec.md section 11.5). Without one, such an
+	// answer is refused as unmined.
+	Source ChainSource
+	// Floor, when set, is the caller's memory of the chains it verified:
+	// Chain refuses hosts that answer an older state than it holds, and
+	// records what it verified (floor.go). Without one a reader has no
+	// memory, and a host set that withholds the latest tokens of a chain
+	// is believed.
+	Floor Floor
+}
+
+// DefaultMaxAnswer is the most bytes a reader takes for one lookup answer
+// when Client.MaxAnswer is zero: a full page of the largest objects the
+// plane carries fits several times over.
+const DefaultMaxAnswer = limits.MaxAnswer
+
+// ChainSource is a source of a mined transaction's current proof, by its
+// txid: a node's asset API (nodeapi.Asset is one).
+type ChainSource interface {
+	MerkleProof(ctx context.Context, txid string) (*transaction.MerklePath, error)
 }
 
 // Query is one ls_borg question: its members, every one a string.
@@ -65,9 +90,14 @@ var ErrHost = errors.New("reader: the host refused the question")
 // ErrNoHeaders refuses to verify against no header source.
 var ErrNoHeaders = errors.New("reader: no header source; refusing to verify against a default")
 
-// Ask asks one host one question and returns the outputs it answered.
+// Ask asks one host one question and returns the outputs it answered. An
+// answer over MaxAnswer bytes is an error, not read.
 func (c *Client) Ask(ctx context.Context, host string, q Query) ([]lookup.Output, error) {
-	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP}
+	maxBody := c.MaxAnswer
+	if maxBody <= 0 {
+		maxBody = DefaultMaxAnswer
+	}
+	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP, MaxBody: maxBody}
 	res, err := lookup.Query(ctx, hs, host, lookup.Question{Service: borgrec.LookupService, Query: q})
 	if err != nil {
 		if strings.Contains(err.Error(), "answered status 4") {
@@ -253,6 +283,96 @@ func VerifySweep(ctx context.Context, beef []byte, hall string, headers chaintra
 	return a.Spent, chainhash.Hash(a.Txid).String(), nil
 }
 
+// A host stores an object with the proof it was given, and cannot take a
+// new one: after a reorganisation the stored proof may name a block that is
+// no longer in the best chain, although the same transaction was mined
+// again elsewhere (spec section 11.5). A reader then fetches the
+// transaction's current proof from a chain source by its txid, and verifies
+// that against its own headers. The three methods below do it for a token,
+// a carrier's funding tree and a sweep; without a chain source they are the
+// plain checks.
+
+// current is the chain source's proof of tx, cut to the minimal one, when
+// the proof tx carries does not verify against the reader's headers and the
+// source's does.
+func (c *Client) current(ctx context.Context, tx *transaction.Transaction) bool {
+	if c.Source == nil || tx == nil || c.Headers == nil {
+		return false
+	}
+	if tx.MerklePath != nil {
+		if ok, err := tx.MerklePath.Verify(ctx, tx.TxID(), c.Headers); err != nil || ok {
+			return false
+		}
+	}
+	mp, err := c.Source.MerkleProof(ctx, tx.TxID().String())
+	if err != nil || mp == nil {
+		return false
+	}
+	if mp, err = borgrec.MinimalPath(mp, tx.TxID()); err != nil {
+		return false
+	}
+	if ok, err := mp.Verify(ctx, tx.TxID(), c.Headers); err != nil || !ok {
+		return false
+	}
+	tx.MerklePath = mp
+	return true
+}
+
+// Token is VerifyToken against the client's headers, with a stale stored
+// proof replaced by the chain source's current one.
+func (c *Client) Token(ctx context.Context, beef []byte, hall string, org []byte) (*Tok, error) {
+	t, err := VerifyToken(ctx, beef, hall, org, c.Headers)
+	if !errors.Is(err, borgrec.ErrUnmined) || len(beef) > limits.MaxBEEF {
+		return t, err
+	}
+	tx, _, perr := borgrec.StoredToken(beef)
+	if perr != nil || !c.current(ctx, tx) {
+		return nil, err
+	}
+	again, perr := tx.AtomicBEEF(false)
+	if perr != nil {
+		return nil, err
+	}
+	return VerifyToken(ctx, again, hall, org, c.Headers)
+}
+
+// Carrier is VerifyCarrier against the client's headers, with a stale
+// proof of the carrier's funding tree replaced by the chain source's
+// current one.
+func (c *Client) Carrier(ctx context.Context, beef []byte, hall string, want borgrec.TxKind) (*Car, error) {
+	car, err := VerifyCarrier(ctx, beef, hall, want, c.Headers)
+	if err == nil || c.Source == nil {
+		return car, err
+	}
+	_, tx, _, perr := guard.ParseBEEF(beef, limits.MaxBEEF)
+	if perr != nil || tx == nil || len(tx.Inputs) != 1 || !c.current(ctx, tx.Inputs[0].SourceTransaction) {
+		return nil, err
+	}
+	again, perr := tx.AtomicBEEF(false)
+	if perr != nil {
+		return nil, err
+	}
+	return VerifyCarrier(ctx, again, hall, want, c.Headers)
+}
+
+// Sweep is VerifySweep against the client's headers, with a stale stored
+// proof replaced by the chain source's current one.
+func (c *Client) Sweep(ctx context.Context, beef []byte, hall string) ([]transaction.Outpoint, string, error) {
+	spent, txid, err := VerifySweep(ctx, beef, hall, c.Headers)
+	if !errors.Is(err, borgrec.ErrUnmined) {
+		return spent, txid, err
+	}
+	_, tx, _, perr := guard.ParseBEEF(beef, limits.MaxBEEF)
+	if perr != nil || tx == nil || !c.current(ctx, tx) {
+		return nil, "", err
+	}
+	again, perr := tx.AtomicBEEF(false)
+	if perr != nil {
+		return nil, "", err
+	}
+	return VerifySweep(ctx, again, hall, c.Headers)
+}
+
 // HostOutputs is what one host answered to one question, all pages.
 type HostOutputs struct {
 	Host      string
@@ -261,9 +381,21 @@ type HostOutputs struct {
 	Truncated bool
 }
 
+// pageOutputs is the most outputs taken from one page (a page of this
+// contract is at most limits.PageSize), and walkBytes the most bytes one
+// paged walk holds from one host.
+const (
+	pageOutputs = 2 * limits.PageSize
+	walkBytes   = 256 << 20
+)
+
 // Pages asks one host a paged class, page after page, until a page is
 // short. cursor gives the -after member for an output, or "" when it has
-// none (which ends the walk).
+// none (which ends the walk). What one page and one walk hold is bounded
+// here, whatever a host answers: a page over the contract's is cut, a walk
+// over walkBytes stops, and a host that answers nothing past the cursor it
+// was given ends the walk. Each is reported as Truncated, never
+// accumulated.
 func (c *Client) Pages(ctx context.Context, host string, q Query, afterClass bool, cursor func(lookup.Output) string) HostOutputs {
 	ho := HostOutputs{Host: host}
 	maxPages := c.MaxPages
@@ -274,6 +406,7 @@ func (c *Client) Pages(ctx context.Context, host string, q Query, afterClass boo
 	for k, v := range q {
 		page[k] = v
 	}
+	held := 0
 	for n := 0; ; n++ {
 		if n == maxPages {
 			ho.Truncated = true
@@ -284,8 +417,19 @@ func (c *Client) Pages(ctx context.Context, host string, q Query, afterClass boo
 			ho.Err = err
 			return ho
 		}
+		full := len(outs) >= limits.PageSize
+		if len(outs) > pageOutputs {
+			outs, ho.Truncated = outs[:pageOutputs], true
+		}
+		for _, o := range outs {
+			held += len(o.Beef) + len(o.Context)
+		}
+		if held > walkBytes {
+			ho.Truncated = true
+			return ho
+		}
 		ho.Outputs = append(ho.Outputs, outs...)
-		if len(outs) < limits.PageSize || !afterClass {
+		if ho.Truncated || !full || !afterClass {
 			return ho
 		}
 		last := ""
@@ -295,6 +439,12 @@ func (c *Client) Pages(ctx context.Context, host string, q Query, afterClass boo
 			}
 		}
 		if last == "" {
+			return ho
+		}
+		if prev, ok := page["after"]; ok && last <= prev {
+			// A full page that does not move past the cursor it was asked
+			// after: the host is repeating itself.
+			ho.Truncated = true
 			return ho
 		}
 		page["after"] = last

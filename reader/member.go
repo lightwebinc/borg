@@ -125,7 +125,7 @@ func (c *Client) GrantsOf(ctx context.Context, ov *OrgView, k []byte) ([]*Car, [
 			continue
 		}
 		for _, o := range outs {
-			car, err := VerifyCarrier(ctx, o.Beef, ov.Hall, borgrec.TxGrant, c.Headers)
+			car, err := c.Carrier(ctx, o.Beef, ov.Hall, borgrec.TxGrant)
 			if err == nil && (!bytes.Equal(car.Carrier.Grant.Org, ov.Org) || !bytes.Equal(car.Carrier.Grant.Subject, k)) {
 				err = errors.New("reader: the grant is not the organisation's grant to this key")
 			}
@@ -181,7 +181,7 @@ func (c *Client) Roll(ctx context.Context, ov *OrgView) []RollAnswer {
 		ra := RollAnswer{Host: h, Err: ho.Err, Truncated: ho.Truncated}
 		var cs [][32]byte
 		for _, o := range ho.Outputs {
-			car, err := VerifyCarrier(ctx, o.Beef, ov.Hall, borgrec.TxGrant, c.Headers)
+			car, err := c.Carrier(ctx, o.Beef, ov.Hall, borgrec.TxGrant)
 			if err == nil && !bytes.Equal(car.Carrier.Grant.Org, ov.Org) {
 				err = errors.New("reader: another organisation's grant")
 			}
@@ -240,7 +240,7 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 			continue
 		}
 		for _, o := range outs {
-			car, err := VerifyCarrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap, c.Headers)
+			car, err := c.Carrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap)
 			if err != nil {
 				continue
 			}
@@ -285,7 +285,7 @@ func (c *Client) Wraps(ctx context.Context, gv *GroupView, epoch uint32) ([]*Car
 	for _, h := range c.Hosts {
 		ho := c.Pages(ctx, h, q, true, func(o lookup.Output) string { return SubjectID(o.Beef) })
 		for _, o := range ho.Outputs {
-			car, err := VerifyCarrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap, c.Headers)
+			car, err := c.Carrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap)
 			if err == nil {
 				_, err = borgrec.CheckEpochToken(begin.Token.Record, car.Carrier.Wrap)
 			}
@@ -346,7 +346,7 @@ func (c *Client) groupIDs(ctx context.Context, hall string, org []byte, q Query)
 			continue
 		}
 		for _, o := range ho.Outputs {
-			t, err := VerifyToken(ctx, o.Beef, hall, org, c.Headers)
+			t, err := c.Token(ctx, o.Beef, hall, org)
 			if err != nil || t.Token.Group == nil {
 				continue
 			}
