@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"sort"
 
@@ -575,32 +574,15 @@ func (e *Engine) keepForeignTree(car *reader.Car) {
 // the change of each adopted token that pays this home's fund key, unspent,
 // is added with its proof.
 func (e *Engine) syncPool(ctx context.Context, adopted []*reader.Tok, rep *SyncReport) {
-	spent := map[string]bool{}
 	for _, o := range e.Pool.Outputs() {
 		if o.Unproven {
 			continue
 		}
-		if by, err := e.Legs.Asset.Spender(ctx, o.TxID, o.Vout); err == nil && by != "" {
-			spent[o.Outpoint()] = true
+		if by, err := e.Legs.Asset.Spender(ctx, o.TxID, o.Vout); err != nil || by == "" {
+			continue
 		}
-	}
-	if len(spent) > 0 {
-		// The pool has no removal: every spendable coin is taken, and
-		// those still unspent are put back.
-		var keep []bwallet.Output
-		for {
-			o, err := e.Pool.TakeAtLeast(math.MaxUint32, 1, nil)
-			if err != nil {
-				break
-			}
-			if spent[o.Outpoint()] {
-				rep.Spent++
-				continue
-			}
-			keep = append(keep, o)
-		}
-		for _, o := range keep {
-			_ = e.Pool.Return(o)
+		if removed, err := e.Pool.Remove(o); err == nil && removed {
+			rep.Spent++
 		}
 	}
 	fund, err := e.Signer.FundScript()
