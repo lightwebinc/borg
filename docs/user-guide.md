@@ -394,7 +394,9 @@ Exit 1, by message:
 Exit 2, by message:
 
 - `fee input: ... no spendable output`: fund the home (`borg fund`). If it
-  says coins are change not yet mined, wait for a block.
+  says coins are change not yet mined, wait for a block. If it says a
+  funding tree minted ahead holds a coin and has not settled, run the
+  command again: the change returns once the tree settles.
 - `1 of 2 host(s) took it and the quorum is 2`, or on the plane `1 of 2
   host(s) named answer it and 2 must`: a host did not take an object, or
   does not answer it. It is kept, and the next command publishes it first.

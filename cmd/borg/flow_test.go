@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,6 +11,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1017,5 +1021,142 @@ func TestKillSweepsEveryTree(t *testing.T) {
 	r = h.must("org", "doctor")
 	if strings.Contains(r.stdout, "sweep       ") {
 		t.Fatalf("doctor after the kill:\n%s", r.stdout)
+	}
+}
+
+// watch is a command's standard error, which tells when a line with mark in
+// it has been written.
+type watch struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	mark string
+	seen chan struct{}
+	once sync.Once
+}
+
+func (w *watch) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf.Write(p)
+	if strings.Contains(w.buf.String(), w.mark) {
+		w.once.Do(func() { close(w.seen) })
+	}
+	return len(p), nil
+}
+
+func (w *watch) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// A funding tree minted ahead takes a coin when the mint starts, and its
+// change reaches the pool only when the mint is collected. A home with one
+// coin has none in between. The grant that leaves the grant tree low starts
+// the mint, and the token that admits the grant needs a fee in that time:
+// the take waits for the mint, collects it, and the token is paid from the
+// tree's change once it mines, so the grant is issued and admitted in one
+// command. When the settlement leg refuses the tree, the coin itself comes
+// back at the collection and pays the token. Either way the token records
+// its fee coin.
+func TestATokenFeeWaitsForATreeMintedAhead(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name    string
+		refused bool
+		notes   []string
+	}{
+		{"minted", false, []string{"is minted ahead and waits for the switch", "fee: every coin is change from 1 transaction(s) not yet mined; waiting for one"}},
+		{"refused", true, []string{"the next funding tree was not minted ahead"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.orgWithGroup()
+			dave := h.identity("dave", false)
+			// The home is left with exactly one coin, as one that has
+			// spent the others is.
+			g, _, _ := h.global("org")
+			hm, err := g.openHome()
+			if err != nil {
+				t.Fatal(err)
+			}
+			kept := false
+			for _, o := range hm.e.Pool.Outputs() {
+				if !kept && !o.Unproven && o.Spendable(h.chain.Height()) {
+					kept = true
+					continue
+				}
+				if _, err := hm.e.Pool.Remove(o); err != nil {
+					t.Fatal(err)
+				}
+			}
+			n := hm.e.Pool.Count()
+			hm.close()
+			if !kept || n != 1 {
+				t.Fatalf("the home holds %d coins, one spendable %v, want 1", n, kept)
+			}
+			// Five grant outputs are left of eight: the grant leaves four,
+			// so the next grant tree is minted ahead from the one coin.
+			// That tree is the next transaction to reach the node. It is
+			// kept from the node until the token's fee has been asked for,
+			// so the mint is in flight then. The transaction after it is
+			// the token, whose record names its fee coin by then.
+			errw := &watch{mark: "no coin is spendable", seen: make(chan struct{})}
+			var tree atomic.Value
+			var recorded atomic.Bool
+			h.mu.Lock()
+			h.onSend = func(tx *transaction.Transaction) {
+				tree.Store(tx.TxID().String())
+				select {
+				case <-errw.seen:
+				case <-time.After(20 * time.Second):
+				}
+				time.Sleep(100 * time.Millisecond)
+				h.mu.Lock()
+				h.onSend = func(*transaction.Transaction) {
+					var st struct {
+						Org struct {
+							Pending *struct {
+								Fee *json.RawMessage `json:"fee"`
+							} `json:"pending"`
+						} `json:"org"`
+					}
+					if raw, err := os.ReadFile(filepath.Join(h.dir, "org", state.File)); err == nil && json.Unmarshal(raw, &st) == nil {
+						recorded.Store(st.Org.Pending != nil && st.Org.Pending.Fee != nil)
+					}
+				}
+				h.mu.Unlock()
+			}
+			if c.refused {
+				h.refuse = func(tx *transaction.Transaction) bool { return tx.TxID().String() == tree.Load() }
+			}
+			h.mu.Unlock()
+			var out bytes.Buffer
+			env := func(k string) string {
+				if k == "BORG_HOME" {
+					return filepath.Join(h.dir, "org")
+				}
+				return h.env[k]
+			}
+			code := run(context.Background(), []string{"grant", "issue", dave}, strings.NewReader(""), &out, errw, env)
+			if code != 0 || !strings.Contains(out.String(), "admits it") {
+				t.Fatalf("grant issue: exit %d\n%s\n%s", code, out.String(), errw)
+			}
+			for _, want := range append([]string{"so the next is minted ahead", "1 funding tree(s) minted ahead hold one: waiting for the change"}, c.notes...) {
+				if !strings.Contains(errw.String(), want) {
+					t.Fatalf("no %q:\n%s", want, errw)
+				}
+			}
+			if id, _ := tree.Load().(string); id == "" || h.chain.Mined(id) == c.refused {
+				t.Fatalf("the tree minted ahead: mined %v, refused %v", !c.refused, c.refused)
+			}
+			if !recorded.Load() {
+				t.Fatalf("the token did not record its fee coin:\n%s", errw)
+			}
+			if r := h.must("org", "doctor"); strings.Contains(r.stdout, "pending") {
+				t.Fatalf("the home owes something:\n%s", r.stdout)
+			}
+		})
 	}
 }

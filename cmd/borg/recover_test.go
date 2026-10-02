@@ -371,6 +371,43 @@ func TestARunStoppedAfterTheTreeWasSent(t *testing.T) {
 	}
 }
 
+// A tree the node took and that then lost a double spend never mines,
+// though the node goes on serving it. The next command adopts nothing: it
+// drops the record, and the coin, spent by the other transaction, stays out
+// of the pool.
+func TestATreeThatLostADoubleSpendIsDropped(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgOnly()
+	// The tree reaches the node and is not mined.
+	h.chain.SetHoldIf(func(tx *transaction.Transaction) bool {
+		for _, p := range h.trees("org").PendingTrees {
+			if p.Tree.Txid == tx.TxID().String() {
+				return true
+			}
+		}
+		return false
+	})
+	tree, _ := h.stoppedGroup(o, true)
+	id := tree.TxID().String()
+	if h.chain.Tx(id) == nil || h.chain.Mined(id) {
+		t.Fatalf("the tree on the node %v, mined %v", h.chain.Tx(id) != nil, h.chain.Mined(id))
+	}
+	st := h.trees("stopped")
+	coin, other := st.coin(), strings.Repeat("d5", 32)
+	h.chain.SpendElsewhere(st.PendingTrees[0].Coin.TxID, st.PendingTrees[0].Coin.Vout, other)
+	said := h.settle("stopped")
+	if !strings.Contains(said, "funding tree "+id+" lost a double spend") || !strings.Contains(said, "is spent by "+other) {
+		t.Fatalf("the next command:\n%s", said)
+	}
+	if st := h.trees("stopped"); st.current(state.TreeRecord) != "" || len(st.PendingTrees) != 0 {
+		t.Fatalf("after the recovery: %+v", st)
+	}
+	if h.poolCoins("stopped")[coin] {
+		t.Fatalf("the spent coin %s is in the pool", coin)
+	}
+}
+
 // A run that stops while a tree minted ahead is on its way to the chain
 // leaves a tree no list of the home names. The next command finds it, holds
 // it as the tree minted ahead, mints no other, and the switch adopts it and
