@@ -69,6 +69,9 @@ type SyncReport struct {
 	Retired []string
 	// Unasked are the hosts that could not be asked.
 	Unasked []string
+	// Refused are the answers a host gave that did not verify: tokens,
+	// grants and wraps, each naming its host. None is used.
+	Refused []reader.Refusal
 }
 
 // Changed reports whether Sync changed the home.
@@ -177,11 +180,13 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 		rep.Unasked = append(rep.Unasked, h)
 	}
 	sort.Strings(rep.Unasked)
+	rep.Refused = append(rep.Refused, ov.Refused...)
 	if u := ov.Usable(); u < len(ov.Tokens) {
 		return nil, syncRefused("the organisation's chain folds to %s at seq %d; nothing is taken from it", ov.Statuses[u], u)
 	}
 	grants := map[[32]byte]*reader.Car{}
 	for _, ra := range rd.Roll(ctx, ov) {
+		rep.Refused = append(rep.Refused, ra.Refused...)
 		for _, car := range ra.Grants {
 			if ov.InRoll(car.Carrier.Commitment) && grants[car.Carrier.Commitment] == nil {
 				grants[car.Carrier.Commitment] = car
@@ -224,6 +229,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 		if u := gv.Usable(); u < len(gv.Tokens) {
 			return nil, syncRefused("group %s folds to %s at seq %d; nothing is taken from it", id, gv.Statuses[u], u)
 		}
+		rep.Refused = append(rep.Refused, gv.Refused...)
 		p := &groupPlan{id: id, view: gv, opened: map[uint32]reader.Opened{}, wrapped: map[string]bool{}}
 		mine := map[uint32]bool{}
 		for _, ep := range gv.EpochsOf(sk) {
@@ -234,7 +240,8 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 			held = e.St.Org.Group(id)
 		}
 		for ep, begin := range gv.Begins {
-			cars, _ := rd.Wraps(ctx, gv, ep)
+			cars, refused := rd.Wraps(ctx, gv, ep)
+			rep.Refused = append(rep.Refused, refused...)
 			wraps = append(wraps, cars...)
 			if ep == gv.Epoch() {
 				for _, car := range cars {
@@ -258,6 +265,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 				}
 			}
 			p.opened[ep] = rd.Open(ctx, sw, sk, gv, ep)
+			rep.Refused = append(rep.Refused, p.opened[ep].Refused...)
 		}
 		plans = append(plans, p)
 	}

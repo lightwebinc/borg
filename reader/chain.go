@@ -103,6 +103,31 @@ func (v *ChainView) Agree() bool {
 // ErrNoChain is a chain no host answered.
 var ErrNoChain = errors.New("reader: no host answers this chain")
 
+// NoChainError is ErrNoChain where hosts did answer tokens and none of them
+// verified: not an absence. Each is in Refused, naming its host. When every
+// answer fails the same way (unmined, say), the reader's own header source
+// is as likely the cause as the hosts. errors.Is(err, ErrNoChain) holds.
+type NoChainError struct {
+	Refused []Refusal
+	// HostErr are the hosts that could not be asked.
+	HostErr map[string]error
+	err     error
+}
+
+func (e *NoChainError) Error() string {
+	return fmt.Sprintf("%v: the hosts answered %d token(s) and none verifies against this reader's headers", e.err, len(e.Refused))
+}
+
+func (e *NoChainError) Unwrap() error { return e.err }
+
+// noChain is err, carrying the refusals when hosts answered tokens.
+func (v *ChainView) noChain(err error) error {
+	if len(v.Refused) == 0 {
+		return err
+	}
+	return &NoChainError{Refused: v.Refused, HostErr: v.HostErr, err: err}
+}
+
 func (c *Client) latestQuery(hall, org, chain string) Query {
 	if chain == ChainOrg {
 		return Query{"hall": hall, "org": org}
@@ -190,7 +215,7 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 		if len(v.HostErr) == len(c.Hosts) {
 			return v, fmt.Errorf("%w: every host failed (%v)", ErrNoChain, firstErr(v.HostErr))
 		}
-		return v, ErrNoChain
+		return v, v.noChain(ErrNoChain)
 	}
 	live := map[string]bool{}
 	for _, h := range c.Hosts {
@@ -251,7 +276,7 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 		}
 	}
 	if len(v.Tokens) == 0 {
-		return v, fmt.Errorf("%w: no seq 0 token verifies", ErrNoChain)
+		return v, v.noChain(fmt.Errorf("%w: no seq 0 token verifies", ErrNoChain))
 	}
 	for h := range v.HostErr {
 		delete(v.Lacks, h)

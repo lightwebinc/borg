@@ -211,13 +211,26 @@ type Opened struct {
 	Err   error
 	// Host is the host whose wrap opened it.
 	Host string
+	// Refused are the wraps a host answered for this member and epoch that
+	// did not verify: a carrier that breaks the carrier rules or SPV (bytes
+	// substituted or damaged), or one that is not of this epoch's token.
+	// Each names its host. What a host refused here is not used, whether
+	// or not another host's wrap opened the key: a caller names each host
+	// and treats the read as incomplete (docs/packages.md).
+	Refused []Refusal
+	// HostErr are the hosts that could not be asked.
+	HostErr map[string]error
 }
 
 // Open is the member's checks of spec section 6.4 for one epoch of a
 // group, in order: the token that began the epoch, from the reader's own
 // canonical chain; a wrap record that verifies and holds an entry for me;
-// the wallet's decryption of it; the commitment. Every host is asked until
-// one answers a wrap that opens.
+// the wallet's decryption of it; the commitment. Every host is asked, and
+// every wrap each answers is checked, after one has opened the key: a host
+// that answers what does not verify is reported in Refused beside an
+// honest one, never passed over. Host is the first host whose wrap opened
+// the key; the key a later host's wrap opens is the same key (the
+// commitment binds it).
 func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *GroupView, epoch uint32) Opened {
 	op := Opened{Epoch: epoch}
 	begin := gv.Begins[epoch]
@@ -234,19 +247,34 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 	}
 	q := Query{"hall": gv.Hall, "org": hex.EncodeToString(gv.Org), "group": gv.Chain, "epoch": fmt.Sprint(epoch), "member": hex.EncodeToString(me)}
 	op.Label, op.Err = "entry", fmt.Errorf("no host answers a wrap of epoch %d to this key", epoch)
+	opened := false
 	for _, h := range c.Hosts {
 		outs, err := c.Ask(ctx, h, q)
 		if err != nil {
+			if op.HostErr == nil {
+				op.HostErr = map[string]error{}
+			}
+			op.HostErr[h] = err
 			continue
 		}
 		for _, o := range outs {
 			car, err := c.Carrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap)
 			if err != nil {
+				op.Refused = append(op.Refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
 				continue
 			}
 			wr := car.Carrier.Wrap
 			if _, err := borgrec.CheckEpochToken(begin.Token.Record, wr); err != nil {
-				op.Label, op.Err = "token", err
+				// A wrap that verifies as a carrier and is not of this
+				// epoch's token answers another question than the one
+				// asked: the host is named.
+				op.Refused = append(op.Refused, Refusal{Host: h, Txid: car.Txid, Reason: borgrec.Reason(err), Err: err})
+				if !opened {
+					op.Label, op.Err = "token", err
+				}
+				continue
+			}
+			if opened {
 				continue
 			}
 			var entry []byte
@@ -264,7 +292,7 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 				continue
 			}
 			op.Key, op.Label, op.Err, op.Host = k, "", nil, h
-			return op
+			opened = true
 		}
 	}
 	return op

@@ -204,7 +204,10 @@ what a home runs after another instance of the tooling changed something
 machine (borg init -from). It cannot bring back the key of an epoch the
 signer key was not a member of, a grant issued and not yet admitted, or
 another home's funding trees and unpublished work; each epoch it cannot
-open is named. -retire-trees stops this home spending its current grant
+open is named. A host that answers a token, a grant or a wrap that does
+not verify is named and what it answered is not taken: the home is caught
+up from what verified, and the command is incomplete (exit 3).
+-retire-trees stops this home spending its current grant
 and record trees: use it once on a home that was copied from another.
 
 due lists the removals owed (members of a group whose grant is no longer
@@ -437,6 +440,14 @@ func (g *global) reportSync(out io.Writer, rep *engine.SyncReport) {
 	for _, h := range rep.Unasked {
 		fmt.Fprintf(out, "sync    host %s could not be asked; the chain is read from the others\n", h)
 	}
+	named := map[string]bool{}
+	for _, r := range rep.Refused {
+		if named[r.Host+" "+r.Txid] {
+			continue
+		}
+		named[r.Host+" "+r.Txid] = true
+		fmt.Fprintf(out, "sync    host %s: REFUSED %s (%s): what this host answered does not verify, so it is not used: %s\n", r.Host, r.Txid, r.Reason, field(firstLine(r.Err.Error())))
+	}
 	if !rep.Changed() && len(rep.Missing) == 0 {
 		fmt.Fprintln(out, "sync    nothing to catch up: this home holds what the hosts answer")
 		return
@@ -509,6 +520,9 @@ func (g *global) orgSync(ctx context.Context, retire bool) error {
 		if m.Current {
 			return incomplete("group %s: the key of the current epoch %d is not open here; ask again after the next block (another instance publishes its wraps one block after its token), run `borg org signer` where the key is held, or rotate the group", m.Group, m.Epoch)
 		}
+	}
+	if len(rep.Refused) > 0 {
+		return incomplete("a host answered what does not verify; it is not used, and the home is caught up from what verified")
 	}
 	return nil
 }
@@ -945,7 +959,8 @@ every host, folded here from seq 0, and its members enumerated from the
 wraps of the current epoch, whose recipients must be exactly the members
 the latest token's root names. A wrap to a key the chain never admitted
 (stray) or a member with no wrap (incomplete) is reported, and the group
-is shown as inconsistent (exit 3).`
+is shown as inconsistent (exit 3). A host that answers a wrap that does
+not verify is named, and what it answered is not used (exit 3).`
 
 func cmdGroup(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("group", groupHelp)
@@ -1084,10 +1099,7 @@ func (g *global) groupShow(ctx context.Context, name string) error {
 	}
 	gv, err := t.rd.Group(ctx, t.hall, t.org, gid)
 	if err != nil {
-		if errors.Is(err, reader.ErrNoChain) {
-			return incomplete("group %s: %v", gid, err)
-		}
-		return refused("group %s: %v", gid, err)
+		return g.chainProblem("group "+gid, err)
 	}
 	problem := g.reportChain("group "+gid, gv.ChainView)
 	tok := gv.Token
@@ -1098,7 +1110,10 @@ func (g *global) groupShow(ctx context.Context, name string) error {
 	}
 	got, refusedWraps := t.rd.Recipients(ctx, gv, gv.Epoch())
 	for _, r := range refusedWraps {
-		g.say("host %s: REFUSED wrap %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
+		g.say("host %s: REFUSED wrap %s (%s): what this host answered does not verify as a wrap of the epoch, so it is not used: %v", r.Host, r.Txid, r.Reason, r.Err)
+	}
+	if len(refusedWraps) > 0 && problem == nil {
+		problem = incomplete("a host answered a wrap that does not verify; it is not used")
 	}
 	var stray, missing []string
 	in := map[string]bool{}

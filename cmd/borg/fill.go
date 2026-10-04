@@ -54,10 +54,7 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 	f := &filler{g: g, t: t, asset: asset}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		if errors.Is(err, reader.ErrNoChain) {
-			return incomplete("the organisation: %v", err)
-		}
-		return refused("the organisation: %v", err)
+		return g.chainProblem("the organisation", err)
 	}
 	f.chain(ctx, "organisation chain", ov.ChainView)
 	f.carriers(ctx, "grant", borgrec.TxGrant, reader.Query{"hall": t.hall, "roll": hex.EncodeToString(t.org)},

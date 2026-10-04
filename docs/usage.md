@@ -68,7 +68,7 @@ variables.
 | `org remove <key>... [-group G]` | yes, the organisation's | a publisher's | with `-group`, a removal from the group (a new epoch); without, offboarding: every grant revoked by the roll and by sweep, and a removal from every group that holds the keys |
 | `org rekey <old> <new>` | yes, the organisation's | a publisher's | a member's key change: a grant to the new key, the old key's grants revoked (roll and sweep), and in every group a transition that removes the old key and adds the new one (a new epoch) |
 | `org signer` | yes, the organisation's | a publisher's | grants the organisation's signer key and adds it to every group that lacks it, so a second home can open each epoch's key |
-| `org sync [-retire-trees]` | yes, funded to go on | a publisher's, `hall` | rebuilds the home's record of the organisation from the hosts: both kinds of chain, the roll, and each epoch key from the wrap to the signer key. Exit 3 when the current epoch's key of a group is not open here |
+| `org sync [-retire-trees]` | yes, funded to go on | a publisher's, `hall` | rebuilds the home's record of the organisation from the hosts: both kinds of chain, the roll, and each epoch key from the wrap to the signer key. Exit 3 when the current epoch's key of a group is not open here, or a host answered something that does not verify (named, and not taken) |
 | `org due [-within DUR] [-apply]` | yes, the organisation's | nothing; with `-apply` a publisher's | lists the removals due (group members whose grant is no longer current; exit 3 when there is one) and the grants of group members expiring within `-within` (default 720h); `-apply` makes the removals due now |
 | `grant issue <key>` | yes, the organisation's | a publisher's | issues a grant (`-role`, `-scope`, `-admin`, `-expiry`) and admits it to the roll |
 | `grant revoke <key\|txid>...` | yes, the organisation's | a publisher's | revokes by the roll and by sweep, or one of them (`-by roll`, `-by sweep`) |
@@ -176,9 +176,9 @@ history_host = https://terms.host-a.example.com
 | Code | Meaning |
 | --- | --- |
 | 0 | done, or everything asked verified (the hosts may still disagree about a chain a key was read from; that is reported) |
-| 1 | refused: a host answered something that does not verify (it is not used), a key this home cannot open (not a member of the current epoch), a grant that is not current, a transition another one beat to the chain (`lost`), a catch-up that found a fork, or a sweep or payment the network refuses |
+| 1 | refused: a key this home cannot open (not a member of the current epoch), a paid `history` page that holds a token that does not verify (the one host asked, named), a grant that is not current, a transition another one beat to the chain (`lost`), a catch-up that found a fork, or a sweep or payment the network refuses |
 | 2 | usage, configuration, local or transport error, a quorum not met, a price over `-max-sats` or `-budget`, or a transition or sweep a leg refused that may still mine (it is kept); what was persisted is sent or published by the next command |
-| 3 | incomplete: the hosts disagree, a host could not be asked, no host answered what was asked, a host answers an older state than this home verified, verified tokens exist above the chain read (`WITHHELD`), a budget ran out before a chain was read to its end, no spend source could give positive evidence, a removal is due (`org due`), or a catch-up could not reproduce the roll or open the current epoch's key. It proves nothing either way |
+| 3 | incomplete: the hosts disagree, a host answered something that does not verify (it is named and not used), a host could not be asked, no host answered what was asked, a host answers an older state than this home verified, verified tokens exist above the chain read (`WITHHELD`), a budget ran out before a chain was read to its end, no spend source could give positive evidence, a removal is due (`org due`), or a catch-up could not reproduce the roll or open the current epoch's key. It proves nothing either way |
 
 ## A home
 
@@ -451,6 +451,16 @@ state. A chain that folds to a mismatch is
 unusable from that token on (fail closed); `commitment-reuse` and
 `rejoin-unrotated` are shown as inconsistent.
 
+A host that answers a token, a grant or a wrap that does not verify (bytes
+substituted or damaged on the way, an object that breaks the host rules,
+a wrap of another epoch than the one asked) is named (`REFUSED`), what it
+answered is not used, and the command is incomplete (exit 3): what is read
+comes from what verified, and one host at fault does not make a check
+fail. When every token the hosts answered is refused, the command names
+each one and the header source it was checked against, since a header
+source that does not answer fails every answer the same way; it never
+says that no host answers.
+
 A home remembers the latest token of each chain it verified, and refuses
 (exit 3) a host set that answers an older one: a host can withhold a
 newer token, and only a reader that remembers can tell. `open` reads
@@ -462,8 +472,13 @@ more than one host.
 every epoch: the token that began it (from the canonical chain), a wrap
 that names this key, the wallet's decryption, the commitment. A key that
 opens is kept in the home. An epoch this key was never a member of is
-named without asking. The current epoch's key not opening is exit 1, with
-the token that removed the key; no host yet answering its wrap is exit 3.
+named without asking. Every host is asked for the wrap, after one has
+opened the key, so a host that answers a wrap that does not verify is
+named beside an honest one (exit 3). The current epoch's key not opening
+is exit 1, with the token that removed the key; no host yet answering its
+wrap is exit 3, and so is a key that was a member of the epoch by the
+group's own chain when every wrap a host answered for it was refused: that
+is an absence, and the hosts are named.
 
 **`member <key>`** judges each grant: in the roll of the latest usable
 token (its inclusion path checked, else the roll folded here), a scope
@@ -546,7 +561,10 @@ it a second time.
 page is one paid question; when the budget cannot cover the next page the
 command stops and says the chain was not read to its end (exit 3). A page
 holds at most 64 tokens, an answer at most 16 MiB, and a page that holds
-tokens at or below the cursor it was asked after is refused.
+tokens at or below the cursor it was asked after is refused. A page is one
+host's paid answer, with no other host beside it: a token in it that does
+not verify is refused (exit 1), and the free `org-seq` and `group-seq`
+classes read the same tokens from every host.
 
 The payment is this home's own transaction. The host records it and its
 payee broadcasts it when it settles; this home also hands it to `settle`

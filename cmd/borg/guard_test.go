@@ -175,9 +175,16 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 		t.Fatalf("a roll given stale proofs:\n%s\n%s", r.stdout, r.stderr)
 	}
 	// With no chain source there is nothing to replace them with: nothing
-	// verifies, and nothing is taken.
+	// verifies, and nothing is taken. The hosts did answer: each answer is
+	// named, with the header source it was checked against, never "no
+	// host answers".
 	delete(h.env, "BORG_ASSET")
-	h.want(h.run("bob", "", "open", o.group), exitIncomplete, "no host answers this chain")
+	r := h.run("bob", "", "open", o.group)
+	h.want(r, exitIncomplete, "none verifies against the header source "+h.chainS.URL)
+	if !strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED token") || !strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED token") ||
+		!strings.Contains(r.stderr, "replaced only from a node (config key asset)") || strings.Contains(r.stderr, "no host answers") {
+		t.Fatalf("stale proofs and no chain source:\n%s", r.stderr)
+	}
 	h.env["BORG_ASSET"] = h.chainS.URL
 	h.a.Stale, h.b.Stale = false, false
 
@@ -209,7 +216,7 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 			}
 		}
 	})
-	r := h.must("org", "org", "remove", o.bob, "-group", o.group)
+	r = h.must("org", "org", "remove", o.bob, "-group", o.group)
 	if !strings.Contains(r.stderr, "the node's current proof") || !strings.Contains(r.stdout, "epoch 1 (a new epoch") {
 		t.Fatalf("a transition from a home with stale proofs:\n%s\n%s", r.stdout, r.stderr)
 	}

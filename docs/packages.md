@@ -50,8 +50,21 @@ any tag.
 - `Latest`, `Fresh`, `Spends`.
 - `VerifyToken`, `VerifyCarrier`, `VerifySweep`.
 - `Floor` and `RollbackError`: see below.
+- `NoChainError`: a chain whose answered tokens none verified, with each
+  refusal naming its host. `errors.Is(err, ErrNoChain)` holds for it, and
+  a caller tells it apart from an empty answer with `errors.As`.
 - `SubjectID`, `ParseGroup`, `GroupHex`.
 - What those return: `Tok`, `Car`, `Opened`, `Refusal`.
+
+`Client.Open` asks every host for the member's wrap and checks every wrap
+each answers, after one has opened the key. A wrap a host answered that
+does not verify, or that is not of the epoch asked, is in
+`Opened.Refused`, naming the host, whether or not the key opened; a host
+that could not be asked is in `Opened.HostErr`. A caller names each and
+treats the read as incomplete. When the key did not open, `Opened.Label`
+says why, as before: `entry` (no wrap to this key that verifies) and
+`token` (only wraps of another epoch) are absences when the caller's key
+was a member of the epoch by the group's chain (`GroupView.EpochsOf`).
 
 
 ### What `reader` does not do

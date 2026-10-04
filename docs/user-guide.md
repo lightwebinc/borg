@@ -385,8 +385,6 @@ Exit 1, by message:
 - `lost: its fee coin is spent by`: another home holds the same coin (a
   copied home). `borg org sync`, then run it again.
 - `not current, revoked`: the grant's revocation outpoint is spent.
-- `REFUSED`: a host answered something that does not verify. It is not
-  used, and the host is named.
 - `catching up: ... a fork`: this home and the hosts hold different mined
   tokens at one seq. Do not go on from this home; read the chain with
   `group show` and `roll` and decide which home is right.
@@ -415,6 +413,14 @@ Exit 2, by message:
 
 Exit 3, by message:
 
+- `REFUSED`: a host answered something that does not verify (bytes
+  changed, or a wrap of another epoch). It is not used, the host is named,
+  and what was read comes from the hosts whose answers verify. Ask other
+  hosts, and look at the named one.
+- `none verifies against the header source`: every token the hosts
+  answered was refused. Check `header_url` (`borg doctor`) before blaming
+  the hosts; after a reorganisation set `asset` so stale proofs are
+  replaced.
 - `DISAGREES`: a host lacks a token another answered: it is behind, or
   withholding. `borg fill`.
 - `an older state`: the hosts answer an older chain than your home

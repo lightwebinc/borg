@@ -85,8 +85,11 @@ func (g *global) reportChain(what string, v *reader.ChainView) error {
 		problem = incomplete("%d of %d host(s) answered about the %s", len(g.cfg.Hosts)-len(v.HostErr), len(g.cfg.Hosts), what)
 	}
 	for _, r := range v.Refused {
-		g.say("host %s: REFUSED token %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
-		problem = refused("a host answered a token that does not verify; it is not used")
+		g.say("host %s: REFUSED token %s (%s): what this host answered does not verify, so it is not used: %v", r.Host, r.Txid, r.Reason, r.Err)
+		// A host that answers what does not verify is a host at fault,
+		// not a check that failed on what is read: the chain is read from
+		// what verified, and the command is incomplete.
+		problem = incomplete("a host answered a token that does not verify; it is not used")
 	}
 	for h, seqs := range v.Lacks {
 		if len(seqs) == 0 {
@@ -143,13 +146,25 @@ func (f floor) See(hall, org, chain string, seq uint64, txid string) {
 }
 
 // chainProblem words a chain that could not be read: one the hosts answer
-// only below what this home verified, one no host answers, or one that
-// does not verify.
-func chainProblem(what string, err error) error {
+// only below what this home verified, one no host answers, one whose
+// answered tokens none verifies, or one that does not verify.
+func (g *global) chainProblem(what string, err error) error {
 	var back *reader.RollbackError
+	var none *reader.NoChainError
 	switch {
 	case errors.As(err, &back):
 		return incomplete("%s: the hosts answer the chain to seq %d, and this home verified seq %d (%s): an older state; ask other hosts", what, back.Answered, back.Seq, back.Txid)
+	case errors.As(err, &none):
+		// The hosts answered, and nothing they answered holds against this
+		// home's headers: as likely this home's header source as the
+		// hosts. Each answer is named, with its reason.
+		for h, e := range none.HostErr {
+			g.say("host %s: NOT ASKED: %s", h, firstLine(e.Error()))
+		}
+		for _, r := range none.Refused {
+			g.say("host %s: REFUSED token %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
+		}
+		return incomplete("%s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (borg doctor), and a proof a reorganisation displaced is replaced only from a node (config key asset)", what, len(none.Refused), g.cfg.HeaderURL)
 	case errors.Is(err, reader.ErrNoChain):
 		return incomplete("%s: %v", what, err)
 	}
@@ -188,10 +203,13 @@ spec section 6.4: the token that began the epoch (token), a wrap record
 that names this key (entry), the wallet's decryption (undecryptable), and
 the epoch's commitment (commitment). A key that opens is kept in the home,
 so later reads need no host. An epoch this key was never a member of is
-named and not asked about.
+named and not asked about. Every host is asked for every wrap, after one
+has opened the key: a host that answers a wrap that does not verify, or
+one of another epoch, is named and what it answered is not used.
 
 Exit 0 when the current epoch's key is held, 1 when this key cannot open it
-(it is not a member: never added, or removed), 3 when no host answered.
+(it is not a member: never added, or removed), 3 when no host answered, or
+a host answered a token or a wrap that does not verify (it is named).
 
 -write is a writer's check (spec section 6.5): positive evidence, at most
 freshness old (default 60s), that the group's latest token is the latest:
@@ -229,7 +247,7 @@ func cmdOpen(ctx context.Context, g *global, args []string) error {
 	t.rd.Floor = floor{h.st}
 	gv, err := t.rd.Group(ctx, t.hall, t.org, gid)
 	if err != nil {
-		return chainProblem("group "+gid, err)
+		return g.chainProblem("group "+gid, err)
 	}
 	problem := g.reportChain("group "+gid, gv.ChainView)
 	orgHex := hex.EncodeToString(t.org)
@@ -243,7 +261,7 @@ func cmdOpen(ctx context.Context, g *global, args []string) error {
 	for _, e := range gv.EpochsOf(me) {
 		mine[e] = true
 	}
-	var curErr error
+	var curErr, wrapErr error
 	for e := uint32(0); e <= cur; e++ {
 		if gv.Begins[e] == nil {
 			continue
@@ -262,12 +280,26 @@ func cmdOpen(ctx context.Context, g *global, args []string) error {
 			continue
 		}
 		op := t.rd.Open(ctx, h.e.Signer(), me, gv, e)
+		for _, r := range op.Refused {
+			g.say("host %s: REFUSED wrap %s of epoch %d (%s): what this host answered is not this key's wrap of the epoch, so it is not used: %v", r.Host, r.Txid, e, r.Reason, r.Err)
+		}
+		if len(op.Refused) > 0 && wrapErr == nil {
+			wrapErr = incomplete("a host answered a wrap that does not verify, or is not of the epoch asked; it is not used")
+		}
 		if op.Label != "" {
 			fmt.Fprintf(g.stdout, "epoch   %d CANNOT OPEN (%s): %s\n", e, op.Label, field(firstLine(op.Err.Error())))
 			if e == cur {
-				if op.Label == "entry" {
+				switch {
+				case op.Label == "entry" && len(op.Refused) > 0, op.Label == "token":
+					// This key was a member of the epoch by the group's
+					// own chain, so its wrap exists: no host answered one
+					// that verifies. An absence, which names the hosts
+					// that answered what does not verify, and proves
+					// nothing about the key.
+					curErr = incomplete("this key was a member of epoch %d by the group's own chain, and no host answers a wrap of epoch %d to this key that verifies: %d answer(s) refused, each named above; ask other hosts", e, e, len(op.Refused))
+				case op.Label == "entry":
 					curErr = incomplete("no host answers a wrap of epoch %d to this key yet: the organisation publishes it after the token mines; ask again", e)
-				} else {
+				default:
 					curErr = refused("epoch %d does not open (%s): %v", e, op.Label, op.Err)
 				}
 			}
@@ -294,13 +326,18 @@ func cmdOpen(ctx context.Context, g *global, args []string) error {
 	}
 	if problem != nil {
 		var ee *exitError
-		if errors.As(problem, &ee) && ee.code == exitIncomplete && len(gv.Beyond()) == 0 {
+		if errors.As(problem, &ee) && ee.code == exitIncomplete && len(gv.Beyond()) == 0 && len(gv.Refused) == 0 {
 			// The key opened from the canonical chain: the disagreement is
 			// reported, and does not undo it. Tokens withheld above the
 			// chain read are not a disagreement: the epoch opened may not
-			// be the current one, and the command is incomplete.
-			return nil
+			// be the current one, and the command is incomplete. Nor is a
+			// host that answered what does not verify: it is named, and
+			// the command is incomplete.
+			problem = nil
 		}
+	}
+	if problem == nil {
+		problem = wrapErr
 	}
 	return problem
 }
@@ -365,7 +402,8 @@ folded from seq 0 against this home's headers; then the roll class from
 every host, all pages, every grant verified (the carrier rules, its
 certificate, its reveal), and the root of the commitments each host
 answered compared with the latest token's roll. A root that differs means
-the host withheld or added a grant (exit 3). Each grant is judged: in the
+the host withheld or added a grant (exit 3), and a host that answers a
+grant that does not verify is named (exit 3). Each grant is judged: in the
 roll, scope grants member, not expired, revealed unless the organisation is
 opaque, and its revocation outpoint unspent per the node (asset). Every
 field someone else wrote is filtered before it reaches the terminal.`
@@ -383,10 +421,7 @@ func cmdRoll(ctx context.Context, g *global, args []string) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		if errors.Is(err, reader.ErrNoChain) {
-			return incomplete("the organisation: %v", err)
-		}
-		return refused("the organisation: %v", err)
+		return g.chainProblem("the organisation", err)
 	}
 	problem := g.reportChain("organisation chain", ov.ChainView)
 	fmt.Fprintf(g.stdout, "org     %s %s\nlatest  seq %d %s, %d grant(s), roll %s, opaque %v\n", hex.EncodeToString(t.org), field(ov.Token.Name),
@@ -409,8 +444,8 @@ func cmdRoll(ctx context.Context, g *global, args []string) error {
 			g.say("host %s: %d grant(s), the root of seq %d reproduced", a.Host, len(a.Grants), ov.Token.Seq)
 		}
 		for _, r := range a.Refused {
-			g.say("host %s: REFUSED grant %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
-			problem = refused("a host answered a grant that does not verify; it is not shown")
+			g.say("host %s: REFUSED grant %s (%s): what this host answered does not verify, so it is not shown: %v", r.Host, r.Txid, r.Reason, r.Err)
+			problem = incomplete("a host answered a grant that does not verify; it is not shown")
 		}
 		for _, car := range a.Grants {
 			if printed[car.Txid] {
@@ -451,8 +486,10 @@ the node. When key is this home's own, each grant is kept whole in the home
 (the certificate, never a summary of it) and its fields opened through the
 keyring the organisation encrypted to it.
 
-Exit 0 current; 1 answered and not current; 3 no host answered a grant, or
-nothing could say whether its revocation outpoint is spent.`
+Exit 0 current; 1 answered and not current; 3 no host answered a grant, a
+host could not be asked or answered a grant that does not verify (it is
+named, and not used), or nothing could say whether its revocation outpoint
+is spent.`
 
 func cmdMember(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("member", memberHelp)
@@ -473,19 +510,19 @@ func cmdMember(ctx context.Context, g *global, args []string) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		if errors.Is(err, reader.ErrNoChain) {
-			return incomplete("the organisation: %v", err)
-		}
-		return refused("the organisation: %v", err)
+		return g.chainProblem("the organisation", err)
 	}
 	problem := g.reportChain("organisation chain", ov.ChainView)
 	cars, refusedCars, errs := t.rd.GrantsOf(ctx, ov, k)
 	for h, e := range errs {
 		g.say("host %s: NOT ASKED: %s", h, firstLine(e.Error()))
+		if problem == nil {
+			problem = incomplete("a host could not be asked")
+		}
 	}
 	for _, r := range refusedCars {
-		g.say("host %s: REFUSED grant %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
-		problem = refused("a host answered a grant that does not verify; it is not shown")
+		g.say("host %s: REFUSED grant %s (%s): what this host answered does not verify, so it is not shown: %v", r.Host, r.Txid, r.Reason, r.Err)
+		problem = incomplete("a host answered a grant that does not verify; it is not shown")
 	}
 	var h *home
 	if e, err := g.openWallet(); err == nil && bytes.Equal(e.Signer().Identity.Compressed(), k) {
