@@ -493,11 +493,34 @@ lacks what the others hold, and nothing resends it: `roll`, `group show`
 and `open` report it (`DISAGREES`). `fill` repairs it from the other hosts'
 answers (spec sections 11.6 and 12). Each token a host lacks is replayed in
 the BEEF a host admits, assembled from the token and its parent (the token
-at `seq - 1`, or at `seq` 0 the chain tree, read from `asset` with its
-proof); each grant of the roll and each wrap of a group, of every epoch
+at `seq - 1`, or at `seq` 0 the chain tree with its proof); each grant of the roll and each wrap of a group, of every epoch
 some host still answers, is submitted as another host answered it. Everything is verified against
 `header_url` first, and each fill is confirmed by a lookup at the host it
 went to. Anyone who reads the hall can run it; it needs no coin.
+
+The chain tree at `seq` 0 is the one part no host keeps. Run in the
+organisation's home, `fill` takes it from the home's own record of its
+funding trees, which keeps every tree it minted with its proof, and asks
+`asset` only when the home holds no record of it. Elsewhere it asks
+`asset`, which may have dropped the tree: a node can prune a transaction
+whose outputs are all spent, and each chain tree output is spent by a
+chain's first token. A tree taken from the home is checked as the node's
+answer would be: its txid must be the one the token spends, its proof must
+verify against `header_url` (a proof a reorganisation left stale is
+replaced by the node's current one when the node gives one), and the
+token's BEEF must pass the host's rules. A record whose bytes are another
+transaction is named (`REFUSED`) and not used. A second home records each
+chain tree, with its proof, when `org sync` first takes a chain, while the
+node still answers it; a home made by `org sync` before borg v0.1.6 holds
+no such record. When neither the home nor the node supplies the tree,
+`fill` names it and exits 3:
+
+```text
+organisation chain seq 0 <txid>: cannot assemble its BEEF: its chain tree <txid>: this home keeps no record of it (a home made by org sync before borg v0.1.6 does not), and the node does not answer it with a proof that makes the token's BEEF (a node drops a fully spent transaction, and no host keeps a chain tree); run borg fill from the organisation's home that published the chain
+```
+
+From a home that is not the organisation's, the message says `this home is
+not the organisation's` in place of the first clause.
 
 On the plane the organisation's own tooling does part of this as it
 publishes: an object is submitted once to the facade, then looked for at

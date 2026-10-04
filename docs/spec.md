@@ -1352,8 +1352,14 @@ stands. A replayer assembles each token's BEEF itself: the token from the
 `org-seq` or `group-seq` answer at `seq`, and its parent from the answer at
 `seq - 1`; at `seq` 0 the parent is the chain tree, which no host keeps, so
 it comes from the publisher or from a chain source by its txid, with its
-proof. Tokens, carriers and sweeps are self-verifying and may be replayed in
-any order; replaying in `seq` order only spares the host its `pending`
+proof. A chain source may drop a transaction once all its outputs are
+spent, and a chain tree is fully spent once each of its outputs paid for a
+chain's first token, so the publisher's own record of the tree is what
+lasts. Which of the two a replayer asks first is its own choice; either way
+the tree is held to the same checks: its txid is the one the token's input
+names, its proof verifies against the replayer's headers, and the assembled
+BEEF passes section 11.1. Tokens, carriers and sweeps are self-verifying
+and may be replayed in any order; replaying in `seq` order only spares the host its `pending`
 interval.
 
 A host MUST NOT enable an unordered synchronisation of unspent outputs for

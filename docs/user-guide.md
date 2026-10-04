@@ -259,6 +259,13 @@ epoch a host still answers. Everything is verified against your headers
 before it is sent and confirmed by a lookup afterwards. Run it again:
 `filled  0 object(s)` means the hosts agree.
 
+A chain's first token needs its chain tree, which no host keeps and a node
+may have dropped once all its outputs were spent. The organisation's home
+keeps it: run `fill` there and the tree comes from the home, checked like
+anything else. From any other home, a host missing a chain's first token
+can be filled only while the node still answers its tree; otherwise `fill`
+names the tree and asks you to run it from the organisation's home.
+
 ## 11. A second home: `sync`
 
 An organisation is one identity key, and more than one home can hold it: a
