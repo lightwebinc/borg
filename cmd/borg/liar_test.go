@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/lightwebinc/borg/borgrec"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // lie answers a class with one byte of every output's BEEF changed: a host
@@ -167,4 +169,79 @@ func TestAHostSubstitutingATokenOrAGrantIsNamed(t *testing.T) {
 	}
 	h.b.Rewrite = nil
 	h.must("org", "org", "sync")
+}
+
+// flood answers a class with every output repeated n times: a host that
+// fits thousands of copies of one object into an answer within its byte
+// bound.
+func flood(n int, classes ...string) func(q *borgrec.Question, outs []testOutput) []testOutput {
+	return func(q *borgrec.Question, outs []testOutput) []testOutput {
+		hit := false
+		for _, c := range classes {
+			hit = hit || q.Class.Name == c
+		}
+		if !hit {
+			return outs
+		}
+		var many []testOutput
+		for _, o := range outs {
+			for range n {
+				many = append(many, o)
+			}
+		}
+		return many
+	}
+}
+
+// A hall host that answers a member more wraps (or grants) than a page
+// holds is at fault: only a page of its answer is read, the host is named,
+// and the read is incomplete (exit 3). The key still opens from an honest
+// host, and the copies are not each verified again.
+func TestAHostFloodingAnAnswerIsNamed(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.b.Rewrite = flood(300, "wrap", "member")
+	r := h.run("alice", "", "open", o.group)
+	if r.code != exitIncomplete || !strings.Contains(r.stdout, "epoch   0 OPENED from "+h.aS.URL) ||
+		!strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED wrap (300 outputs to one question) of epoch 0 (overfull)") ||
+		strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED") {
+		t.Fatalf("open, one hall host flooding a wrap answer: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	g, _, _ := h.global("alice")
+	rd, err := g.reader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	org, _ := hex.DecodeString(o.key)
+	gv, err := rd.Group(ctx, h.hall, org, o.group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := g.openWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := rd.Open(ctx, e.Signer(), e.Signer().Identity.Compressed(), gv, 0)
+	if op.Label != "" || op.Host != h.aS.URL || len(op.Refused) != 1 || op.Refused[0].Host != h.bS.URL ||
+		!errors.Is(op.Refused[0].Err, reader.ErrOverfull) {
+		t.Fatalf("reader.Open, one host flooding: label %q host %q refused %+v", op.Label, op.Host, op.Refused)
+	}
+	// The member class is capped the same way.
+	r = h.run("alice", "", "member", o.alice)
+	if r.code != exitIncomplete || !strings.Contains(r.stdout, "CURRENT member") ||
+		!strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED grant (300 outputs to one question) (overfull)") {
+		t.Fatalf("member, one hall host flooding a grant answer: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	// Every host floods: nothing past a page is read, both are named, and
+	// the wrap of a page still opens the key.
+	h.a.Rewrite = flood(300, "wrap")
+	r = h.run("bob", "", "open", o.group)
+	if r.code != exitIncomplete || !strings.Contains(r.stdout, "OPENED") ||
+		!strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED wrap") || !strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED wrap") {
+		t.Fatalf("open, every hall host flooding: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.a.Rewrite, h.b.Rewrite = nil, nil
+	h.must("carol", "open", o.group)
 }

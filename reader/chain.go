@@ -196,7 +196,11 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 			continue
 		}
 		v.HostLatest[h] = 0
-		for _, o := range capOutputs(outs, limits.SeqAnswers) {
+		outs, over := capAnswer(h, outs, limits.SeqAnswers)
+		if over != nil {
+			v.Refused = append(v.Refused, *over)
+		}
+		for _, o := range outs {
 			t := verify(h, o, nil)
 			if t == nil {
 				continue
@@ -234,7 +238,11 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 				continue
 			}
 			holds[h] = map[string]bool{}
-			for _, o := range capOutputs(outs, limits.SeqAnswers) {
+			outs, over := capAnswer(h, outs, limits.SeqAnswers)
+			if over != nil {
+				v.Refused = append(v.Refused, *over)
+			}
+			for _, o := range outs {
 				t := verify(h, o, &s)
 				if t == nil {
 					continue
@@ -288,14 +296,6 @@ func (c *Client) Chain(ctx context.Context, hall string, org []byte, chain strin
 		}
 	}
 	return v, nil
-}
-
-// capOutputs is at most n of a host's answered outputs.
-func capOutputs(outs []lookup.Output, n int) []lookup.Output {
-	if len(outs) > n {
-		return outs[:n]
-	}
-	return outs
 }
 
 func firstErr(m map[string]error) error {

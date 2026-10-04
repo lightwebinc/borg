@@ -453,7 +453,8 @@ unusable from that token on (fail closed); `commitment-reuse` and
 
 A host that answers a token, a grant or a wrap that does not verify (bytes
 substituted or damaged on the way, an object that breaks the host rules,
-a wrap of another epoch than the one asked) is named (`REFUSED`), what it
+a wrap of another epoch than the one asked, more outputs to one question
+than a page holds) is named (`REFUSED`), what it
 answered is not used, and the command is incomplete (exit 3): what is read
 comes from what verified, and one host at fault does not make a check
 fail. When every token the hosts answered is refused, the command names

@@ -17,6 +17,7 @@ package reader
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -134,12 +135,67 @@ func (c *Client) Held(ctx context.Context, host string, q Query, txid string) (b
 	if err != nil {
 		return false, err
 	}
+	if len(outs) > pageOutputs {
+		return false, overfull(len(outs))
+	}
 	for _, o := range outs {
 		if SubjectID(o.Beef) == txid {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// ErrOverfull is an answer to one question that holds more outputs than a
+// page of this contract may (pageOutputs): a host fault. Only the first
+// pageOutputs are read, and the host is named.
+var ErrOverfull = errors.New("reader: the host answered more outputs than a page holds")
+
+// ErrTruncated is a paged answer the reader cut (Pages): what the host
+// answered past the cut is not read.
+var ErrTruncated = errors.New("reader: the host's answer was cut at the reader's bound (a page over the bound, a walk too long, or a host repeating itself); what it answered past the cut is not read")
+
+func overfull(n int) error { return overBound(n, pageOutputs) }
+
+func overBound(n, bound int) error {
+	return fmt.Errorf("%w: %d outputs to one question, over the bound of %d; only %d are read", ErrOverfull, n, bound, bound)
+}
+
+// capAnswer bounds one unpaged answer at bound outputs: an answer over it
+// is cut, and a Refusal names the host.
+func capAnswer(host string, outs []lookup.Output, bound int) ([]lookup.Output, *Refusal) {
+	if len(outs) <= bound {
+		return outs, nil
+	}
+	return outs[:bound], &Refusal{Host: host, Txid: fmt.Sprintf("(%d outputs to one question)", len(outs)), Reason: "overfull", Err: overBound(len(outs), bound)}
+}
+
+// verdicts remembers what one call verified, by the exact bytes of each
+// answered BEEF: the same bytes verify the same way against the same
+// headers, so a copy is not verified again. A copy from a host already
+// named for those bytes is skipped; from another host it takes the
+// verdict, and a refusal names that host too.
+type verdicts map[[32]byte]*verdict
+
+type verdict struct {
+	car   *Car
+	err   error
+	hosts map[string]bool
+}
+
+// carrier is Client.Carrier once per distinct BEEF. again is set when the
+// bytes were already verified in this call, sameHost when this host
+// answered them before.
+func (v verdicts) carrier(ctx context.Context, c *Client, host string, beef []byte, hall string, want borgrec.TxKind) (car *Car, again, sameHost bool, err error) {
+	k := sha256.Sum256(beef)
+	if x := v[k]; x != nil {
+		sameHost = x.hosts[host]
+		x.hosts[host] = true
+		return x.car, true, sameHost, x.err
+	}
+	car, err = c.Carrier(ctx, beef, hall, want)
+	v[k] = &verdict{car: car, err: err, hosts: map[string]bool{host: true}}
+	return car, false, false, err
 }
 
 // Refusal is an answered output that did not verify.

@@ -66,6 +66,14 @@ says why, as before: `entry` (no wrap to this key that verifies) and
 `token` (only wraps of another epoch) are absences when the caller's key
 was a member of the epoch by the group's chain (`GroupView.EpochsOf`).
 
+An answer to one unpaged question that holds more outputs than a page
+(128), or more than 16 tokens to one seq, is a host fault: only the bound
+is read, and a `Refusal` names the host (`ErrOverfull`), in
+`Opened.Refused`, the refusals of `GrantsOf` and `ChainView.Refused`. A
+paged walk cut at the reader's bound is a `Refusal` of `Wraps` and an
+error of `GroupsOf` and `GroupsAll` (`ErrTruncated`). The same BEEF bytes
+answered again in one call are not verified again.
+
 
 ### What `reader` does not do
 

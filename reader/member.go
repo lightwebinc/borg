@@ -118,19 +118,31 @@ func (c *Client) GrantsOf(ctx context.Context, ov *OrgView, k []byte) ([]*Car, [
 	var refused []Refusal
 	errs := map[string]error{}
 	seen := map[string]bool{}
+	vs := verdicts{}
 	for _, h := range c.Hosts {
 		outs, err := c.Ask(ctx, h, q)
 		if err != nil {
 			errs[h] = err
 			continue
 		}
+		outs, over := capAnswer(h, outs, pageOutputs)
+		if over != nil {
+			refused = append(refused, *over)
+		}
 		for _, o := range outs {
-			car, err := c.Carrier(ctx, o.Beef, ov.Hall, borgrec.TxGrant)
+			car, again, sameHost, err := vs.carrier(ctx, c, h, o.Beef, ov.Hall, borgrec.TxGrant)
+			if sameHost {
+				continue
+			}
 			if err == nil && (!bytes.Equal(car.Carrier.Grant.Org, ov.Org) || !bytes.Equal(car.Carrier.Grant.Subject, k)) {
 				err = errors.New("reader: the grant is not the organisation's grant to this key")
 			}
 			if err != nil {
 				refused = append(refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
+				continue
+			}
+			if again {
+				// The same bytes another host answered: already taken.
 				continue
 			}
 			car.Context = o.Context
@@ -176,12 +188,13 @@ type RollAnswer struct {
 func (c *Client) Roll(ctx context.Context, ov *OrgView) []RollAnswer {
 	q := Query{"hall": ov.Hall, "roll": hex.EncodeToString(ov.Org)}
 	var out []RollAnswer
+	vs := verdicts{}
 	for _, h := range c.Hosts {
 		ho := c.Pages(ctx, h, q, true, func(o lookup.Output) string { return SubjectID(o.Beef) })
 		ra := RollAnswer{Host: h, Err: ho.Err, Truncated: ho.Truncated}
 		var cs [][32]byte
 		for _, o := range ho.Outputs {
-			car, err := c.Carrier(ctx, o.Beef, ov.Hall, borgrec.TxGrant)
+			car, _, _, err := vs.carrier(ctx, c, h, o.Beef, ov.Hall, borgrec.TxGrant)
 			if err == nil && !bytes.Equal(car.Carrier.Grant.Org, ov.Org) {
 				err = errors.New("reader: another organisation's grant")
 			}
@@ -248,6 +261,7 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 	q := Query{"hall": gv.Hall, "org": hex.EncodeToString(gv.Org), "group": gv.Chain, "epoch": fmt.Sprint(epoch), "member": hex.EncodeToString(me)}
 	op.Label, op.Err = "entry", fmt.Errorf("no host answers a wrap of epoch %d to this key", epoch)
 	opened := false
+	vs := verdicts{}
 	for _, h := range c.Hosts {
 		outs, err := c.Ask(ctx, h, q)
 		if err != nil {
@@ -257,8 +271,19 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 			op.HostErr[h] = err
 			continue
 		}
+		// A host answers a member at most a few wraps of an epoch: an
+		// answer over a page is a host fault, named, and only a page of
+		// it is read.
+		outs, over := capAnswer(h, outs, pageOutputs)
+		if over != nil {
+			op.Refused = append(op.Refused, *over)
+		}
 		for _, o := range outs {
-			car, err := c.Carrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap)
+			car, again, sameHost, err := vs.carrier(ctx, c, h, o.Beef, gv.Hall, borgrec.TxWrap)
+			if sameHost {
+				// The same bytes this host answered before: judged.
+				continue
+			}
 			if err != nil {
 				op.Refused = append(op.Refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
 				continue
@@ -274,7 +299,9 @@ func (c *Client) Open(ctx context.Context, w wallet.Interface, me []byte, gv *Gr
 				}
 				continue
 			}
-			if opened {
+			if opened || again {
+				// again: the same bytes another host answered, already
+				// tried for this key.
 				continue
 			}
 			var entry []byte
@@ -309,11 +336,18 @@ func (c *Client) Wraps(ctx context.Context, gv *GroupView, epoch uint32) ([]*Car
 		return nil, nil
 	}
 	seen := map[string]bool{}
+	vs := verdicts{}
 	q := Query{"hall": gv.Hall, "org": hex.EncodeToString(gv.Org), "group": gv.Chain, "epoch": fmt.Sprint(epoch)}
 	for _, h := range c.Hosts {
 		ho := c.Pages(ctx, h, q, true, func(o lookup.Output) string { return SubjectID(o.Beef) })
+		if ho.Truncated {
+			// A page over the bound, a walk over its bytes or pages, or a
+			// host repeating itself: what it answered past the cut is not
+			// read, and the host is named.
+			refused = append(refused, Refusal{Host: h, Txid: "(answer cut)", Reason: "truncated", Err: ErrTruncated})
+		}
 		for _, o := range ho.Outputs {
-			car, err := c.Carrier(ctx, o.Beef, gv.Hall, borgrec.TxWrap)
+			car, _, _, err := vs.carrier(ctx, c, h, o.Beef, gv.Hall, borgrec.TxWrap)
 			if err == nil {
 				_, err = borgrec.CheckEpochToken(begin.Token.Record, car.Carrier.Wrap)
 			}
@@ -372,6 +406,9 @@ func (c *Client) groupIDs(ctx context.Context, hall string, org []byte, q Query)
 		if ho.Err != nil {
 			errs[h] = ho.Err
 			continue
+		}
+		if ho.Truncated {
+			errs[h] = ErrTruncated
 		}
 		for _, o := range ho.Outputs {
 			t, err := c.Token(ctx, o.Beef, hall, org)

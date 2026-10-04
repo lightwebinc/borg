@@ -199,6 +199,34 @@ func TestAnAnswerIsBounded(t *testing.T) {
 	}
 }
 
+// An unpaged answer over a page is a host fault: cut, and the host named.
+// Held does not scan it.
+func TestAnAnswerOverAPageIsNamed(t *testing.T) {
+	outs := make([]lookup.Output, 2000)
+	got, over := capAnswer("h", outs, pageOutputs)
+	if len(got) != pageOutputs || over == nil || over.Host != "h" || !errors.Is(over.Err, ErrOverfull) {
+		t.Fatalf("an answer of 2000: %d read, refusal %+v", len(got), over)
+	}
+	if got, over = capAnswer("h", outs[:pageOutputs], pageOutputs); len(got) != pageOutputs || over != nil {
+		t.Fatalf("an answer of a page: %d read, refusal %+v", len(got), over)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"type":"output-list","outputs":[`))
+		for i := 0; i < 2000; i++ {
+			if i > 0 {
+				_, _ = w.Write([]byte(","))
+			}
+			_, _ = w.Write([]byte(`{"beef":[1,2,3],"outputIndex":0}`))
+		}
+		_, _ = w.Write([]byte(`]}`))
+	}))
+	defer srv.Close()
+	if ok, err := (&Client{}).Held(context.Background(), srv.URL, Query{}, "00"); ok || !errors.Is(err, ErrOverfull) {
+		t.Fatalf("Held over a page: %v, %v", ok, err)
+	}
+}
+
 // source answers a chain source's current proof of one transaction.
 type source struct {
 	mp  *transaction.MerklePath
