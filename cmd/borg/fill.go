@@ -6,15 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/bsv-blockchain/go-sdk/transaction"
 
+	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/lookup"
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
+	"github.com/lightwebinc/borg/internal/state"
 	"github.com/lightwebinc/borg/internal/unicast"
 	"github.com/lightwebinc/borg/reader"
 )
@@ -27,7 +30,9 @@ organisation's chain, the grants of its roll, and for each group (every
 group any host answers, or those named) its chain and the wraps of every
 epoch a host still answers. Each token is replayed in the BEEF a host admits, assembled
 here from the token and its parent (the token at seq - 1, or at seq 0 the
-chain tree, read from the node: config key asset); each carrier is
+chain tree: from this home when it is the organisation's home that keeps
+the tree, else from the node, config key asset, which drops a fully spent
+transaction; the tree is checked either way); each carrier is
 submitted as another host answered it, once it verifies here. Everything is
 checked against this home's headers before it is sent, and each fill is
 confirmed by a lookup at the host it was sent to. Needs no coin and signs
@@ -52,6 +57,11 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	f := &filler{g: g, t: t, asset: asset}
+	if w, err := g.openWallet(); err == nil {
+		if st, err := state.Load(g.cfg.Home, w.Signer().IdentityHex()); err == nil && st.Org != nil && st.Identity == hex.EncodeToString(t.org) {
+			f.home = st
+		}
+	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
 		return g.chainProblem("the organisation", err)
@@ -111,6 +121,9 @@ type filler struct {
 		TxRaw(ctx context.Context, txid string) ([]byte, error)
 		MerkleProof(ctx context.Context, txid string) (*transaction.MerklePath, error)
 	}
+	// home is the organisation's home state when fill runs in it: the
+	// chain trees it keeps are taken before the node is asked.
+	home        *state.State
 	filled      int
 	hostsFilled map[string]bool
 	problem     bool
@@ -173,35 +186,98 @@ func (f *filler) chain(ctx context.Context, what string, v *reader.ChainView) {
 // and its parent, each with its minimal proof, held to the host's rules.
 func (f *filler) tokenBEEF(ctx context.Context, v *reader.ChainView, s uint64) ([]byte, error) {
 	tok := v.Tokens[s]
-	var parent *transaction.Transaction
 	if s > 0 {
-		parent = v.Tokens[s-1].Tx
-	} else {
-		// The chain tree: the transaction the token's chain input spends,
-		// which no host keeps; read from the node with its proof.
+		return f.assemble(ctx, v.Hall, tok.Tx, v.Tokens[s-1].Tx)
+	}
+	// The chain tree: the transaction the token's chain input spends,
+	// which no host keeps. The organisation's home that published the
+	// chain keeps it with its proof, and is asked first; the node is
+	// asked after, since a node drops a fully spent transaction.
+	var refused []string
+	if f.home != nil {
 		for _, in := range tok.Tx.Inputs {
 			id := in.SourceTXID.String()
-			raw, err := f.asset.TxRaw(ctx, id)
-			if err != nil {
+			rec, _, ok := f.home.TreeOf(id)
+			if !ok {
 				continue
 			}
-			tx, err := guard.ParseTransaction(raw, guard.DefaultBound)
-			if err != nil || tx.TxID().String() != id {
-				continue
-			}
-			mp, err := f.asset.MerkleProof(ctx, id)
-			if err != nil {
-				continue
-			}
-			tx.MerklePath = mp
-			cand, err := f.assemble(ctx, v.Hall, tok.Tx, tx)
+			tx, err := f.homeTree(ctx, id, rec)
 			if err == nil {
-				return cand, nil
+				var cand []byte
+				if cand, err = f.assemble(ctx, v.Hall, tok.Tx, tx); err == nil {
+					return cand, nil
+				}
 			}
+			refused = append(refused, fmt.Sprintf("this home's record of the chain tree %s is REFUSED: %v", id, err))
 		}
-		return nil, errors.New("no input's transaction, read from the node with its proof, is its chain tree")
 	}
-	return f.assemble(ctx, v.Hall, tok.Tx, parent)
+	for _, in := range tok.Tx.Inputs {
+		id := in.SourceTXID.String()
+		raw, err := f.asset.TxRaw(ctx, id)
+		if err != nil {
+			continue
+		}
+		tx, err := guard.ParseTransaction(raw, guard.DefaultBound)
+		if err != nil || tx.TxID().String() != id {
+			continue
+		}
+		mp, err := f.asset.MerkleProof(ctx, id)
+		if err != nil {
+			continue
+		}
+		tx.MerklePath = mp
+		cand, err := f.assemble(ctx, v.Hall, tok.Tx, tx)
+		if err == nil {
+			return cand, nil
+		}
+	}
+	tree := "its chain tree"
+	if len(tok.Tx.Inputs) > 0 {
+		tree = "its chain tree " + tok.Tx.Inputs[0].SourceTXID.String()
+	}
+	const node = "and the node does not answer it with a proof that makes the token's BEEF (a node drops a fully spent transaction, and no host keeps a chain tree)"
+	switch {
+	case len(refused) > 0:
+		return nil, fmt.Errorf("%s; %s", strings.Join(refused, "; "), node)
+	case f.home == nil:
+		return nil, fmt.Errorf("%s: this home is not the organisation's, %s; run borg fill from the organisation's home that published the chain", tree, node)
+	default:
+		return nil, fmt.Errorf("%s: this home keeps no record of it (a home made by org sync before borg v0.1.6 does not), %s; run borg fill from the organisation's home that published the chain", tree, node)
+	}
+}
+
+// homeTree is the chain tree id as the home's record keeps it, held to
+// what the node's answer would be held to: its bytes are the transaction
+// the token spends, and its proof verifies against this home's headers. A
+// kept proof that no longer verifies (a reorganisation) is replaced by the
+// node's current one when the node answers; the home is not written.
+func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*transaction.Transaction, error) {
+	tx, err := funding.Rebuild(rec.RawHex, rec.BumpHex, rec.BeefHex)
+	if err != nil {
+		return nil, fmt.Errorf("it does not parse: %w", err)
+	}
+	if got := tx.TxID().String(); got != id {
+		return nil, fmt.Errorf("its bytes are transaction %s, not the token's parent", got)
+	}
+	if tx.MerklePath != nil {
+		ok, err := tx.MerklePath.Verify(ctx, tx.TxID(), f.t.rd.Headers)
+		if err != nil {
+			return nil, fmt.Errorf("checking its proof against the header source: %w", err)
+		}
+		if ok {
+			return tx, nil
+		}
+	}
+	mp, err := f.asset.MerkleProof(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one: %w", err)
+	}
+	if ok, err := mp.Verify(ctx, tx.TxID(), f.t.rd.Headers); err != nil || !ok {
+		return nil, errors.New("neither its kept proof nor the node's current one verifies against the header source")
+	}
+	f.g.say("chain tree %s: the proof this home kept does not verify against the header source; the node's current proof, at height %d, is used", engine.Short(id), mp.BlockHeight)
+	tx.MerklePath = mp
+	return tx, nil
 }
 
 func (f *filler) assemble(ctx context.Context, hall string, token, parent *transaction.Transaction) ([]byte, error) {

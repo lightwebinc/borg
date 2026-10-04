@@ -14,6 +14,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
+	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/producer"
 
 	"github.com/lightwebinc/borg/borgrec"
@@ -283,6 +284,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 		return nil, err
 	}
 	rep.OrgTokens, rep.Displaced = n, d
+	e.keepChainTree(ctx, o.Tokens)
 	for _, p := range plans {
 		g := o.Group(p.id)
 		if g == nil {
@@ -297,6 +299,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 		}
 		rep.GroupTokens += n
 		rep.Displaced += d
+		e.keepChainTree(ctx, g.Tokens)
 		// An epoch this home held whose token is no longer in the chain
 		// goes with its token.
 		g.Epochs = slices.DeleteFunc(g.Epochs, func(ep state.Epoch) bool {
@@ -543,6 +546,56 @@ func (e *Engine) syncTrees(ctx context.Context, grants map[[32]byte]*reader.Car,
 		}
 		ts.Trees = producer.Index(ts.Trees, t)
 	}
+}
+
+// keepChainTree records the chain tree a chain's seq 0 token spends, read
+// from the node with its proof, when this home keeps no record of it: the
+// organisation's other home minted it. No host keeps a chain tree and a
+// node drops a fully spent transaction, so fill replays the first token
+// from this record (spec section 11.6). Nothing is spent from it. A node
+// that does not answer leaves the home as it was.
+func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
+	if len(tokens) == 0 || tokens[0].Parent == "" {
+		return
+	}
+	id := tokens[0].Parent
+	if _, _, ok := e.St.TreeOf(id); ok {
+		return
+	}
+	tok, err := rebuild(&tokens[0])
+	if err != nil || len(tok.Inputs) == 0 || tok.Inputs[0].SourceTXID == nil || tok.Inputs[0].SourceTXID.String() != id {
+		return
+	}
+	raw, err := e.Legs.Asset.TxRaw(ctx, id)
+	if err != nil {
+		return
+	}
+	tree, err := guard.ParseTransaction(raw, guard.DefaultBound)
+	if err != nil || tree.TxID().String() != id {
+		return
+	}
+	mp, err := e.Legs.Asset.MerkleProof(ctx, id)
+	if err != nil {
+		return
+	}
+	if ok, err := mp.Verify(ctx, tree.TxID(), e.Legs.Headers); err != nil || !ok {
+		return
+	}
+	idx := int(tok.Inputs[0].SourceTxOutIndex)
+	if idx >= len(tree.Outputs) || tree.Outputs[idx].LockingScript == nil {
+		return
+	}
+	lock := tree.Outputs[idx].LockingScript
+	count := uint32(0)
+	for _, o := range tree.Outputs {
+		if o.LockingScript != nil && bytes.Equal(*o.LockingScript, *lock) {
+			count++
+		}
+	}
+	ts := e.St.Set(state.TreeChain)
+	ts.Trees = append(ts.Trees, funding.Tree{IdentityKeyHex: e.Signer.IdentityHex(), Txid: id, RawHex: tree.Hex(),
+		BumpHex: mp.Hex(), Height: mp.BlockHeight, Sats: tree.Outputs[idx].Satoshis, Count: count, Next: count,
+		Funder: "another instance"})
 }
 
 // keepForeignTree records the funding tree of a carrier another instance
