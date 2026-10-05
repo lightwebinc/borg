@@ -47,7 +47,13 @@ any tag.
   `Client.Source` (a `ChainSource`; bcommon's `nodeapi.Asset` is one).
 - `ChainView` (with `Beyond`: the verified tokens above the chain read),
   `GroupView`, `NewGroupView`.
-- `Latest`, `Fresh`, `Spends`.
+- `Latest`, `Fresh`, `Spends`. `Latest` takes unspent only on a spend
+  source's `""` with a nil error; with bcommon's `nodeapi.Asset` that is
+  the node's status `OK`, and every other answer is an error wrapping
+  `nodeapi.ErrSpendUnknown`, which is no evidence.
+- `QuietSpend`: a spend source's error with the names the node chose left
+  out of its text (a short status word kept), for printing; `errors.Is`
+  still holds.
 - `VerifyToken`, `VerifyCarrier`, `VerifySweep`.
 - `Floor` and `RollbackError`: see below.
 - `NoChainError`: a chain whose answered tokens none verified, with each

@@ -899,6 +899,7 @@ func (e *Engine) FinishTransition(ctx context.Context) error {
 // the transition is kept, unless another transaction spends its fee coin.
 func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why string, payer *producer.Payer) error {
 	by, err := e.Legs.Asset.Spender(ctx, tr.Parent, tr.ParentVout)
+	err = reader.QuietSpend(err)
 	if err != nil {
 		return fmt.Errorf("%s: refused (%s), and the node could not say what spends its predecessor: %w (the next command looks again)", tr.What, why, err)
 	}

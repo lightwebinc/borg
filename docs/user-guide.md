@@ -412,6 +412,10 @@ Exit 2, by message:
 - `which the node could not show`: something spends the transition's
   predecessor and the node cannot show it yet. Nothing is discarded; run
   the command again.
+- `the node could not say what spends its predecessor`: a leg refused the
+  transition and the node does not say whether its predecessor is spent
+  (a status other than unspent or spent, as for an output it pruned or
+  could not read). Nothing is discarded; run the command again.
 - `a name is one line of plain text`: the name holds a line break or a
   control character.
 - `the transition breaks the host's rules` or `would be reported`: the
@@ -444,7 +448,9 @@ Exit 3, by message:
   again shortly.
 - `PENDING`: the same, seen by `group show`.
 - `a writer does not write`: no positive evidence that the group's latest
-  token is the latest. Check `asset`.
+  token is the latest. Check `asset`. `the node does not say whether the
+  output is spent` means the node answered neither unspent nor spent for
+  the token's output; ask again shortly.
 - `removal(s) due`: `borg org due -apply`.
 - `the key of the current epoch ... is not open here`: after `org sync`,
   the other home has not published its wraps yet, or the signer key is not

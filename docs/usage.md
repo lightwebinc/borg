@@ -551,8 +551,11 @@ token, with positive evidence at most `freshness` old (spec section 6.5).
    by a transaction not yet mined, that transaction is read from the node:
    the group's next token keeping the epoch lets the writer go on; one
    beginning an epoch, or anything else (which terminates the chain), is no
-   evidence. A node that cannot answer is no evidence: the writer fails
-   closed (exit 3).
+   evidence. Only the node's status `OK` is unspent: a node that cannot
+   answer, or answers any other status (`NOT_FOUND`, which a node also
+   answers for an output it pruned or could not read, `IMMATURE`,
+   `FROZEN`, a `SPENT` naming no spender), is no evidence, and the writer
+   fails closed (exit 3).
 
 Evidence is recorded in the home with its time and source, and reused
 while it is younger than `freshness` and names the same token. The same

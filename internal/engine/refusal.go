@@ -11,6 +11,7 @@ import (
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/internal/state"
+	"github.com/lightwebinc/borg/reader"
 )
 
 // A sweep the network will not mine is not in flight any more: waiting for
@@ -76,6 +77,7 @@ func (e *Engine) failSweep(ctx context.Context, sw *state.Sweep, why string) err
 		by, err := "", errors.New("no node is configured")
 		if e.Legs.Asset != nil {
 			by, err = e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
+			err = reader.QuietSpend(err)
 		}
 		switch {
 		case err != nil:

@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction"
+
+	"github.com/lightwebinc/bcommon/nodeapi"
 
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/vectors"
@@ -161,6 +166,50 @@ func TestLatestIsTheSpendIndex(t *testing.T) {
 	}
 }
 
+// The writer's evidence fails closed on the node's answer: only status OK
+// is unspent. Every other status, a SPENT naming no spender and a
+// transaction the node does not serve is nodeapi.ErrSpendUnknown, and no
+// evidence.
+func TestLatestFailsClosedOnAnUnknownSpend(t *testing.T) {
+	c := chain{}
+	ctx := context.Background()
+	g0 := group0()
+	t0 := token(t, g0, nil)
+	c.mine(t0)
+	tok, err := VerifyToken(ctx, stored(t, t0), vectors.Hall, vectors.Org.Pub(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cv := &ChainView{Hall: vectors.Hall, Org: vectors.Org.Pub(), Chain: GroupHex(g0.Group), Tokens: []*Tok{tok}, Statuses: []string{borgrec.StatusConsistent}}
+	gv, err := NewGroupView(cv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vout := gv.Latest().Token.Vout
+	answer := ""
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answer == "" || r.URL.Path != "/api/v1/utxos/"+t0.TxID().String()+"/json" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `[{"vout":%d,%s}]`, vout, answer)
+	}))
+	defer node.Close()
+	asset := &nodeapi.Asset{Base: node.URL}
+	now := time.Now()
+	answer = `"status":"OK"`
+	if f, err := Latest(ctx, asset, nil, gv, now); err != nil || !f.OK() || !f.Unspent {
+		t.Fatalf("status OK: %v %+v", err, f)
+	}
+	for _, a := range []string{`"status":"NOT_FOUND"`, `"status":"IMMATURE"`, `"status":"FROZEN"`, `"status":"SPENT"`, `"status":""`, ""} {
+		answer = a
+		f, err := Latest(ctx, asset, nil, gv, now)
+		if err == nil || f.OK() || f.Unspent || !errors.Is(err, nodeapi.ErrSpendUnknown) || !strings.Contains(err.Error(), "could not say whether") {
+			t.Fatalf("answer %q is evidence: %v %+v", a, err, f)
+		}
+	}
+}
+
 func TestGroupViewFolds(t *testing.T) {
 	c := chain{}
 	ctx := context.Background()
@@ -197,5 +246,22 @@ func TestGroupViewFolds(t *testing.T) {
 	}
 	if !toks[0].Before(toks[1]) || toks[1].Prev() != toks[0].Txid {
 		t.Fatal("order and prev")
+	}
+}
+
+// A spend error keeps its chain and a status word, and loses every other
+// name the node chose.
+func TestQuietSpendLeavesOutWhatTheNodeNamed(t *testing.T) {
+	if QuietSpend(nil) != nil {
+		t.Fatal("nil is an error")
+	}
+	evil := fmt.Errorf("%w: output 0 of x: the node names the spender %q, which is not a txid", nodeapi.ErrSpendUnknown, "\x1b]0;owned\aevil")
+	q := QuietSpend(evil)
+	if !errors.Is(q, nodeapi.ErrSpendUnknown) || strings.Contains(q.Error(), "owned") || !strings.Contains(q.Error(), "not repeated") {
+		t.Fatalf("%v", q)
+	}
+	st := fmt.Errorf("%w: the node answers status %q", nodeapi.ErrSpendUnknown, "NOT_FOUND")
+	if q := QuietSpend(st); q.Error() != st.Error() || !errors.Is(q, nodeapi.ErrSpendUnknown) {
+		t.Fatalf("%v", q)
 	}
 }
