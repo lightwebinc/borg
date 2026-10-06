@@ -59,6 +59,13 @@ synchronisation of unspent outputs for `tm_borg_` topics (spec sections
 | `BORG_HANDSHAKE_ADDR_BURST` | 4 | the most handshakes one remote address is answered at once |
 | `BORG_RESPONSES_PER_SEC` | 5 | signed responses a second one BRC-104 session is given; decimals allowed |
 | `BORG_RESPONSE_BURST` | 20 | the most signed responses one session is given at once |
+| `BORG_ARCADE_URL` | none | arcade, which the host broadcasts each payment through before it answers (`POST /tx`, `GET /tx/<txid>`) |
+| `BORG_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without both URLs every payment is held until it mines |
+| `BORG_ACCEPT_THRESHOLD_SATS` | 25000000 | the largest payment answered on the network's acceptance; above it a payment is held until it mines |
+| `BORG_ACCEPT_PAYER_LIMIT` | the threshold | satoshis one payer may have answered fast and not yet mined; past it, held |
+| `BORG_ACCEPT_TOTAL_LIMIT` | ten thresholds | the same across every payer |
+| `BORG_ACCEPT_WINDOW` | `1h` | how long a fast payment counts against the limits unless it mines first (`ms`, `s`, `m`, `h`) |
+| `BORG_ACCEPT_WATCH` | `0s` | how long the host keeps watching for a conflict after arcade's acceptance before it answers |
 
 A price needs `BORG_LISTEN` and `BORG_PAYEE_KEY`. `history` and
 `history-after` sell one walk, so a host that prices one and not the other
@@ -171,7 +178,7 @@ log once and keeps no list of it.
 - `payments.jsonl` holds every payment the terms route accepted: the Atomic
   BEEF, the derivation prefix and suffix, the sender's identity key, the
   satoshis, the class and the outpoints it spends. The route answers once
-  the line is on disk. It does not broadcast the payment.
+  the line is on disk. The host broadcasts the payment ([Payment acceptance](#payment-acceptance)); the payee still settles it.
 
 Both files are append-only, so a copy taken while the host runs is safe: at
 worst its last line is cut short, and both readers skip such a line. Copy
@@ -195,8 +202,7 @@ with a line it does not know (`"k":"w"`) and does not start. To run an
 earlier build again, remove those lines from a copy of `borg-rows.jsonl`
 first.
 
-A payment is money only once it is broadcast and mined; until then the
-payer can spend the same coins elsewhere. Settle each line promptly with
+A payment is money only once it is mined; until then the payer can race a conflicting spend to a miner. Settle each line promptly with
 the payee wallet's BRC-100 `internalizeAction` (protocol `wallet payment`,
 output 0, the remittance as written), which broadcasts it.
 
@@ -223,11 +229,7 @@ header it is answered 402 with `x-bsv-payment-version` (`1.0`),
 `x-bsv-payment-satoshis-required` and `x-bsv-payment-derivation-prefix`;
 with one, it is answered once output 0 of the payment pays at least the
 price, P2PKH, to the key BRC-29 derives for the prefix, the suffix and the
-asker, the prefix is one this route issued, the payment verifies against
-the host's headers, its txid was never used before, and it spends no
-coin an accepted payment spent. A payment is unbroadcast when it is
-offered, so two transactions spending one coin both verify and at most one
-can ever be mined: the second is refused 409 `ERR_PAYMENT_CONFLICT`, as a
+asker, the prefix is one this route issued, the payment verifies against the host's headers, its txid was never used before, it spends no coin an accepted payment spent, and it passes [payment acceptance](#payment-acceptance). Two transactions spending one coin can both verify, and at most one can ever be mined: the second is refused 409 `ERR_PAYMENT_CONFLICT`, as a
 used txid is refused 409 `ERR_PAYMENT_REPLAYED`. The coins of every
 accepted payment are kept in `payments.jsonl` and refused again after a
 restart. A payer's next payment may spend the change of its last, which is
@@ -261,6 +263,47 @@ route bounds both its memory and its work:
   remembers the last 65536 requests it verified; the session budget bounds
   what an older replay can cost.
 
+
+## Payment acceptance
+
+A paid question is answered only after the payment is held to bcommon's
+acceptance rule (package `acceptance`, the same rule for every layer):
+
+1. the route's own checks (prefix, output 0 pays the derived key, SPV
+   against the host's headers, a txid and coins never used before);
+2. finality (lock time 0, or every input final) and conservation (every
+   input carries its source, and the outputs do not exceed the inputs);
+3. the value: at or below `BORG_ACCEPT_THRESHOLD_SATS`, and within the
+   payer's and the total limits, it is fast; otherwise it is held;
+4. the host broadcasts it through `BORG_ARCADE_URL`, unmined ancestors first,
+   held or fast: this is how the payee collects;
+5. on the fast path the host answers only once arcade reports the network
+   took it (`SEEN_ON_NETWORK`, `ACCEPTED_BY_NETWORK`, ...), with no
+   `DOUBLE_SPEND_ATTEMPTED` and no competing transaction, and the node shows
+   every input unspent or spent by this payment.
+
+A refusal (arcade `REJECTED`, a definitive HTTP refusal, an input spent by
+another transaction, a payment that is not final or spends more than it
+holds) is answered 400 `ERR_PAYMENT_REFUSED`. Anything else that is not
+fast (above the threshold, a limit reached, a conflict reported, no
+verdict within 10 s, a spend view that cannot say) is answered 402
+`ERR_PAYMENT_HELD` with the reason and no BRC-105 headers, so a client
+does not pay again. The held payment is recorded in `payments.jsonl` with
+`"decision":"hold"`, keeps its coins, and the same payment sent again is
+answered once the node serves its proof and that proof verifies against the
+host's headers. A host with no arcade or no node holds every payment.
+
+Every fast payment is watched on the host's background tick (every 30 s)
+until it mines. One whose input another transaction spent, that arcade
+refuses, or that has not mined within a day, is written to
+`unsettleable.jsonl` in the state directory, logged, and counted; its payer
+is then held for confirmation on every later payment until the host
+restarts. Nothing is clawed back: the answer was given. A restart watches
+the fast lines of the last window again.
+
+The ledger line carries `decision` (`fast`, `hold` or `mined`) and
+`reason`; `borg payee settle` reads it as before.
+
 ## Metrics
 
 | Metric | What |
@@ -273,7 +316,10 @@ route bounds both its memory and its work:
 | `borg_lookups_total{class}` | questions answered |
 | `borg_halls`, `borg_tokens`, `borg_tokens_pending`, `borg_grants`, `borg_wraps`, `borg_sweeps`, `borg_outpoint_rows`, `borg_spend_table` | what the index holds |
 | `borg_carrier_lines` | carriers ever admitted, each a journal line held in memory for the host's life |
-| `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}`, `borg_payments_total{result}` | the terms route; a payment refused for its txid or for a coin already spent counts `replayed` |
+| `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}` | the terms route |
+| `borg_payments_total{decision,reason}` | paid questions by what the host did: `requested` (`no-payment`, a 402 with the price); `fast` (`at-or-below-threshold`, `mined`); `hold` (`above-threshold`, `payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`, `broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`, `spend-view-unknown`); `refuse` (`malformed`, `wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`, `network-refused`, `double-spent`, `replayed`, `conflict`) |
+| `borg_payment_events_total{kind}` | fast payments the watch resolved: `confirmed`, `double-spent`, `refused`, `unmined` (all but the first flag the payer) |
+| `borg_payments_unmined` | fast payments being watched |
 | `borg_requests_total{result}` | authenticated requests refused before any signature: `replayed`, or `limited` by the session's budget |
 
 ## Testing against a reference host

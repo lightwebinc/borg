@@ -23,13 +23,14 @@
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AuthFetch, PrivateKey, Transaction, type WalletInterface } from '@bsv/sdk'
 import { readToken } from './admit.js'
+import { TestNetwork, serveNetwork } from './testnetwork.js'
 import { KeyGrant, Refusal, decodeWrap, recipients, type Group } from './borgrec.js'
 import { checkEpochToken, unwrap } from './epoch.js'
 import { decodeContext, verifyGrant } from './merkle.js'
@@ -61,16 +62,24 @@ function stage(dir: string): { file: string; root: string } {
 }
 
 /** The chain's headers, served in the reference host's native shape, read at each request. */
-async function headers(chain: Chain): Promise<Server> {
+async function headers(chain: Chain, net: TestNetwork): Promise<Server> {
   const server = createServer((req, res) => {
+    void serveNetwork(net, req, res).then((served) => {
+      if (!served) headersOnly(chain, req, res)
+    })
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  return server
+}
+
+function headersOnly(chain: Chain, req: IncomingMessage, res: ServerResponse): void {
+  {
     const m = /^\/v1\/root\/(\d+)$/.exec(req.url ?? '')
     const tip = Math.max(...chain.roots.keys())
     const body = req.url === '/v1/tip' ? { height: tip } : m !== null && chain.roots.has(Number(m[1])) ? { merkleRoot: chain.roots.get(Number(m[1])) } : undefined
     res.writeHead(body === undefined ? 404 : 200, { 'content-type': 'application/json' })
     res.end(JSON.stringify(body ?? {}))
-  })
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-  return server
+  }
 }
 
 function docker(...args: string[]): string {
@@ -133,6 +142,8 @@ async function startHost(dir: string, staged: { file: string; root: string }, p:
       BORG_LISTEN: `127.0.0.1:${p.terms}`,
       BORG_PRICES: 'history=5,history-after=5',
       BORG_PAYEE_KEY: payeeKey,
+      BORG_ARCADE_URL: `http://127.0.0.1:${p.headers}/arcade`,
+      BORG_ASSET_URL: `http://127.0.0.1:${p.headers}`,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -247,7 +258,8 @@ async function main(): Promise<void> {
   const chain = new Chain(30000)
   // The organisation's trees are mined before the host starts, so its header source has a tip.
   const org = new OrgSim(hall, 'e2e organisation', chain)
-  const hdr = await headers(chain)
+  const net = new TestNetwork(chain)
+  const hdr = await headers(chain, net)
   const db = await mysql()
   const ports: Ports = { db: db.port, headers: (hdr.address() as AddressInfo).port, host: await freePort(), terms: await freePort() }
   const staged = stage(dir)
@@ -345,7 +357,9 @@ async function main(): Promise<void> {
       }
     }
     expect("history paid through its 402: the group's whole chain", await paidHistory(), { status: 200, paid: '5', txids: groupChain })
-    expect('the payment is in the ledger', readFileSync(join(staged.root, 'state', 'payments.jsonl'), 'utf8').trim().split('\n').length, 1)
+    const lines = readFileSync(join(staged.root, 'state', 'payments.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { txid: string; decision?: string })
+    expect('the payment is in the ledger, taken fast', lines.map((l) => l.decision), ['fast'])
+    expect('the host broadcast it before answering', lines.every((l) => net.sent.includes(l.txid)), true)
 
     // Restart: the index is rebuilt from storage and the rows.
     const before = {

@@ -32,6 +32,19 @@
  *                         answers, and at once; default 4 and 8 (budget.ts)
  *   BORG_HANDSHAKES_PER_ADDR_PER_SEC, BORG_HANDSHAKE_ADDR_BURST
  *                         the same for one remote address; default 1 and 4
+ *   BORG_ARCADE_URL       arcade, which the host broadcasts payments through
+ *   BORG_ASSET_URL        the node's asset service: spend view and proofs;
+ *                         without both, every payment is held until mined
+ *   BORG_ACCEPT_THRESHOLD_SATS
+ *                         the largest payment answered on network acceptance;
+ *                         default 25000000; above it, held until mined
+ *   BORG_ACCEPT_PAYER_LIMIT, BORG_ACCEPT_TOTAL_LIMIT
+ *                         satoshis taken fast and not yet mined, per payer
+ *                         and in all; default one and ten thresholds
+ *   BORG_ACCEPT_WINDOW    how long a fast payment counts against the limits
+ *                         unless it mines first; default 1h
+ *   BORG_ACCEPT_WATCH     how long to watch for a conflict before answering;
+ *                         default 0s
  *   BORG_RESPONSES_PER_SEC, BORG_RESPONSE_BURST
  *                         the signed responses a second one BRC-104 session
  *                         is given, and at once; default 5 and 20
@@ -43,7 +56,9 @@
 import { isAbsolute } from 'node:path'
 import type { Server } from 'node:http'
 import { PrivateKey, ProtoWallet, type ChainTracker } from '@bsv/sdk'
+import { Transaction, Utils } from '@bsv/sdk'
 import type { Module, ModuleHost } from '@lightwebinc/bcommon'
+import { gateFor, parseAcceptConfig, type AcceptConfig } from './accept.js'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './beef.js'
 import { LookupService, TopicPrefix, checkHall, topic } from './borgrec.js'
 import { DefaultBudget, DefaultResponseBudget, type BudgetConfig, type ResponseBudgetConfig } from './budget.js'
@@ -62,6 +77,8 @@ declare const BORG_BUILD: string | undefined
 
 /** How often retention runs, seconds. */
 const PruneEvery = 3600
+/** How often the background tick runs (payment watch; retention every PruneEvery), seconds. */
+const TickEvery = 30
 
 /** The token statuses the index reports (spec section 11.2), each counted. */
 export const TokenStatuses = ['consistent', 'pending', 'roll-mismatch', 'members-mismatch', 'commitment-reuse', 'rejoin-unrotated'] as const
@@ -80,6 +97,8 @@ export interface Config {
   sessions: { max: number; ttlSeconds: number }
   handshakes: BudgetConfig
   responses: ResponseBudgetConfig
+  /** Payment acceptance; bcommon's DefaultPolicy with no arcade or node (every payment held) when unset. */
+  accept?: AcceptConfig
 }
 
 /** Parses BORG_HALLS. Throws on anything it cannot take exactly. */
@@ -155,6 +174,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): Config {
       perSec: rate('BORG_RESPONSES_PER_SEC', env['BORG_RESPONSES_PER_SEC'], DefaultResponseBudget.perSec),
       burst: integer('BORG_RESPONSE_BURST', env['BORG_RESPONSE_BURST'], DefaultResponseBudget.burst, 1),
     },
+    accept: parseAcceptConfig('BORG', env),
   }
   const listen = env['BORG_LISTEN']?.trim()
   if (listen !== undefined && listen !== '') {
@@ -203,7 +223,6 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   for (const status of TokenStatuses) host.metrics.preset('borg_token_status_total', { status })
   for (const why of ['evidence', 'retention', 'table']) host.metrics.preset('borg_dropped_total', { why })
   for (const why of ['cap', 'idle']) host.metrics.preset('borg_sessions_evicted_total', { why })
-  for (const result of ['requested', 'accepted', 'refused', 'replayed']) host.metrics.preset('borg_payments_total', { result })
   host.metrics.preset('borg_retractions_total')
   const priced = new Set([...c.prices].filter(([, p]) => p > 0).map(([name]) => name))
   const ls = new BorgLookupService({
@@ -228,24 +247,47 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   const topics: Record<string, BorgTopicManager> = {}
   for (const hall of c.halls) topics[topic(hall)] = new BorgTopicManager(topic(hall), host, tracker, c.maxBEEF, c.maxSweepInputs)
   let front: LookupFront | undefined
+  const accept = c.accept ?? parseAcceptConfig('BORG', {})
+  const receiver = c.listen !== undefined && priced.size > 0 ? new LedgerReceiver(c.stateDir) : undefined
+  const gate = receiver !== undefined ? gateFor('borg', host, tracker, accept, c.stateDir) : undefined
+  if (gate !== undefined && receiver !== undefined) {
+    for (const f of receiver.fast) {
+      try {
+        gate.restore(Transaction.fromAtomicBEEF(Utils.toArray(f.beef, 'base64')), f.senderIdentityKey, f.satoshis, f.at)
+      } catch {
+        // a line whose BEEF does not parse was never answered fast
+      }
+    }
+  }
   if (c.listen !== undefined) {
     front = new LookupFront({
       ls,
       host,
       prices: c.prices,
       wallet: c.payeeKey === undefined ? undefined : new ProtoWallet(c.payeeKey),
-      receiver: priced.size > 0 ? new LedgerReceiver(c.stateDir) : undefined,
+      receiver,
       headers: tracker,
+      gate,
       sessions: c.sessions,
       budget: c.handshakes,
       responses: c.responses,
     })
   }
   const start = async (): Promise<Server | undefined> => {
+    let pruned = Date.now()
+    let sweeping = false
     const timer = setInterval(() => {
-      if (!ls.restored) return
+      if (gate !== undefined && !sweeping) {
+        sweeping = true
+        gate
+          .sweep()
+          .catch((e: unknown) => host.log('borg payment watch failed', { err: String(e) }))
+          .finally(() => (sweeping = false))
+      }
+      if (!ls.restored || Date.now() - pruned < PruneEvery * 1000) return
+      pruned = Date.now()
       ls.prune().catch((e: unknown) => host.log('ls_borg retention failed', { err: String(e) }))
-    }, PruneEvery * 1000)
+    }, TickEvery * 1000)
     timer.unref()
     if (front === undefined || c.listen === undefined) return undefined
     const server = await front.listen(c.listen.port, c.listen.host)
@@ -262,6 +304,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
     sessions: c.listen === undefined ? 'none' : `${c.sessions.max}, idle ${c.sessions.ttlSeconds}s`,
     handshakes: c.listen === undefined ? 'none' : `${c.handshakes.perSec}/s burst ${c.handshakes.burst}, per address ${c.handshakes.perAddressPerSec}/s burst ${c.handshakes.addressBurst}`,
     responses: c.listen === undefined ? 'none' : `${c.responses.perSec}/s burst ${c.responses.burst} a session`,
+    payments: gate === undefined ? 'none' : gate.networked ? `fast to ${accept.policy.thresholdSats} sat, payer ${accept.policy.payerLimit}, total ${accept.policy.totalLimit}` : 'held until mined (no arcade or asset URL)',
     build,
   })
   return { module: { topics, lookups: { [LookupService]: ls } }, ls, front, start }
