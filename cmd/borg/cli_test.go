@@ -160,6 +160,9 @@ func (h *harness) global(name string) (*global, *bytes.Buffer, *bytes.Buffer) {
 		return h.env[k]
 	}
 	cfg, err := config.Load(config.Path("", env), env)
+	if err == nil {
+		cfg, err = cfg.Resolve()
+	}
 	if err != nil {
 		h.t.Fatal(err)
 	}

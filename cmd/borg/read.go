@@ -24,7 +24,6 @@ import (
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/lookup"
-	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/producer"
 	"github.com/lightwebinc/bcommon/purse"
 	"github.com/lightwebinc/bcommon/termsafe"
@@ -164,7 +163,7 @@ func (g *global) chainProblem(what string, err error) error {
 		for _, r := range none.Refused {
 			g.say("host %s: REFUSED token %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
 		}
-		return incomplete("%s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (borg doctor), and a proof a reorganisation displaced is replaced only from a node (config key asset)", what, len(none.Refused), g.cfg.HeaderURL)
+		return incomplete("%s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (borg doctor), and a proof a reorganisation displaced is replaced only from the chain view (config key chain)", what, len(none.Refused), g.cfg.HeaderURL)
 	case errors.Is(err, reader.ErrNoChain):
 		return incomplete("%s: %v", what, err)
 	}
@@ -213,8 +212,8 @@ a host answered a token or a wrap that does not verify (it is named).
 
 -write is a writer's check (spec section 6.5): positive evidence, at most
 freshness old (default 60s), that the group's latest token is the latest:
-its proof verifies against this home's headers and the node (config key
-asset) says its output is unspent. Without it a writer must not write
+its proof verifies against this home's headers and the chain view
+(config key chain) says its output is unspent. Without it a writer must not write
 (exit 3). The evidence is recorded in the home. -show-key prints the
 current epoch key in hex: a secret.`
 
@@ -372,9 +371,8 @@ func (g *global) writerEvidence(ctx context.Context, st *state.State, gv *reader
 	}
 	var raw func(ctx context.Context, txid string) ([]byte, error)
 	sp := g.spends()
-	if g.cfg.Asset != "" {
-		_, asset, _ := g.node(false)
-		raw = asset.TxRaw
+	if c, err := g.chainView(); err == nil {
+		raw = c.TxRaw
 	}
 	f, err := reader.Latest(ctx, sp, raw, gv, now)
 	if err != nil || !f.OK() {
@@ -383,7 +381,7 @@ func (g *global) writerEvidence(ctx context.Context, st *state.State, gv *reader
 		}
 		return incomplete("no writer evidence for group %s: %v; a writer does not write (spec section 6.5)", gv.Chain, err)
 	}
-	src := "unspent per the node " + g.cfg.Asset
+	src := "unspent per " + g.cfg.Chain
 	if f.Next != nil {
 		src = fmt.Sprintf("spent by the next token %s, not yet mined, which keeps the epoch", reader.Short(f.By))
 	}
@@ -405,7 +403,7 @@ answered compared with the latest token's roll. A root that differs means
 the host withheld or added a grant (exit 3), and a host that answers a
 grant that does not verify is named (exit 3). Each grant is judged: in the
 roll, scope grants member, not expired, revealed unless the organization is
-opaque, and its revocation outpoint unspent per the node (asset). Every
+opaque, and its revocation outpoint unspent per the chain view (chain). Every
 field someone else wrote is filtered before it reaches the terminal.`
 
 func cmdRoll(ctx context.Context, g *global, args []string) error {
@@ -563,7 +561,7 @@ func cmdMember(ctx context.Context, g *global, args []string) error {
 	case len(cars) == 0:
 		return incomplete("no host answers a grant to %s in the roll: an empty answer proves nothing", hex.EncodeToString(k))
 	case unknown:
-		return incomplete("%s: no source could say its grants' revocation outpoints are unspent (config key asset)", hex.EncodeToString(k))
+		return incomplete("%s: no source could say its grants' revocation outpoints are unspent (config key chain)", hex.EncodeToString(k))
 	}
 	return refused("%s holds no current grant", hex.EncodeToString(k))
 }
@@ -622,19 +620,23 @@ func cmdMemberOf(ctx context.Context, g *global, args []string) error {
 // purse is the home's wallet with the pool's payer, the settlement leg and
 // the header source: what history and payee settle pay and take through.
 func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracker, maxPay uint64) (*purse.Purse, error) {
-	_, asset, err := g.node(false)
+	chain, err := g.chainView()
 	if err != nil {
 		return nil, err
 	}
-	settler, _, err := g.settler()
+	settler, arcade, err := g.settler()
 	if err != nil {
 		return nil, err
 	}
-	tip, err := asset.BestHeader(ctx)
+	fees, err := g.fees(ctx, arcade)
 	if err != nil {
-		return nil, fmt.Errorf("node tip: %w", err)
+		return nil, err
 	}
-	engine.CollectChange(ctx, h.e.Pool, asset)
+	tip, err := hc.CurrentHeight(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("chain tip: %w", err)
+	}
+	engine.CollectChange(ctx, h.e.Pool, chain)
 	if h.st.KeepPayments(h.e.Pool.UnprovenTxids()) {
 		if err := h.st.Save(); err != nil {
 			return nil, err
@@ -662,11 +664,11 @@ func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracke
 		return ids
 	}
 	newPayer := func() *producer.Payer {
-		return &producer.Payer{Pool: h.e.Pool, Tip: tip.Height, Keys: map[string]*bwallet.Signer{s.IdentityHex(): s},
-			Kept: kept, Allow: allow, Settler: settler, Asset: asset, Fees: mint.DefaultFees, Poll: poll, Note: g.say}
+		return &producer.Payer{Pool: h.e.Pool, Tip: tip, Keys: map[string]*bwallet.Signer{s.IdentityHex(): s},
+			Kept: kept, Allow: allow, Settler: settler, Chain: chain, Fees: fees, Poll: poll, Note: g.say}
 	}
-	return &purse.Purse{Embedded: h.e, NewPayer: newPayer, Fees: mint.DefaultFees, MaxPay: maxPay,
-		Settler: settler, Asset: asset, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
+	return &purse.Purse{Embedded: h.e, NewPayer: newPayer, Fees: fees, MaxPay: maxPay,
+		Settler: settler, Chain: chain, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
 }
 
 // recordPayment records a payment this home made, so the next payment can
@@ -840,7 +842,7 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 	}
 	// The pool is recorded before a coin is taken from it, and a coin a
 	// run that stopped took and never recorded goes back (engine.Journal).
-	engine.Journal(h.st, h.e.Pool, engine.Reconcile(ctx, h.st, h.e.Pool, p.Asset, g.say))
+	engine.Journal(h.st, h.e.Pool, engine.Reconcile(ctx, h.st, h.e.Pool, p.Chain, g.say))
 	if err := h.st.Save(); err != nil {
 		return nil, 0, err
 	}

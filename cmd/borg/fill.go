@@ -13,6 +13,7 @@ import (
 	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/lookup"
+	"github.com/lightwebinc/bcommon/nodeapi"
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/borgrec"
@@ -31,8 +32,8 @@ group any host answers, or those named) its chain and the wraps of every
 epoch a host still answers. Each token is replayed in the BEEF a host admits, assembled
 here from the token and its parent (the token at seq - 1, or at seq 0 the
 chain tree: from this home when it is the organization's home that keeps
-the tree, else from the node, config key asset, which drops a fully spent
-transaction; the tree is checked either way); each carrier is
+the tree, else from the chain view, config key chain (a node drops a fully
+spent transaction); the tree is checked either way); each carrier is
 submitted as another host answered it, once it verifies here. Everything is
 checked against this home's headers before it is sent, and each fill is
 confirmed by a lookup at the host it was sent to. Needs no coin and signs
@@ -52,11 +53,11 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
-	_, asset, err := g.node(false)
+	chain, err := g.chainView()
 	if err != nil {
 		return err
 	}
-	f := &filler{g: g, t: t, asset: asset}
+	f := &filler{g: g, t: t, asset: chain}
 	if w, err := g.openWallet(); err == nil {
 		if st, err := state.Load(g.cfg.Home, w.Signer().IdentityHex()); err == nil && st.Org != nil && st.Identity == hex.EncodeToString(t.org) {
 			f.home = st
@@ -117,10 +118,7 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 type filler struct {
 	g     *global
 	t     *target
-	asset interface {
-		TxRaw(ctx context.Context, txid string) ([]byte, error)
-		MerkleProof(ctx context.Context, txid string) (*transaction.MerklePath, error)
-	}
+	asset nodeapi.Chain
 	// home is the organisation's home state when fill runs in it: the
 	// chain trees it keeps are taken before the node is asked.
 	home        *state.State
@@ -221,7 +219,7 @@ func (f *filler) tokenBEEF(ctx context.Context, v *reader.ChainView, s uint64) (
 		if err != nil || tx.TxID().String() != id {
 			continue
 		}
-		mp, err := f.asset.MerkleProof(ctx, id)
+		mp, _, err := f.asset.Proof(ctx, id)
 		if err != nil {
 			continue
 		}
@@ -268,7 +266,7 @@ func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*t
 			return tx, nil
 		}
 	}
-	mp, err := f.asset.MerkleProof(ctx, id)
+	mp, _, err := f.asset.Proof(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one: %w", err)
 	}

@@ -120,7 +120,7 @@ func (e *Engine) Stale(ctx context.Context) bool {
 		if t == nil {
 			return false
 		}
-		by, err := e.Legs.Asset.Spender(ctx, t.Txid, t.Vout)
+		by, err := e.Legs.Chain.Spender(ctx, t.Txid, t.Vout)
 		return err == nil && by != ""
 	}
 	if spent(state.Latest(o.Tokens)) {
@@ -153,8 +153,8 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 		return nil, fmt.Errorf("the organisation lives in hall %s, not %s", o.Hall, hall)
 	}
 	rep := &SyncReport{}
-	if h, err := e.Legs.Asset.BestHeader(ctx); err == nil {
-		e.payer.Tip = h.Height
+	if h, err := e.Legs.Headers.CurrentHeight(ctx); err == nil {
+		e.payer.Tip = h
 	}
 	// A transition of this home's own still in flight is settled first: it
 	// is mined, or it lost.
@@ -477,7 +477,7 @@ func (e *Engine) syncGrants(ctx context.Context, o *state.Org, grants map[[32]by
 		if !g.Admitted || g.Revoked || g.Swept != "" {
 			continue
 		}
-		if by, err := e.Legs.Asset.Spender(ctx, g.Tree, g.Vout); err == nil && by != "" {
+		if by, err := e.Legs.Chain.Spender(ctx, g.Tree, g.Vout); err == nil && by != "" {
 			g.Swept = by
 		}
 	}
@@ -538,7 +538,7 @@ func (e *Engine) syncTrees(ctx context.Context, grants map[[32]byte]*reader.Car,
 	if ts := e.St.Trees[state.TreeChain]; ts != nil && ts.Tree != nil {
 		t := ts.Tree
 		for t.Next < t.Count {
-			by, err := e.Legs.Asset.Spender(ctx, t.Txid, t.Next)
+			by, err := e.Legs.Chain.Spender(ctx, t.Txid, t.Next)
 			if err != nil || by == "" {
 				break
 			}
@@ -566,7 +566,7 @@ func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
 	if err != nil || len(tok.Inputs) == 0 || tok.Inputs[0].SourceTXID == nil || tok.Inputs[0].SourceTXID.String() != id {
 		return
 	}
-	raw, err := e.Legs.Asset.TxRaw(ctx, id)
+	raw, err := e.Legs.Chain.TxRaw(ctx, id)
 	if err != nil {
 		return
 	}
@@ -574,7 +574,7 @@ func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
 	if err != nil || tree.TxID().String() != id {
 		return
 	}
-	mp, err := e.Legs.Asset.MerkleProof(ctx, id)
+	mp, _, err := e.Legs.Chain.Proof(ctx, id)
 	if err != nil {
 		return
 	}
@@ -639,7 +639,7 @@ func (e *Engine) syncPool(ctx context.Context, adopted []*reader.Tok, rep *SyncR
 		if o.Unproven {
 			continue
 		}
-		if by, err := e.Legs.Asset.Spender(ctx, o.TxID, o.Vout); err != nil || by == "" {
+		if by, err := e.Legs.Chain.Spender(ctx, o.TxID, o.Vout); err != nil || by == "" {
 			continue
 		}
 		if removed, err := e.Pool.Remove(o); err == nil && removed {
@@ -655,7 +655,7 @@ func (e *Engine) syncPool(ctx context.Context, adopted []*reader.Tok, rep *SyncR
 			if out.LockingScript == nil || !bytes.Equal(*out.LockingScript, *fund) {
 				continue
 			}
-			by, err := e.Legs.Asset.Spender(ctx, t.Txid, uint32(i)) //nolint:gosec // an output index
+			by, err := e.Legs.Chain.Spender(ctx, t.Txid, uint32(i)) //nolint:gosec // an output index
 			if err != nil || by != "" {
 				continue
 			}

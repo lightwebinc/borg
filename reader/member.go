@@ -452,7 +452,7 @@ func Latest(ctx context.Context, spends Spends, raw func(ctx context.Context, tx
 	t := gv.Latest()
 	f := Fresh{Tok: t, At: now}
 	if spends == nil {
-		return f, errors.New("no spend source (config key asset): a writer needs a positive answer that the latest token is unspent")
+		return f, errors.New("no spend source (config key chain): a writer needs a positive answer that the latest token is unspent")
 	}
 	by, err := spends.Spender(ctx, t.Txid, t.Token.Vout)
 	if err != nil {

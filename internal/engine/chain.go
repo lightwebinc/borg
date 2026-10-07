@@ -860,7 +860,7 @@ func (e *Engine) FinishTransition(ctx context.Context) error {
 		}
 	}
 	payer := e.NewPayer()
-	if mp, h, err := e.Legs.Asset.Proof(ctx, tr.Txid); err == nil {
+	if mp, h, err := e.Legs.Chain.Proof(ctx, tr.Txid); err == nil {
 		tx.MerklePath = mp
 		return e.adopt(ctx, tr, tx, mp, h, payer)
 	}
@@ -898,7 +898,7 @@ func (e *Engine) FinishTransition(ctx context.Context) error {
 // that is unspent, or spent by this very transaction, is beaten by nobody:
 // the transition is kept, unless another transaction spends its fee coin.
 func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why string, payer *producer.Payer) error {
-	by, err := e.Legs.Asset.Spender(ctx, tr.Parent, tr.ParentVout)
+	by, err := e.Legs.Chain.Spender(ctx, tr.Parent, tr.ParentVout)
 	err = reader.QuietSpend(err)
 	if err != nil {
 		return fmt.Errorf("%s: refused (%s), and the node could not say what spends its predecessor: %w (the next command looks again)", tr.What, why, err)
@@ -910,7 +910,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why strin
 		if _, herr := reader.Hash(by); herr != nil {
 			return fmt.Errorf("%s: the node names a spender of its predecessor that is not a transaction id; it is kept, and the next command looks again", tr.What)
 		}
-		raw, err := e.Legs.Asset.TxRaw(ctx, by)
+		raw, err := e.Legs.Chain.TxRaw(ctx, by)
 		if err != nil {
 			return fmt.Errorf("%s: its predecessor is spent by %s, which the node could not show (%v): whether that is this transition under another txid is not known yet; it is kept, and the next command looks again", tr.What, Short(by), err)
 		}
@@ -919,7 +919,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why strin
 			return fmt.Errorf("%s: its predecessor is spent by %s, and the node answered other bytes for it; it is kept, and the next command looks again", tr.What, Short(by))
 		}
 		if t, err := borgrec.ReadToken(other); err == nil && hex.EncodeToString(t.Record) == tr.Record {
-			mp, h, perr := e.Legs.Asset.Proof(ctx, by)
+			mp, h, perr := e.Legs.Chain.Proof(ctx, by)
 			if perr != nil {
 				return fmt.Errorf("%s: a copy of it, %s, spends its predecessor and has not mined yet (the next command looks again)", tr.What, Short(by))
 			}
@@ -942,7 +942,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why strin
 		if f == nil {
 			return kept
 		}
-		spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
+		spent, err := e.Legs.Chain.Spender(ctx, f.TxID, f.Vout)
 		if err != nil || spent == "" || spent == tr.Txid {
 			return kept
 		}
@@ -953,7 +953,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, tr *state.Transition, why strin
 	}
 	e.St.Org.Pending = nil
 	if f := tr.Fee; f != nil {
-		if spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout); err == nil && spent == "" {
+		if spent, err := e.Legs.Chain.Spender(ctx, f.TxID, f.Vout); err == nil && spent == "" {
 			_ = e.Pool.Return(*f)
 		}
 	}

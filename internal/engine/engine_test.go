@@ -42,7 +42,7 @@ func offline(t *testing.T) (*Engine, *state.State) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legs := Legs{Settler: &publish.TCPIngress{Addr: "192.0.2.1:1"}, Asset: &nodeapi.Asset{Base: "http://192.0.2.1"},
+	legs := Legs{Settler: &publish.TCPIngress{Addr: "192.0.2.1:1"}, Chain: &nodeapi.Asset{Base: "http://192.0.2.1"},
 		Facade: &publish.Facade{Base: "http://192.0.2.1"}, Headers: testchain.New(1)}
 	e, err := New(st, w.Signer(), w.Pool, legs, Options{TreeCount: 4, ChainTreeCount: 2, TreeSats: 1, Entries: 8})
 	if err != nil {
