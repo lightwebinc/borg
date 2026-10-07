@@ -6,8 +6,8 @@
 #   docker build -t ghcr.io/lightwebinc/borg .                             # the command (default)
 #   docker build --target devchain -t ghcr.io/lightwebinc/borg-devchain .  # the local chain
 #
-# The builder is pinned by digest and is a later toolchain than go.mod's
-# floor, so scanning sees the standard library that ships.
+# The builder is pinned by digest at go.mod's Go release line (1.27), so
+# scanning sees the standard library that ships.
 #
 # No ENV defaults are baked in. The hosts, the header source, the node and
 # the settlement leg are addresses of somebody's deployment and have no

@@ -97,7 +97,7 @@ func printDue(out io.Writer, items []dueItem, now time.Time) int {
 const dueHelp = `usage: borg org due [-within DUR] [-apply]
 
 List the removals due: group by group, each member whose grant is no longer
-current (expired, revoked or swept), which the organisation owes a removal
+current (expired, revoked or swept), which the organization owes a removal
 and a new epoch (rotation debt, spec section 7.1), and each member whose
 grant stops being current within -within (default 720h). It reads this
 home's own record and asks nobody. Exit 3 when a removal is due now.

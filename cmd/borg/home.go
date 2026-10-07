@@ -374,13 +374,13 @@ const initHelp = `usage: borg init [-from FILE]
 
 Create the home (mode 0700): an identity key and an empty coin pool. Print
 the identity key, which is a member's name in every grant and group, and an
-organisation's name when this home runs one, and the fund address for the
+organization's name when this home runs one, and the fund address for the
 configured network. A home that exists is left alone and printed.
 
 -from FILE makes the home around an identity key that exists already:
 FILE is another home's identity.json, carried here by hand. It is how an
-organisation's home is made on a second machine; borg org sync then
-rebuilds its state from the hosts. FILE is the organisation's key: carry it
+organization's home is made on a second machine; borg org sync then
+rebuilds its state from the hosts. FILE is the organization's key: carry it
 as the secret it is, and never copy a whole home that is still in use.`
 
 // adoptIdentity copies an identity file into a home that has none.
@@ -459,19 +459,21 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 	return nil
 }
 
-const fundHelp = `usage: borg fund [-blocks N] [-batch N] [-rescan]
-       borg fund -txid TXID
+const fundHelp = `usage: borg fund -txid TXID
+       borg fund [-blocks N] [-batch N] [-rescan]
 
 With -txid, import a payment: read the mined transaction TXID with its
 proof from the node (asset), check the proof against the header source,
 and add every output it pays to the home's fund address to the pool. This
-is how a home on a real network is funded: send BSV to the fund address
-init printed, wait for one confirmation, and import it.
+is how a home on mainnet or testnet is funded: send BSV from your own
+wallet to the fund address init printed, wait for one confirmation, and
+import it.
 
-Without -txid, mine coinbase to the fund address through the node's
-generatetoaddress, which only a chain you run answers. Coinbase can be
-spent 100 blocks after it is mined, so the first fund mines 101 or more.
--rescan re-reads recent blocks for coinbase the pool lacks.`
+Without -txid (coinbase: only on a regtest chain you run, for development
+and tests): mine coinbase to the fund address through the node's
+generatetoaddress. Coinbase can be spent 100 blocks after it is mined, so
+the first fund mines 101 or more. -rescan re-reads recent blocks for
+coinbase the pool lacks. Refused on network main.`
 
 // addressNetwork is the network a base58 P2PKH address is for.
 func addressNetwork(addr string) (string, error) {
@@ -503,10 +505,10 @@ func checkFundAddress(addr, network string) error {
 
 func cmdFund(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("fund", fundHelp)
-	blocks := fs.Int("blocks", 101, "blocks to mine to the fund address")
-	batch := fs.Int("batch", bwallet.DefaultFundBatch, "blocks per generatetoaddress call")
-	rescan := fs.Bool("rescan", false, "re-read the last -blocks blocks for coinbase the pool lacks instead of mining")
-	txid := fs.String("txid", "", "import this mined payment to the fund address instead of mining")
+	blocks := fs.Int("blocks", 101, "coinbase: only on a regtest chain you run (development and tests); blocks to mine to the fund address")
+	batch := fs.Int("batch", bwallet.DefaultFundBatch, "coinbase: only on a regtest chain you run (development and tests); blocks per generatetoaddress call")
+	rescan := fs.Bool("rescan", false, "coinbase: only on a regtest chain you run (development and tests); re-read the last -blocks blocks for coinbase the pool lacks instead of mining")
+	txid := fs.String("txid", "", "import this mined payment you sent to the fund address (mainnet, testnet)")
 	if pos, err := parse(fs, args); err != nil {
 		return err
 	} else if len(pos) > 0 {
@@ -645,7 +647,7 @@ hall identifier <name>_<suffix>, its topic, and the line a host's
 BORG_HALLS takes to carry it. <name> is 1 to 31 lowercase letters and
 single underscores, starting and ending with a letter. The suffix is not a
 secret and not an access control: it keeps unrelated halls off each
-other's topic. Many organisations may share one hall. When a home exists,
+other's topic. Many organizations may share one hall. When a home exists,
 the hall is recorded in it, and list prints the halls recorded.`
 
 func cmdHall(_ context.Context, g *global, args []string) error {
@@ -699,7 +701,7 @@ func cmdHall(_ context.Context, g *global, args []string) error {
 
 const doctorHelp = `usage: borg doctor
 
-Report the home (identity, pool, funding trees, the organisation it runs,
+Report the home (identity, pool, funding trees, the organization it runs,
 any transition in flight, what is persisted and not yet published, and
 every group's rotation debt) and whether the configured node, header
 source, hosts and priced host answer. Reads only: it publishes nothing and

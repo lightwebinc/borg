@@ -32,11 +32,11 @@ for the next command. An output the chain already shows spent is left out
 of the sweep, and the transaction that spends it is taken as its sweep and
 published as one: another instance of the tooling swept it.
 
-What it does not do: the organisation's and the groups' chain tokens are
+What it does not do: the organization's and the groups' chain tokens are
 mined and stay, and readers go on reading them (each member then holds no
 current grant); a copy of a wrap or a grant anyone kept stays a copy; and
 an epoch key a member opened stays opened. A tree another home of this
-organisation minted is swept only once this home knows it (borg org sync
+organization minted is swept only once this home knows it (borg org sync
 records the tree of every grant and wrap the hosts answer).`
 
 // killTrees are the grant and record trees a home holds that still have an

@@ -397,14 +397,14 @@ func (g *global) writerEvidence(ctx context.Context, st *state.State, gv *reader
 
 const rollHelp = `usage: borg roll [-org KEY]
 
-Read the organisation's roll (spec section 13): its chain from every host,
+Read the organization's roll (spec section 13): its chain from every host,
 folded from seq 0 against this home's headers; then the roll class from
 every host, all pages, every grant verified (the carrier rules, its
 certificate, its reveal), and the root of the commitments each host
 answered compared with the latest token's roll. A root that differs means
 the host withheld or added a grant (exit 3), and a host that answers a
 grant that does not verify is named (exit 3). Each grant is judged: in the
-roll, scope grants member, not expired, revealed unless the organisation is
+roll, scope grants member, not expired, revealed unless the organization is
 opaque, and its revocation outpoint unspent per the node (asset). Every
 field someone else wrote is filtered before it reaches the terminal.`
 
@@ -477,14 +477,14 @@ func grantLine(st reader.GrantStatus) string {
 
 const memberHelp = `usage: borg member <key> [-org KEY]
 
-Whether key is a current member of the organisation (spec section 13): the
+Whether key is a current member of the organization (spec section 13): the
 member class from every host, each grant verified and its inclusion path
 checked against the roll of the token it names (falling back to the roll
 this home folded), then judged: in the roll, scope grants member, not
 expired, revealed unless opaque, and its revocation outpoint unspent per
 the node. When key is this home's own, each grant is kept whole in the home
 (the certificate, never a summary of it) and its fields opened through the
-keyring the organisation encrypted to it.
+keyring the organization encrypted to it.
 
 Exit 0 current; 1 answered and not current; 3 no host answered a grant, a
 host could not be asked or answered a grant that does not verify (it is
@@ -570,7 +570,7 @@ func cmdMember(ctx context.Context, g *global, args []string) error {
 
 const memberOfHelp = `usage: borg member-of <key> [-org KEY]
 
-The groups of the organisation whose members include key: the member-of
+The groups of the organization whose members include key: the member-of
 class from every host, then each group's chain folded here from seq 0, and
 the key looked for in the members the fold reaches. A group a host names
 whose fold does not include the key is reported, not listed.`
@@ -904,7 +904,7 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 const historyHelp = `usage: borg history [-org KEY] [-chain org|GROUP] [-after SEQ] [-all] [-at URL] [-max-sats N] [-budget N]
 
 Ask a host the priced history question (spec section 10.3): every token of
-a chain of the organisation (its own, or a group's), one page, or with -all
+a chain of the organization (its own, or a group's), one page, or with -all
 every page from there on. It is asked at the host's terms route (-at,
 default the configured history_host) over BRC-104 authentication; the host
 answers 402 with its price, and the question is asked again with a BRC-29

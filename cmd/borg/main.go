@@ -47,31 +47,32 @@ const usageText = `usage: borg [global flags] <command> [flags] [arguments]
 identity (a home):
   init [-from FILE]             create the home: identity key and coin pool;
                                 -from: around another home's identity.json
-  fund -txid TXID               import a mined payment to the fund address
-  fund [-blocks N]              mine coinbase to the fund address (a chain you run)
+  fund -txid TXID               import a mined payment you sent to the fund address
+  fund [-blocks N] [-rescan]    coinbase: only on a regtest chain you run
+                                (development and tests)
   hall new <name>               create a hall: <name>_<random suffix>, its topic,
                                 and the BORG_HALLS line a host takes
   hall list                     the halls this home created
   doctor                        local state, rotation debt and reachability; reads only
 
-the organisation (this home's identity key is the organisation):
-  org create <name>             begin the organisation: its chain, first grants
+the organization (this home's identity key is the organization):
+  org create <name>             begin the organization: its chain, first grants
   org show                      its chain, grants, groups and rotation debt
   org add <key>... -group G     add members to a group (granting them first)
   org remove <key>... [-group G]
                                 remove from a group, a new epoch; without -group,
                                 offboard: revoke every grant and leave every group
   org rekey <old> <new>         a member's key change: every group rotates
-  org signer                    grant the organisation's signer key and add it to
+  org signer                    grant the organization's signer key and add it to
                                 every group, so a second home can catch up
-  org sync                      rebuild this home's record of the organisation
+  org sync                      rebuild this home's record of the organization
                                 from the hosts: chains, roll, epoch keys
   org due [-apply]              the removals due: members whose grant is no longer
                                 current, and those expiring soon; -apply removes
   grant issue <key>             issue a membership grant and admit it to the roll
   grant revoke <key|txid>...    revoke by the roll and by sweep (-by)
   group create <name>           a group with a fresh epoch key, wrapped to each member
-  group list                    the organisation's groups
+  group list                    the organization's groups
   epoch rotate <group>          begin a new epoch with the same members
   kill -confirm KILL [-yes]     sweep every grant and record tree: the whole roll
                                 revoked, every grant and wrap retracted
@@ -99,7 +100,7 @@ global flags:
                       $XDG_CONFIG_HOME/borg/config, ~/.borg/config)
   -home DIR           the identity's home (default ~/.borg)
   -hall HALL          the hall identifier <name>_<suffix>
-  -org KEY            the organisation a member reads (default: this home's own)
+  -org KEY            the organization a member reads (default: this home's own)
   -hosts URLS         overlay hosts, comma separated: every host a reader asks,
                       and in mode unicast every host a publisher submits to
   -header-url SOURCE  header source: a bridge URL, woc:main, woc:test or

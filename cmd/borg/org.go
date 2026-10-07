@@ -35,7 +35,7 @@ func addGrantFlags(fs interface {
 		role:   fs.String("role", "member", "the grant's role: a label a client shows, 1 to 64 bytes"),
 		scope:  fs.String("scope", "member", "the grant's scope (spec section 5.3); member is what makes a membership"),
 		expiry: fs.String("expiry", "", "when the grant stops being current: a duration from now (8760h) or YYYY-MM-DDTHH:MM:SSZ (default one year)"),
-		admin:  fs.Bool("admin", false, "add admin to the scope (shown by clients; authorises nothing on chain)"),
+		admin:  fs.Bool("admin", false, "add admin to the scope (shown by clients; authorizes nothing on chain)"),
 	}
 }
 
@@ -159,21 +159,21 @@ const orgHelp = `usage: borg org create <name> [-opaque] [-member KEY]... [grant
        borg org sync [-retire-trees]
        borg org due [-within DUR] [-apply]
 
-The home's identity key is the organisation. Every change is a mined token
-of the organisation's chain or of a group's, built here, persisted with
+The home's identity key is the organization. Every change is a mined token
+of the organization's chain or of a group's, built here, persisted with
 any epoch key it samples, settled, waited for until it mines in this
 home's headers, and published (after the propagation delay) to the plane
 and to every host named, or in unicast to every host; then confirmed at
 each host by a lookup.
 
 create mints a chain tree and a grant tree, issues a grant to each -member,
-publishes them, and mints the organisation's first token admitting them.
+publishes them, and mints the organization's first token admitting them.
 -opaque publishes grants without their fields in the clear: hosts and
 readers then see that a grant exists, not its role or scope. It is fixed
 at create.
 
 add issues a grant to each key that holds no current grant, admits them in
-one organisation token, and adds every key to the group in one group
+one organization token, and adds every key to the group in one group
 token. A key the group removed earlier comes back only with a new epoch.
 
 remove with -group removes the keys from the group: a new epoch, its key
@@ -185,17 +185,17 @@ rekey is a member's key change: a grant to the new key, the old key's
 grants revoked (roll and sweep), and in every group a transition that
 removes the old key and adds the new one, which begins a new epoch.
 
-signer grants the organisation's signer key and adds it to every group
-that lacks it. The signer key is derived from the organisation's identity
+signer grants the organization's signer key and adds it to every group
+that lacks it. The signer key is derived from the organization's identity
 key, so every home made around that key derives it; as a member, it is
 wrapped each epoch's key like any other, and that wrap is what org sync
 opens. With signers above one every group this home creates or changes
 includes it without being asked; org signer does it now, or for an
-organisation run from one machine that wants a second home to be able to
+organization run from one machine that wants a second home to be able to
 catch up.
 
-sync rebuilds this home's record of the organisation from the hosts, as a
-reader reads it: the organisation's chain and each group's, verified
+sync rebuilds this home's record of the organization from the hosts, as a
+reader reads it: the organization's chain and each group's, verified
 against this home's headers and folded from seq 0; every grant of the
 roll, whose root must be reproduced; and each epoch key, opened from the
 wrap to the signer key and checked against the epoch's commitment. It is
@@ -841,13 +841,13 @@ const grantHelp = `usage: borg grant issue <key> [-role R] [-scope S] [-admin] [
        borg grant revoke <key|txid>... [-by both|roll|sweep]
 
 issue signs a BRC-52 membership grant to the key (certifier the
-organisation; its revocation outpoint the grant-tree output its carrier
-spends), publishes it, and admits it to the roll in the next organisation
+organization; its revocation outpoint the grant-tree output its carrier
+spends), publishes it, and admits it to the roll in the next organization
 token. The member reads it with borg member <its key>, which keeps it whole
 in the member's home.
 
 revoke revokes every grant of a key not yet revoked (or one grant by its
-txid) two ways (spec section 5.6): by the roll, in the next organisation
+txid) two ways (spec section 5.6): by the roll, in the next organization
 token, which every reader of borg's records sees at once; and by a mined
 sweep of its revocation outpoint, which every BRC-52 verifier sees and
 which retracts the carrier at every host. -by roll or -by sweep does one.
@@ -949,10 +949,10 @@ create draws a group id and an epoch key, mints the group's first token
 publishes it and wraps the epoch key to every member. Every member must
 hold a current grant (borg grant issue, or borg org add). -rotate-on-join
 makes every later addition begin a new epoch too; -rotate-every records the
-schedule of rotations the organisation intends (no host enforces it).
+schedule of rotations the organization intends (no host enforces it).
 
-list prints the organisation's groups: this home's own record, or with
--org another organisation's, read from the hosts.
+list prints the organization's groups: this home's own record, or with
+-org another organization's, read from the hosts.
 
 show reads a group as any reader does (spec section 13): its chain from
 every host, folded here from seq 0, and its members enumerated from the
@@ -967,7 +967,7 @@ func cmdGroup(ctx context.Context, g *global, args []string) error {
 	var members listFlag
 	fs.Var(&members, "member", "create: a member's identity key; repeatable")
 	onJoin := fs.Bool("rotate-on-join", false, "create: every addition begins a new epoch")
-	every := fs.Duration("rotate-every", 0, "create: the rotation schedule the organisation intends (informative)")
+	every := fs.Duration("rotate-every", 0, "create: the rotation schedule the organization intends (informative)")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
