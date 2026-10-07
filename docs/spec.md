@@ -1,15 +1,15 @@
-# borg: the organisation and group contract
+# borg: the organization and group contract
 
-borg gives an organisation a membership roll and its groups a key that
+borg gives an organization a membership roll and its groups a key that
 changes whenever anyone leaves, on the BEEF object plane with overlay hosts
-as replicas. An organisation is an identity key. Its roll is a set of BRC-52
-certificates, one per member, issued by the organisation's key and committed
+as replicas. An organization is an identity key. Its roll is a set of BRC-52
+certificates, one per member, issued by the organization's key and committed
 to by a chain of mined tokens. A group is a second chain of mined tokens:
 every membership change is one spend of the chain, so changes are totally
 ordered without a coordinator, and every host checks that a change which
 removes someone begins a new **epoch**. Each epoch has its own key, sampled at
 random and committed to before anyone holds it (BRC-369), and the
-organisation wraps it to each member in its own record on the plane. A
+organization wraps it to each member in its own record on the plane. A
 removed member receives no wrap of the next epoch's key and cannot derive it.
 A host is an ordinary overlay host running the `tm_borg_<name>_<suffix>`
 topic manager and the `ls_borg` lookup service.
@@ -23,7 +23,7 @@ vectors in `testdata/vectors` are part of the contract (section 17).
 
 | Object | On chain | On the plane | What it is |
 | --- | --- | --- | --- |
-| **Organisation record** `O` | inside a mined token | the token's transaction | canonical CBOR: one transition of the roll (section 3) |
+| **Organization record** `O` | inside a mined token | the token's transaction | canonical CBOR: one transition of the roll (section 3) |
 | **Group record** `G` | inside a mined token | the token's transaction | canonical CBOR: one transition of a group's membership; a token that begins an epoch is that epoch's descriptor (section 4) |
 | **Grant record** `M` | never | inside a carrier | canonical CBOR: one membership grant, a BRC-52 certificate (section 5) |
 | **Wrap record** `W` | never | inside a carrier | canonical CBOR: one epoch's key wrapped to up to 16 members (section 6) |
@@ -52,8 +52,8 @@ by the token they belong to.
 ```
 
 A **hall** is the rendezvous: one topic, `tm_borg_<name>_<suffix>`, that a
-set of hosts carries and any number of organisations share (section 10.1).
-Every record names its hall, and an organisation's chains and carriers all
+set of hosts carries and any number of organizations share (section 10.1).
+Every record names its hall, and an organization's chains and carriers all
 live in one hall.
 
 ## 2. Conventions
@@ -89,23 +89,23 @@ live in one hall.
   or refuses by a time; only a reader's checks of a grant's expiry and of
   freshness use the clock (sections 5.2 and 13).
 
-## 3. The organisation record
+## 3. The organization record
 
-Magic `"boo"` `0x01`. The second field of an organisation token.
+Magic `"boo"` `0x01`. The second field of an organization token.
 
 | Key | Field | Type and bounds | Rule |
 | --- | --- | --- | --- |
-| 0 | `magic` | bytes(4) | `62 6f 6f 01` (`"bo"`, `'o'` for organisation, version 1). Always the first key |
+| 0 | `magic` | bytes(4) | `62 6f 6f 01` (`"bo"`, `'o'` for organization, version 1). Always the first key |
 | 1 | `hall` | text; the hall identifier grammar (section 10.1) | MUST equal the topic's hall |
-| 2 | `org` | bytes; the key rule | the organisation's identity key. The token's lock is derived from it (section 9.3), so it is bound, not claimed |
-| 3 | `seq` | uint, 0 to 2^53 - 1 | 0 for the organisation's first token, then one more per token |
+| 2 | `org` | bytes; the key rule | the organization's identity key. The token's lock is derived from it (section 9.3), so it is bound, not claimed |
+| 3 | `seq` | uint, 0 to 2^53 - 1 | 0 for the organization's first token, then one more per token |
 | 4 | `prev` | bytes(32) | the txid, hash byte order, of the mined transaction holding the token at `seq - 1`; all zero exactly when `seq = 0` |
-| 5 | `name` | text, 1 to 64 bytes | the organisation's display name |
+| 5 | `name` | text, 1 to 64 bytes | the organization's display name |
 | 6 | `admit` | array of 0 to 64 bytes(32), ascending | grant commitments entering the roll |
 | 7 | `revoke` | array of 0 to 64 bytes(32), ascending, disjoint from `admit` | grant commitments leaving the roll |
 | 8 | `count` | uint, 0 to 65536 | the number of grants in the roll after this transition |
 | 9 | `roll` | bytes(32) | the roll root after this transition (section 3.2) |
-| 10 | `opaque` | bool | `true` when the organisation's grants carry no public reveal (section 5.4) |
+| 10 | `opaque` | bool | `true` when the organization's grants carry no public reveal (section 5.4) |
 | 11 | `created` | uint, 1 to 253402300799 | a claim |
 
 Keys 0 to 11 are always present; keys 12 and above are unknown to this
@@ -133,7 +133,7 @@ implementation reports the same reason. For each of the four records:
    `range` for every other bound in the record's table;
 7. across fields, in this order: `list` when a value is both added and
    removed (or admitted and revoked); `members` when a group adds the
-   organisation or the anyone key, or a grant's subject is either; `chain`
+   organization or the anyone key, or a grant's subject is either; `chain`
    when `prev` is zero at a `seq` other than 0 or not zero at `seq` 0, when
    a group's `epochSeq` is after its `seq`, or when a group's first token is
    not epoch 0 at `epochSeq` 0; `count` when a first token's `count` is not
@@ -167,8 +167,8 @@ Magic `"bog"` `0x01`. The second field of a group token.
 | --- | --- | --- | --- |
 | 0 | `magic` | bytes(4) | `62 6f 67 01` (`"bo"`, `'g'` for group, version 1) |
 | 1 | `hall` | text; the hall grammar | MUST equal the topic's hall |
-| 2 | `org` | bytes; the key rule | the organisation's identity key; the token is locked to it |
-| 3 | `group` | bytes(16) | the group identifier, drawn uniformly at random by the organisation when it creates the group and fixed for the group's life |
+| 2 | `org` | bytes; the key rule | the organization's identity key; the token is locked to it |
+| 3 | `group` | bytes(16) | the group identifier, drawn uniformly at random by the organization when it creates the group and fixed for the group's life |
 | 4 | `seq` | uint, 0 to 2^53 - 1 | 0 for the group's first token |
 | 5 | `prev` | bytes(32) | txid of the token at `seq - 1`, hash byte order; zero exactly at `seq` 0 |
 | 6 | `name` | text, 1 to 64 bytes | the group's display name |
@@ -180,11 +180,11 @@ Magic `"bog"` `0x01`. The second field of a group token.
 | 12 | `count` | uint, 0 to 1024 | the number of members after this transition |
 | 13 | `members` | bytes(32) | the members root after this transition (section 4.3) |
 | 14 | `rotateOnJoin` | bool | when `true`, the next transition that adds anyone begins an epoch |
-| 15 | `rotateEvery` | uint, 0 to 2^32 - 1 | seconds between scheduled rotations the organisation intends; 0 means none. Informative: no host enforces it |
+| 15 | `rotateEvery` | uint, 0 to 2^32 - 1 | seconds between scheduled rotations the organization intends; 0 means none. Informative: no host enforces it |
 | 16 | `created` | uint, 1 to 253402300799 | a claim |
 
 Keys 0 to 16 are always present; keys 17 and above are unknown to this
-version. The encoded record is at most 8192 bytes. Neither the organisation
+version. The encoded record is at most 8192 bytes. Neither the organization
 nor the anyone key is ever a member.
 
 ### 4.1 Epochs
@@ -223,7 +223,7 @@ Rule 2 is the property the application exists for, checked by every replica:
 **no removal is admitted without a new epoch, and no new epoch is admitted
 with the old epoch's commitment.** A host cannot check that the new key is
 fresh, only that its commitment differs from the one before; freshness is the
-organisation's obligation (section 6.1). The index reports a commitment that
+organization's obligation (section 6.1). The index reports a commitment that
 repeats any earlier epoch's as `commitment-reuse`, and a reader that holds
 earlier commitments checks that none repeats (section 13). `group-v1.json` pins every
 rule with an admitted and a refused case.
@@ -233,7 +233,7 @@ removed MUST begin a new epoch, whatever the predecessor's `rotateOnJoin`:
 otherwise the returning key receives the current epoch's key, and with it
 everything written while it was away. A host cannot check this while it
 admits, because the predecessor's record names only the members root, not
-the keys ever removed; the organisation's tooling MUST rotate, and the index
+the keys ever removed; the organization's tooling MUST rotate, and the index
 reports a token that re-adds a removed key without beginning an epoch as
 `rejoin-unrotated` (section 11.2).
 
@@ -256,7 +256,7 @@ from the returning key.
 
 Membership within one epoch only grows, because every removal begins a new
 epoch. So the members of a group at its latest token are exactly the
-recipients of that epoch's wraps when the organisation has published them
+recipients of that epoch's wraps when the organization has published them
 all (section 6.3), which is how a reader enumerates them (section 13).
 
 ## 5. The membership grant
@@ -268,7 +268,7 @@ Magic `"bom"` `0x01`. The payload of a grant carrier's one output.
 | 0 | `magic` | bytes(4) | `62 6f 6d 01` (`"bo"`, `'m'` for membership, version 1) |
 | 1 | `hall` | text; the hall grammar | MUST equal the topic's hall |
 | 2 | `org` | bytes; the key rule | the certificate's certifier, and the carrier's owner |
-| 3 | `subject` | bytes; the key rule | the member's identity key; neither the organisation nor the anyone key |
+| 3 | `subject` | bytes; the key rule | the member's identity key; neither the organization nor the anyone key |
 | 4 | `serial` | bytes(32) | the certificate's serial number |
 | 5 | `revocation` | array `[bytes(32), uint 0 to 2^32 - 1]` | the certificate's revocation outpoint: txid in hash byte order and output index. It MUST be the outpoint the carrier's one input spends (section 9.2) |
 | 6 | `fields` | map of text to bytes | exactly `expiry`, `role` and `scope`: each field's ciphertext (section 5.2) |
@@ -305,7 +305,7 @@ each grant's binary form, so an implementation can compare its own bytes
 before it checks a signature.
 
 The type is borg's own rather than BRC-169's delegation certificate: a
-membership names a role and a fail-closed scope for one organisation's
+membership names a role and a fail-closed scope for one organization's
 members, and BRC-52 expects certificates of one type to "use the same field
 names and meanings", so other meanings take another type. The field names it shares with the
 delegation certificate, `scope` and `expiry`, mean what they mean there.
@@ -314,8 +314,8 @@ delegation certificate, `scope` and `expiry`, mean what they mean there.
 
 | Field | Value in the clear | Rule |
 | --- | --- | --- |
-| `expiry` | text | exactly `YYYY-MM-DDTHH:MM:SSZ`, a real UTC time from 1970 (BRC-169 section 9.1's `expiry`, its spelling pinned). A grant is not current at or after it, allowing a reader's clock skew of at most 300 seconds (BRC-169 section 9.6). An organisation renews by issuing a new grant |
-| `role` | text, 1 to 64 bytes of UTF-8 | a label a client shows. It authorises nothing |
+| `expiry` | text | exactly `YYYY-MM-DDTHH:MM:SSZ`, a real UTC time from 1970 (BRC-169 section 9.1's `expiry`, its spelling pinned). A grant is not current at or after it, allowing a reader's clock skew of at most 300 seconds (BRC-169 section 9.6). An organization renews by issuing a new grant |
+| `role` | text, 1 to 64 bytes of UTF-8 | a label a client shows. It authorizes nothing |
 | `scope` | text, 1 to 512 bytes | section 5.3 |
 
 Each field's ciphertext is BRC-52's: AES-256-GCM under the field's revelation
@@ -342,16 +342,16 @@ neither with a qualifier:
 
 | Token | Meaning |
 | --- | --- |
-| `member` | the subject is a member of the organisation. A grant whose scope does not grant `member` is not a membership, and its subject belongs to no group |
-| `admin` | the subject administers the organisation's tooling. A client shows it; it authorises nothing on chain in this version, where every chain transition is signed by the organisation's key |
+| `member` | the subject is a member of the organization. A grant whose scope does not grant `member` is not a membership, and its subject belongs to no group |
+| `admin` | the subject administers the organization's tooling. A client shows it; it authorizes nothing on chain in this version, where every chain transition is signed by the organization's key |
 
 Unknown tokens fail closed (BRC-169 section 9.2 rule 4), read as follows: a
-verb this version does not define authorises nothing, and a defined verb that
+verb this version does not define authorizes nothing, and a defined verb that
 carries any qualifier is **denied**, never read as the bare verb. So
 `member:eng` grants no membership, and `member,member:eng` grants none
 either. A host checks only the grammar (when the scope is revealed); the
 meaning is a reader's, so that a grant naming a later version's token is
-admitted by an earlier host and simply authorises nothing there.
+admitted by an earlier host and simply authorizes nothing there.
 `scope-v1.json` pins the grammar and the meaning.
 
 ### 5.4 Reveal, and the opaque setting
@@ -365,13 +365,13 @@ verifier, and a key revealed to everyone needs no encryption. A host that
 finds `reveal` checks that every key opens its field and that every value
 meets its rule (`grant-reveal`).
 
-An organisation whose `opaque` is `true` publishes grants without `reveal`.
-`opaque` is fixed at the organisation's first token (section 11.1).
+An organization whose `opaque` is `true` publishes grants without `reveal`.
+`opaque` is fixed at the organization's first token (section 11.1).
 Its hosts and readers then cannot see roles or scopes, only that a grant
 exists for a subject: the opaque setting hides roles and scopes, not
 membership; its members read their own fields through the keyring
 (section 5.5) and reveal them to a verifier the ordinary BRC-52 way, over
-BRC-103 and BRC-104. A reader of a non-opaque organisation treats a grant
+BRC-103 and BRC-104. A reader of a non-opaque organization treats a grant
 without `reveal` as not current: it cannot check the scope. Group
 membership is not hidden by the opaque setting: a wrap names its recipient
 (section 16).
@@ -382,13 +382,13 @@ membership is not hidden by the opaque setting: a wrap names its recipient
 key encrypted by the certifier to the subject under protocol
 `[2, "certificate field encryption"]`, key id the field name, BRC-2's
 symmetric form (80 bytes for a 32-byte key). The subject decrypts it with
-counterparty the organisation and opens every field; go-sdk's
+counterparty the organization and opens every field; go-sdk's
 `certificates.DecryptFields` does exactly this, and the vectors check it.
 
 The grant carries everything a BRC-100 wallet's `acquireCertificate` takes
 under the direct protocol (type, certifier, serial number, revocation
 outpoint, signature, fields, the keyring for the subject, and the
-organisation as keyring revealer). A member's client MUST NOT keep a derived
+organization as keyring revealer). A member's client MUST NOT keep a derived
 summary in place of its grant (BRC-169 section 4.6): a client on a BRC-100
 wallet acquires it with `acquireCertificate`; a client that is its own home
 (the borg command's embedded wallet) keeps the grant record whole, as
@@ -396,9 +396,9 @@ carried, and rebuilds the certificate from it.
 
 ### 5.6 Revocation
 
-A grant is revoked two ways, and an organisation does both:
+A grant is revoked two ways, and an organization does both:
 
-- **by omission:** the next organisation token revokes the grant's
+- **by omission:** the next organization token revokes the grant's
   commitment, so the roll no longer holds it. Readers of borg's records see
   it at once, and one token revokes up to 64 grants;
 - **by spend:** a mined sweep spends the grant's revocation outpoint, which
@@ -407,34 +407,34 @@ A grant is revoked two ways, and an organisation does both:
   spent, the certificate MUST be treated as revoked"), and every host
   retracts the carrier. One sweep spends many outpoints. Hosts see a spend
   only when it is a sweep (a mined transaction whose output 0 is a
-  funding-shaped tombstone, section 11.1), so an organisation MUST revoke by
+  funding-shaped tombstone, section 11.1), so an organization MUST revoke by
   sweep; any other mined spend of the outpoint revokes the grant for BRC-52
   verifiers while hosts keep answering it. Only a mined spend revokes: an
   unmined transaction spending the outpoint revokes nothing.
 
 A grant is **current** for a reader when its commitment is in the roll of the
-organisation's canonical latest token, its revocation outpoint is unspent,
+organization's canonical latest token, its revocation outpoint is unspent,
 its scope grants `member`, and its expiry has not passed. A reader allows
 300 seconds of clock skew on expiry (a grant is current until 300 seconds
-after it); the organisation's own tooling allows none, so it stops wrapping
+after it); the organization's own tooling allows none, so it stops wrapping
 to a key and owes its removal from the instant the grant expires by its
 clock. Whether an outpoint
 is spent comes from an index, never from SPV alone, and inherits the index's
 honesty and lag (BRC-169 section 4.2); for anything that moves value or
 releases a key, "unspent" needs a positive answer (section 13), never the
-absence of a spend. For the organisation's own grants, its tooling's record
-of the sweeps it made is that evidence: a grant outpoint the organisation
+absence of a spend. For the organization's own grants, its tooling's record
+of the sweeps it made is that evidence: a grant outpoint the organization
 never swept is unspent by its own record, because only its key can spend it
 (the grant tree is locked to its derived key), and one it swept is spent
 from the moment it signed the sweep.
 
-An organisation funds each grant from its own funding output and makes one
+An organization funds each grant from its own funding output and makes one
 carrier per output: two carriers on one outpoint are equivocation, and a
 host answers only one of them (section 11.2). It holds at most 8 grants for
 one subject in its roll at a time.
 
 A role change is a revocation and a fresh grant (BRC-169 section 9.8): one
-organisation token admits the new commitment and revokes the old one. The
+organization token admits the new commitment and revokes the old one. The
 member's groups do not change, because a group names identity keys, not
 grants.
 
@@ -458,7 +458,7 @@ These are BRC-369 section 2, adopted verbatim:
 `epoch-v1.json` reproduces BRC-369's own vector for both values and then
 gives the scenario's three epochs.
 
-The organisation's tooling samples `k` for a transition that begins an epoch
+The organization's tooling samples `k` for a transition that begins an epoch
 when it builds the token, keeps it in its wallet's encrypted storage, and
 discards it if that token is never mined (section 7.3). It MUST NOT reuse a
 `k` for any other token, mined or not.
@@ -473,10 +473,10 @@ id's place:
 | security level | 2 |
 | protocol | `keyed content release` |
 | key id | standard padded base64 of `SHA-256(epoch id || epoch)`, the epoch as four bytes big-endian |
-| counterparty | the member, when wrapping; the organisation, when unwrapping |
+| counterparty | the member, when wrapping; the organization, when unwrapping |
 
 The derived key id binds a wrap to one group's one epoch: a wrap cannot be
-moved to another group, another epoch or another organisation, because the
+moved to another group, another epoch or another organization, because the
 epoch id hashes the whole record that began the epoch. The distinct protocol
 lets a wallet permit key release separately from messaging (BRC-369 section
 5.2 rule 2).
@@ -489,7 +489,7 @@ Magic `"bow"` `0x01`. The payload of a wrap carrier's one output.
 | --- | --- | --- | --- |
 | 0 | `magic` | bytes(4) | `62 6f 77 01` (`"bo"`, `'w'` for wrap, version 1) |
 | 1 | `hall` | text; the hall grammar | MUST equal the topic's hall |
-| 2 | `org` | bytes; the key rule | the releaser: the organisation, and the carrier's owner |
+| 2 | `org` | bytes; the key rule | the releaser: the organization, and the carrier's owner |
 | 3 | `group` | bytes(16) | the group |
 | 4 | `epoch` | uint, 0 to 2^32 - 1 | the epoch whose key this releases |
 | 5 | `epochId` | bytes(32) | the epoch id (section 4.1) |
@@ -517,10 +517,10 @@ BRC-369's release vector carries `33104242`; a host refuses both (`epoch-v1.json
 whose ciphertext opens with its listed shared secret, refused for its header
 alone).
 
-Only the organisation releases in this version: it holds every epoch key
+Only the organization releases in this version: it holds every epoch key
 because it sampled it, and BRC-369 section 6.2 makes the publisher its own
 releaser. A wrap is never addressed to the anyone key or to anyone the
-organisation has not authenticated as a member (BRC-369 section 5.2 rule 4).
+organization has not authenticated as a member (BRC-369 section 5.2 rule 4).
 
 ### 6.4 The member's checks
 
@@ -538,7 +538,7 @@ failure:
    equals the token's `commitment` (BRC-369 section 5.3 check 2).
 
 Check 4 names the culprit: a key that fails it was wrapped wrong by the
-organisation, which signed the commitment before any member held the key. A
+organization, which signed the commitment before any member held the key. A
 member keeps every epoch key it has opened in its wallet's encrypted storage,
 so later reads need no host.
 
@@ -546,7 +546,7 @@ so later reads need no host.
 
 borg delivers the epoch key; how an application keys its own objects under it
 is the application's contract. It MUST follow BRC-369 section 2.1 for every
-key it uses, MUST name the organisation, group and epoch of the key it used
+key it uses, MUST name the organization, group and epoch of the key it used
 beside each object, and SHOULD key each object with a fresh random key that
 it wraps under the epoch's symmetric key, so that one object's key opens one
 object (BRC-369 section 2.1 rule 2).
@@ -582,19 +582,19 @@ still write objects only `e`'s members read.
 
 ## 7. Membership changes
 
-Every change is one or more mined tokens plus carriers. The organisation's
+Every change is one or more mined tokens plus carriers. The organization's
 tooling builds, signs, waits for the proof, and publishes in this order.
 
 ### 7.1 The flows
 
-- **Create the organisation.** Mint a chain tree and a grant tree (section
+- **Create the organization.** Mint a chain tree and a grant tree (section
   9.4), and wait until both are mined; issue
-  the first grants (carriers on the grant tree); mint organisation token
+  the first grants (carriers on the grant tree); mint organization token
   `seq` 0 spending an output of the chain tree and admitting the grants; once
   it is mined, publish it with the chain tree in its BEEF.
 - **Grant.** Issue the grant carrier, funded by a grant-tree output whose
   outpoint becomes the revocation outpoint; publish it; then the next
-  organisation token admits its commitment. The member acquires the grant
+  organization token admits its commitment. The member acquires the grant
   into its wallet (section 5.5).
 - **Create a group.** Draw a group id and an epoch key; mint group token
   `seq` 0 (epoch 0, the initial members as `add`) spending a chain-tree
@@ -617,22 +617,22 @@ tooling builds, signs, waits for the proof, and publishes in this order.
 - **Rotate.** A transition with no change of members and a new epoch, on a
   schedule (`rotateEvery`), or after a suspected leak of a key: rotation on
   removal gives forward exclusion, not recovery (BRC-369 section 8.4).
-- **Offboard.** Revoke the member's grants (an organisation token revoking
+- **Offboard.** Revoke the member's grants (an organization token revoking
   their commitments, and a sweep of their revocation outpoints), and remove
   the member from every group that holds them, each removal with its new
   epoch.
-- **Change a role.** Revoke and reissue the grant in one organisation token
+- **Change a role.** Revoke and reissue the grant in one organization token
   (section 5.6); no group changes.
 - **A member's key changes.** The new key is a new identity: a grant to the
   new key, the old one revoked, and in every group a transition that removes
   the old key and adds the new one. Because it removes a key, it begins a new
   epoch, which is what a key change after a suspected compromise needs.
 
-The organisation MUST NOT wrap a key to anyone without a current membership
+The organization MUST NOT wrap a key to anyone without a current membership
 grant (section 5.6). A member whose grant expires or is revoked is owed a
 removal: **rotation debt** is a group whose latest members include a key with
 no current grant now (expired at the reader's clock, revoked, or not in the
-roll), and every transition the organisation makes in such a group first
+roll), and every transition the organization makes in such a group first
 removes those keys: the debt is removed in the same transition as any other
 change, or in an earlier one, never later. The tooling SHOULD schedule each member's removal for the
 moment its grant expires, so that debt does not arise. Anyone can compute the
@@ -650,10 +650,10 @@ clears it.
   names by lookup and offers it again to any that lacks it.
 - A wrap is published only after the token that makes its recipient a member
   of its epoch is mined in the publisher's own headers, and, where more than
-  one instance of the organisation's tooling can sign transitions, after one
+  one instance of the organization's tooling can sign transitions, after one
   further block (section 7.3). A wrap of a transition that never mines would
   hand a key to someone the chain never admitted.
-- A grant carrier is published before the organisation token that admits
+- A grant carrier is published before the organization token that admits
   it, so that a host holds the grant when it answers the roll.
 - A sweep is published after it is mined, under the same delay as a token.
 
@@ -675,8 +675,8 @@ published only after their token is mined (section 7.2), a losing transition
 has released nothing.
 
 When more than one instance of the tooling can sign (two devices of one
-organisation), a transition mined and then displaced by a reorganisation in
-favour of the other instance's is possible; that is why wraps then wait one
+organization), a transition mined and then displaced by a reorganization in
+favor of the other instance's is possible; that is why wraps then wait one
 further block. A single instance never builds two transitions on one tip.
 
 ### 7.4 More than one instance: the signer key and catching up
@@ -686,12 +686,12 @@ instance's change is at the hosts, except the epoch key the other instance
 sampled. That key reaches a second instance the way it reaches any member:
 in a wrap.
 
-The **signer key** of an organisation is the BRC-42 child of its identity
+The **signer key** of an organization is the BRC-42 child of its identity
 key under `[1, "borg organisation"]`, key id `signer`, counterparty anyone.
-Anyone derives the public key from the organisation's, so a reader can tell
-that a member is the organisation's own signer key; only a holder of the
-organisation's identity key derives the private key, and every instance of
-the tooling holds that. The signer key is not the organisation's key, so it
+Anyone derives the public key from the organization's, so a reader can tell
+that a member is the organization's own signer key; only a holder of the
+organization's identity key derives the private key, and every instance of
+the tooling holds that. The signer key is not the organization's key, so it
 may be a member and a wrap recipient (sections 4.3 and 6.3). It is granted
 and added to a group like any other key, and nothing about it is special to
 a host: admission, the index and a reader's checks see one more member.
@@ -699,7 +699,7 @@ a host: admission, the index and a reader's checks see one more member.
 Where more than one instance can sign, the tooling SHOULD keep the signer
 key a member of every group it creates or changes, holding a current grant,
 so that each epoch's key is wrapped to it. An instance **catches up** by
-reading as any reader does (section 13): the organisation's chain and each
+reading as any reader does (section 13): the organization's chain and each
 group's from seq 0 against its own headers, every grant of the roll (whose
 root it MUST reproduce before it takes any, because a grant it lacked would
 read as a member owed a removal), and each epoch's key from the wrap to
@@ -757,7 +757,7 @@ When a member is removed from a group at the transition that begins epoch
   the new epoch's commitment and does not decrypt its objects;
 - unless they are added again (a mined transition, visible to all, which
   begins a new epoch, so they read from that epoch on and not what was written
-  while they were away, section 7.1), or a current member or the organisation
+  while they were away, section 7.1), or a current member or the organization
   gives them the key outside the protocol, which no protocol prevents.
 
 **They can still write** objects keyed under epoch `e`, which only epoch `e`'s
@@ -770,20 +770,20 @@ plus the propagation delay and the writers' freshness bound.
 
 ## 9. Carriers, tokens, funding trees and derivations
 
-Everything here is bcommon's, parameterised by the values in section 9.1.
+Everything here is bcommon's, parameterized by the values in section 9.1.
 
 ### 9.1 Derivations and tags
 
 | What | Value |
 | --- | --- |
 | BRC-43 protocol | `[1, "borg organisation"]` (security level 1) |
-| Organisation token lock and field signature | key id `org`, invoice `1-borg organisation-org` |
+| Organization token lock and field signature | key id `org`, invoice `1-borg organisation-org` |
 | Group token lock and field signature | key id `group`, invoice `1-borg organisation-group` |
 | Wrap carrier record output and field signature; the outputs of the trees that fund wraps | key id `record`, invoice `1-borg organisation-record` |
 | Grant carrier record output and field signature; the outputs of the trees that fund grants | key id `grant`, invoice `1-borg organisation-grant` |
 | The outputs of the trees that pay for a chain's first token | key id `chain`, invoice `1-borg organisation-chain` |
 | Embedded wallet funding key | key id `fund`, counterparty `self` |
-| Organisation token tag | `62 6f 01` (`"bo"` `0x01`) |
+| Organization token tag | `62 6f 01` (`"bo"` `0x01`) |
 | Funding-output tag | `62 6f 02` (`"bo"` `0x02`) |
 | Group token tag | `62 6f 03` (`"bo"` `0x03`) |
 | Epoch-key release | `[2, "keyed content release"]`, BRC-369's (section 6.2) |
@@ -817,7 +817,7 @@ A grant or a wrap rides a carrier built by bcommon `carrier.Mint`:
   round, to keep a record off the chain while SPV still verifies it through
   its funding parent.
 
-The owner is the record's `org`: only the organisation issues grants and
+The owner is the record's `org`: only the organization issues grants and
 releases keys. The carrier's input script is executed against the funding
 output it spends (SPV of an unproven transaction does this; a host whose
 engine does not MUST do it itself), so only the owner's key could have made
@@ -826,13 +826,13 @@ not require a canonical unlocking script, so without it anyone could
 re-encode the input's script and present the same record under a new txid.
 The owner itself can make many carriers from one funding output, since
 carriers never conflict on chain; a host answers one of them per outpoint
-(section 11.2), and the organisation MUST NOT make more than one. A grant's
+(section 11.2), and the organization MUST NOT make more than one. A grant's
 revocation outpoint is its carrier's funding outpoint (section 5), so one
 grant fits one outpoint and a sweep of that outpoint revokes it.
 
 ### 9.3 Chain tokens
 
-An organisation or group token is a mined transaction with exactly one output
+An organization or group token is a mined transaction with exactly one output
 that claims a token, a lock-before PushDrop of two fields and the field
 signature, holding 1 satoshi (its other outputs, such as change, claim
 nothing):
@@ -845,15 +845,15 @@ nothing):
 The signature is the wallet's strict low-S DER signature over
 `SHA-256(field 1 || field 2)` under the locking key. A token at `seq > 0`
 MUST spend the token at `seq - 1` of the same chain; a token at `seq` 0 MUST
-spend at least one output of the organisation's chain tree, locked to
-`derive(org, "chain")` (section 9.4). Only the organisation's key can do either:
+spend at least one output of the organization's chain tree, locked to
+`derive(org, "chain")` (section 9.4). Only the organization's key can do either:
 the token is mined, so its inputs' scripts were valid, and the output it
-spends is locked to the organisation's derived key. Copying a token's
+spends is locked to the organization's derived key. Copying a token's
 signed output script into another transaction makes nothing a host admits,
 because that transaction cannot spend the predecessor. Two tokens spending
 one predecessor are a double spend of which at most one is ever mined. A
 token's other inputs pay its fee from any source and are not read. The
-organisation MUST NOT spend a token's output except in its successor: a token
+organization MUST NOT spend a token's output except in its successor: a token
 output spent by anything else ends the chain, and a reader that finds the
 latest token spent by a transaction that is not a token reports the chain
 **terminated** (section 13).
@@ -894,7 +894,7 @@ carrier and pay for chains' first tokens. A chain tree is small (8 outputs
 by default), because a chain's first token carries it whole. A mined spend of a grant tree's output revokes the grant it funded, so a sweep
 of a whole grant tree is a revocation of every grant on it: a kill switch
 that sweeps every tree (bcommon `producer` sweeps all of a home's trees) is,
-for an organisation, the revocation of its whole roll, and the tooling says
+for an organization, the revocation of its whole roll, and the tooling says
 so before it runs.
 
 ### 9.5 Retraction and revocation
@@ -931,7 +931,7 @@ renderer that shows the readable part SHOULD show the suffix beside it.
 The object plane is shared: anyone may publish to any topic, and readable
 names collide. A suffix drawn at random once per hall makes an accidental
 collision negligible (about 2^-47 for any one pair). It is not a secret and
-not an access control. An organisation picks a hall its members' hosts
+not an access control. An organization picks a hall its members' hosts
 carry, or creates one; a host advertises the halls it carries by BRC-88 SHIP
 like any other topic.
 
@@ -942,8 +942,8 @@ answers BRC-24 questions of exactly these classes:
 
 | Class | Question (`query` object) | Answer (`output-list`) | Price |
 | --- | --- | --- | --- |
-| `org` | `{"hall": h, "org": o}` | the organisation's latest tokens: those at the highest `seq` held, at most 8 | free |
-| `org-seq` | `{"hall": h, "org": o, "seq": s}` | the organisation's tokens at `seq` `s`, at most 8 | free |
+| `org` | `{"hall": h, "org": o}` | the organization's latest tokens: those at the highest `seq` held, at most 8 | free |
+| `org-seq` | `{"hall": h, "org": o, "seq": s}` | the organization's tokens at `seq` `s`, at most 8 | free |
 | `roll` | `{"hall": h, "roll": o}` | the grant carriers whose commitments the roll of `o`'s latest token holds, first page | free |
 | `roll-after` | `{"hall": h, "roll": o, "after": c}` | the same, after the commitment `c` | free |
 | `member` | `{"hall": h, "org": o, "member": k}` | the grant carriers in that roll whose subject is `k`, at most 8, each with its inclusion path in the roll as context | free |
@@ -991,7 +991,7 @@ loses nothing.
 
 **Inclusion paths.** Each output of a `member` answer carries, as its BRC-24
 `context`, the canonical CBOR array `[seq, index, size, path]`: the `seq` of
-the organisation token whose roll the answer used, the grant's leaf index in
+the organization token whose roll the answer used, the grant's leaf index in
 that roll, the roll's size, and the RFC 6962 inclusion path as an array of
 `[bytes(32), bool]` steps from the leaf upward, the bool `true` when the
 sibling is on the left (bcommon `commit.Prove`). A reader verifies the path
@@ -1052,14 +1052,14 @@ objects arrived in. This is deliberate. A topic manager that reads another
 topic, or a policy record, while it admits is not stable on the reference
 engine: it has been measured to refuse a transaction whose dependency was
 submitted at the same time (every time, for a pair), in the same transaction
-(always), or synchronised in the other order (always, silently, and never
+(always), or synchronized in the other order (always, silently, and never
 repaired), because the engine checks every topic before it writes any and
 holds no lock across submissions. And the engine hands a topic manager only
 the indices of the inputs whose outputs the topic holds (its previous coins,
 BRC-22), never those outputs. So a chain token carries its predecessor's
 transaction in its own BEEF, and the topic manager reads the predecessor's
 record from those bytes; every cross-record question (is this member's grant
-current? is this the latest epoch? did the organisation wrap to everyone?) is
+current? is this the latest epoch? did the organization wrap to everyone?) is
 a status the lookup service computes and a reader checks (sections 11.2 and
 13). The previous coins decide only which held outputs an accepted
 transaction retains. SPV of the BEEF is the engine's and runs before the
@@ -1103,7 +1103,7 @@ other path computes at that level, or at the lowest level the other txid
 itself, which is flagged); nothing else may be omitted, and nothing else may
 appear. Two separate paths for a token and a parent mined in one block are
 refused (`beef`): the BEEF writers merge them, so two of one block are not
-what a writer builds. The organisation's tooling SHOULD still build a token
+what a writer builds. The organization's tooling SHOULD still build a token
 only on a parent mined in an earlier block. Every transaction is carried whole: a txid-only entry (BRC-96)
 is refused. The counts are those the BEEF declares on the wire, before any
 parser merges or collapses anything.
@@ -1119,7 +1119,7 @@ starts with `0x21`, 33 bytes and `0xac`, then one push (an opcode `0x01` to
 `0x4b`, or `OP_PUSHDATA1`, `2` or `4` with its little-endian length, every
 declared byte present). The output **claims a grant** when that push's data
 starts with a CBOR definite-length map head, `00 44` and `62 6f 6d 01`, **a
-wrap** with `62 6f 77 01`, **an organisation token** when the data is exactly
+wrap** with `62 6f 77 01`, **an organization token** when the data is exactly
 `62 6f 01`, **a group token** when it is exactly `62 6f 03`, and it is
 **funding-shaped** when the whole script is `0x21 <33 bytes> 0xac 03 62 6f 02
 75` (`script-v1.json`). A transaction with more than one claiming output, or
@@ -1159,7 +1159,7 @@ Rules 5 to 8 follow bcommon `carrier.Validate`'s order, stricter in rule 8.
 Rules 6 and 9, with the engine's execution of the input's script, make the
 commitment the owner's alone.
 
-**Organisation or group token.** A transaction whose one claiming output
+**Organization or group token.** A transaction whose one claiming output
 claims a token. Its **parent** is the other transaction in its BEEF:
 
 1. `shape`: the claiming output is not a PushDrop of exactly two fields and a
@@ -1169,7 +1169,7 @@ claims a token. Its **parent** is the other transaction in its BEEF:
 3. the record's own rules, with their reasons;
 4. `hall`: not this topic's;
 5. `lock`: the output script is not the well-formed two-field signed PushDrop
-   locked to `derive(org, "org")` for an organisation token or
+   locked to `derive(org, "org")` for an organization token or
    `derive(org, "group")` for a group token;
 6. `signature`: the field signature is not strict low-S DER, or does not
    verify;
@@ -1177,14 +1177,14 @@ claims a token. Its **parent** is the other transaction in its BEEF:
    host's headers;
 8. `token-input`: for `seq > 0`, the parent's txid is not `prev`, or no input
    of the token spends an output of the parent that is a well-formed token of
-   the same kind, hall and organisation (and group) at `seq - 1`, or more than
+   the same kind, hall and organization (and group) at `seq - 1`, or more than
    one input spends a token output of the parent (an output that classifies
    as a token, well formed or not); for `seq` 0, no input spends
    an output of the parent that is a well-formed funding output locked to
    `derive(org, "chain")`, or an input spends a token output of the parent;
 9. the transition rules against the predecessor (the parent's token output):
    section 4.2 for a group token (`transition`, `rotation`, `count`), and for
-   an organisation token `transition` (same hall and organisation, the next
+   an organization token `transition` (same hall and organization, the next
    `seq`, `prev` naming the predecessor's transaction, the same `opaque`) and
    `count` (the predecessor's `count` plus `admit` less `revoke`).
 
@@ -1217,7 +1217,7 @@ publishes a tree on its own (section 9.4). Only output
 and nothing unmined is admitted, so a stranger cannot fill a topic with free
 ones. A host MAY refuse (`too-large`) a sweep of more than its input bound,
 which is at least 1024; such a sweep is about 150 KB on the plane, so an
-organisation sweeps large trees in parts on the plane. A host keeps a spend
+organization sweeps large trees in parts on the plane. A host keeps a spend
 for its life only when the outpoint is a carrier's funding outpoint; spends
 of other outpoints it keeps in a bounded table (host policy, at least 65536
 outpoints, oldest dropped first), so that a sweep that arrives before the
@@ -1246,7 +1246,7 @@ once.
 
 ### 11.2 The index
 
-The lookup service keeps, per hall and organisation: the tokens of each
+The lookup service keeps, per hall and organization: the tokens of each
 chain by `seq` (up to 8 per `seq`); the grants by commitment and by subject;
 the wraps by group, epoch and recipient; and one **outpoint row** per funding
 outpoint any admitted carrier spends, holding the commitments of the carriers
@@ -1268,8 +1268,8 @@ sees each and checks its status itself. Otherwise a held carrier is answered
 and a retracted or superseded one is not. Up to 8 superseded wrap carriers
 per outpoint are kept as evidence that the owner equivocated; the rest are
 counted and MUST be dropped. Superseded grant carriers are kept, up to 64 per
-outpoint, until the outpoint is swept, because a later organisation token may
-name any of them in its roll; beyond 64 the organisation has equivocated at a
+outpoint, until the outpoint is swept, because a later organization token may
+name any of them in its roll; beyond 64 the organization has equivocated at a
 scale no host follows.
 
 The index folds each chain from `seq` 0 along the spends it holds and records
@@ -1280,7 +1280,7 @@ token's new epoch repeats an earlier epoch's commitment; and
 `rejoin-unrotated` when a group token adds a key an earlier token of the
 group removed without beginning an epoch (section 4.2). A token gets the
 first that applies, in this order: `members-mismatch` (and
-`roll-mismatch` for an organisation) is sticky, so every later token of the
+`roll-mismatch` for an organization) is sticky, so every later token of the
 chain has it too; then `commitment-reuse`; then `rejoin-unrotated`; else the
 token is consistent. `pending` is not a fold result but the host's state
 while it lacks a predecessor, and a reader that holds the whole chain never
@@ -1318,7 +1318,7 @@ index from the topic's stored outputs and the outpoints it persisted, and
 folds every chain from `seq` 0, whatever order storage returns them in; a
 token met before its predecessor is `pending` until the fold reaches it.
 
-### 11.5 Reorganisations
+### 11.5 Reorganizations
 
 A host learns of a block only through its headers, and an application on the
 reference host is given no signal when a block leaves the best chain. So a
@@ -1338,7 +1338,7 @@ decide with their own headers (section 13): a token or a sweep whose proof
 does not verify against the reader's best chain is not mined for that reader,
 who fetches the transaction's current proof from a chain source by its txid. Because an epoch id
 hashes the record, not the txid, a transition that is mined again after a
-reorganisation, as it usually is, keeps its epoch id, and its wraps stay
+reorganization, as it usually is, keeps its epoch id, and its wraps stay
 valid.
 
 ### 11.6 Joining a hall
@@ -1362,14 +1362,14 @@ BEEF passes section 11.1. Tokens, carriers and sweeps are self-verifying
 and may be replayed in any order; replaying in `seq` order only spares the host its `pending`
 interval.
 
-A host MUST NOT enable an unordered synchronisation of unspent outputs for
+A host MUST NOT enable an unordered synchronization of unspent outputs for
 `tm_borg_` topics: one carries only unspent outputs, so it never carries a
 chain's spent tokens, and it drops what a topic manager refuses without
 retrying it.
 
 ## 12. Delivery: plane and unicast
 
-A publisher (the organisation's tooling) reaches the hall's hosts in one of
+A publisher (the organization's tooling) reaches the hall's hosts in one of
 two ways. The records, the hosts and the readers are the same in both.
 
 | | plane | unicast |
@@ -1393,7 +1393,7 @@ facade took it (the `wrap` class answers a wrap as soon as a host holds it),
 and offer it directly to a host that still lacks it after a few seconds:
 that is a copy across (below), not a way round the plane's repair, and a
 direct copy that meets the plane's is a duplicate. A grant is confirmed the
-same way once the organisation token that admits it is published.
+same way once the organization token that admits it is published.
 
 **Unicast.** The publisher submits the same bytes to each host it names (at
 most 16), retries each on its own, and counts the object published once a
@@ -1403,7 +1403,7 @@ raised refusal look the same, so an answer that admits nothing is confirmed by
 lookup before it counts. Tokens and sweeps must reach every host named. A
 grant carrier is the exception to confirming at once: no free class answers
 a grant before the roll admits it, so a grant is counted when sent, then
-confirmed by the `member` class at each host once the organisation token
+confirmed by the `member` class at each host once the organization token
 that admits it is published, and offered again to any host whose answer
 lacks it.
 
@@ -1429,11 +1429,11 @@ silently.
 
 A reader checks everything against its own block headers and fails closed.
 
-**The organisation's state.** Ask `org` (one or more hosts). Among the
+**The organization's state.** Ask `org` (one or more hosts). Among the
 answered tokens, keep those whose proof verifies against the reader's best
 chain and that meet section 11.1's token rules; the **canonical** chain is
 the one that runs by spends from the first-mined `seq` 0 token (lower height,
-then lower position in its block). Its highest token is the organisation's
+then lower position in its block). Its highest token is the organization's
 latest. A reader that holds an earlier latest token checks that the new one
 descends from it (`org-seq` back to it), so that a host cannot answer an old
 state as the latest. Whether a token is the latest is settled the way a
@@ -1442,7 +1442,7 @@ to a source that indexes spends. A reader without such a source trusts the
 highest `seq` any asked host answers, asks more than one, and says that its
 answer may be stale.
 
-**Is `K` a current member?** Ask `member` for `K` at the organisation's
+**Is `K` a current member?** Ask `member` for `K` at the organization's
 latest token; verify each answered grant carrier (the carrier rules and
 section 5's content rules) and its inclusion path against the token's `roll`
 (section 10.2). Without a path that verifies, ask `roll` (all pages), verify
@@ -1450,7 +1450,7 @@ every grant, and compute the roll root of their commitments: a mismatch means
 the host withheld or added a grant, so ask another host. Then `K` is a
 current member when a grant in the roll has subject `K`, a scope that grants
 `member` (section 5.3), an expiry not passed, a reveal unless the
-organisation is opaque, and an unspent revocation outpoint. "Unspent" is a
+organization is opaque, and an unspent revocation outpoint. "Unspent" is a
 positive answer, never an absence: a node or UTXO index the reader trusts
 says the outpoint is unspent, mempool included, or at least two sources
 agree, each checked within 60 seconds for anything that moves value or
@@ -1464,11 +1464,11 @@ A chain whose latest token's output is spent by a transaction that is not a
 token is **terminated**: the reader shows it so and keys nothing under it.
 
 **A group's state.** Ask `group`; choose the canonical latest token as for
-the organisation. Its `members` root is the group's membership. To enumerate
+the organization. Its `members` root is the group's membership. To enumerate
 the members, ask `wraps` for the latest token's epoch (all pages), verify each
 wrap carrier, and take the recipients of every entry; their members root MUST
 equal the token's `members`. A recipient not in the set is a **stray** wrap,
-which the organisation made to someone the chain never admitted, and a member
+which the organization made to someone the chain never admitted, and a member
 of the set with no entry has an **incomplete** release: both are reported,
 and the group is shown as inconsistent. An incomplete release is reported
 **pending**, not inconsistent, while the reader's best chain is at most one
@@ -1488,10 +1488,10 @@ of an epoch after `e` names `K`. The last is the absence of an answer, so it
 is evidence and not proof; what makes the removal cryptographic is that the
 key of epoch `e + 1` is fresh and wrapped only to the members the root names.
 
-**Rotation debt.** A group of the organisation whose latest members include a
-key that is not a current member of the organisation now (the two checks
+**Rotation debt.** A group of the organization whose latest members include a
+key that is not a current member of the organization now (the two checks
 above). Anyone can compute it;
-the organisation's tooling clears it (section 7.1).
+the organization's tooling clears it (section 7.1).
 
 **A host's answer is not authority.** A host can withhold a token, a grant or
 a wrap; it cannot forge or alter one. The roots make withholding from the roll
@@ -1502,7 +1502,7 @@ newer token detectable.
 
 | Quantity | Bound | Why |
 | --- | --- | --- |
-| Organisation record, encoded | 8192 bytes | 64 admitted and 64 revoked commitments take about 4.2 KB |
+| Organization record, encoded | 8192 bytes | 64 admitted and 64 revoked commitments take about 4.2 KB |
 | Group record, encoded | 8192 bytes | 64 added and 64 removed keys take about 4.3 KB |
 | Grant record, encoded | 4096 bytes | a revealed grant is about 850 bytes |
 | Wrap record, encoded | 4096 bytes | 16 entries take about 3.1 KB |
@@ -1532,25 +1532,25 @@ a client MUST respect it.
 
 | Choice | Pattern followed | Where it differs, and why |
 | --- | --- | --- |
-| Members hold certificates issued by the organisation; authority in a certificate, never in shared keys | BRC-169 section 9 (delegation: "Authority travels in a certificate, never in shared key material"; section 9.8: an organisation "issues each member a delegation certificate and reassigns access by revoke-and-reissue") | a type of its own (section 5.1) with `role`, `scope` and `expiry`; no `delegator` handle, because the organisation is named by its key |
+| Members hold certificates issued by the organization; authority in a certificate, never in shared keys | BRC-169 section 9 (delegation: "Authority travels in a certificate, never in shared key material"; section 9.8: an organization "issues each member a delegation certificate and reassigns access by revoke-and-reissue") | a type of its own (section 5.1) with `role`, `scope` and `expiry`; no `delegator` handle, because the organization is named by its key |
 | The grant's shape, signature, field encryption and keyring | BRC-52 (certifier, subject, serial, revocation outpoint, encrypted fields, master keyring, `[2, "certificate signature"]`, `[2, "certificate field encryption"]`) | laid out as CBOR rather than BRC-52's binary form; the binary form is rebuilt to verify. Unless opaque, a public reveal: the field revelation keys in the clear, which reveals to everyone what a BRC-52 keyring reveals to one verifier |
 | Certificate type id | BRC-169 section 4.5's derivation (`type = base64(SHA-256(derivation string))`, versioned by the string); BRC-52 (one type, one set of field names and meanings) | the derivation string is borg's |
 | Scope grammar and fail-closed reading | BRC-169 section 9.2 | `*` refused; a qualifier this version does not define denies its verb |
 | Revocation by outpoint spend; revocation status from an index, not SPV; expiry against the reader's clock | BRC-52 ("If that UTXO has been spent, the certificate MUST be treated as revoked"); BRC-169 sections 4.2, 9.6 | the revocation outpoint is the grant carrier's funding outpoint, so one sweep both revokes for every verifier and retracts the carrier at every host; the roll root is a second, batched revocation |
 | Certificate custody | BRC-169 section 4.6; BRC-100 `acquireCertificate` | none |
 | Epoch key sampling, symmetric key, commitment | BRC-369 sections 2.1 and 2.2 (digest form) | adopted verbatim; the point form and split keys (section 6.4) are not used |
-| Epochs, rotation on removal, `previous` link, linear release | BRC-369 section 8 ("A room MUST begin a new epoch whenever a participant ceases to satisfy its gate"; "linear in the number of participants") | the epoch descriptor is the group record of the token that begins the epoch, in CBOR, signed by the token's field signature under the organisation's derived key rather than JSON signed by the identity key (a BRC-100 wallet cannot sign with its identity key); its id is SHA-256 of the record; `previous` is the chain's `prev` and `epochSeq`; rotation on removal is enforced by every host, not only by the releaser |
+| Epochs, rotation on removal, `previous` link, linear release | BRC-369 section 8 ("A room MUST begin a new epoch whenever a participant ceases to satisfy its gate"; "linear in the number of participants") | the epoch descriptor is the group record of the token that begins the epoch, in CBOR, signed by the token's field signature under the organization's derived key rather than JSON signed by the identity key (a BRC-100 wallet cannot sign with its identity key); its id is SHA-256 of the record; `previous` is the chain's `prev` and `epochSeq`; rotation on removal is enforced by every host, not only by the releaser |
 | The release and its derivation | BRC-369 section 5.2 (`[2, "keyed content release"]`, key id `SHA-256(content id || epoch)`); BRC-78 serialization; BRC-2 symmetric form; BRC-42 and BRC-43 | the wraps ride the plane in a record of up to 16, not one message per recipient to a messagebox; version bytes as both SDKs write them, not as BRC-369's vector writes them |
 | Checking a released key | BRC-369 section 5.3 (check 2, the commitment) | check 1 (ciphertext hash) and 3 (the tag) belong to each application's content |
 | Releaser | BRC-369 section 6.2 (the publisher as its own releaser) | delegated releasers (section 6.1) are not in this version |
 | Group key agreement | BRC-369 section 11 ("Tree-based rekeying ... needs a group key agreement specification"); RFC 9420 | linear, as BRC-369 section 8.3; the group chain settles which change applies at each step, the ordering RFC 9420 leaves to its delivery service, without a server |
-| Ordered membership on a chain of mined tokens; a fork is a double spend | BRC-48 Pay to Push Drop tokens spent forward; BRC-22 topic managers retaining previous coins | no coordinator: each group and each organisation is its own serialization point; the predecessor is read from the token's BEEF, never from what a host holds |
+| Ordered membership on a chain of mined tokens; a fork is a double spend | BRC-48 Pay to Push Drop tokens spent forward; BRC-22 topic managers retaining previous coins | no coordinator: each group and each organization is its own serialization point; the predecessor is read from the token's BEEF, never from what a host holds |
 | Records never mined, kept off chain | BRC-60's non-final transaction, which it keeps open to update before mining | turned the other way round: a far-future lock time keeps the record off the chain for good |
 | Canonical CBOR records with integer keys; unknown keys preserved | RFC 8949 section 4.2.1 for the encoding; BRC-174 section 3.2 for preserving unrecognized fields | one codec with every application on the same library |
 | Record magic: prefix, type letter, version | BRC-171 section 6's header of a protocol prefix, a version and a record type | in the order bcommon's registry fixes (prefix, type letter, version) |
 | Roll and membership roots | RFC 6962 Merkle Tree Hash | none |
 | Topic and lookup names | BRC-87; BRC-22; BRC-24 with `output-list` answers | a random suffix per hall |
-| Host discovery | BRC-88 SHIP | a chain is joined by replay, each token's BEEF assembled by the replayer, not by an unordered synchronisation (section 11.6) |
+| Host discovery | BRC-88 SHIP | a chain is joined by replay, each token's BEEF assembled by the replayer, not by an unordered synchronization (section 11.6) |
 | Priced questions | BRC-105 over BRC-103 and BRC-104; BRC-29; BRC-180 rule 2 | only the bulk history classes are priceable; the payment's output index and script are fixed here, where BRC-105 leaves them to the implementation |
 | Carrier ancestry and proofs | BRC-62, BRC-96 and BRC-95 BEEF; BRC-74 BUMP | exactly what the object needs, so nobody can attach anything to it; a chain token carries its proven parent in a BEEF V1 or V2, which Atomic BEEF cannot |
 | Objects on the plane | BRC-148 and BRC-149 | none |
@@ -1558,7 +1558,7 @@ a client MUST respect it.
 The BRC-52 certificate verifier and the BRC-369 release code (wrapping an
 epoch key, opening a wrap and checking an entry) are borg's own (Go
 `borgrec`, TypeScript `host/src`). What a second application
-shares is bcommon's, unchanged in behaviour and checked against the same
+shares is bcommon's, unchanged in behavior and checked against the same
 vectors: the bounded record reader (`record`), the BEEF a chain token, a
 carrier and a sweep are admitted in (`chaintoken`), and in Go the BRC-369
 content key, its symmetric key, its commitment and the check on an opened
@@ -1570,7 +1570,7 @@ key (`keyed`). borg pins bcommon v0.6.2 in both languages.
    joined and left, how many members a group has and how often it rotates are
    visible to every host in the hall and to anyone who follows its topic: the
    chain lists every addition and removal, and every wrap names its
-   recipient. A non-opaque organisation also publishes roles and scopes. The
+   recipient. A non-opaque organization also publishes roles and scopes. The
    opaque setting hides roles and scopes, not membership: a grant names its
    subject, and a group names its members.
 2. **No forward secrecy for wraps.** A wrap is BRC-2 under BRC-42 derivation
@@ -1581,14 +1581,14 @@ key (`keyed`). borg pins bcommon v0.6.2 in both languages.
 3. **No recovery without rotation.** A leaked epoch key exposes that epoch
    until the group rotates; rotation on removal is not proactive recovery
    (BRC-369 section 8.4). A group that wants recovery on a schedule sets
-   `rotateEvery` and the organisation's tooling acts on it; no host enforces it.
+   `rotateEvery` and the organization's tooling acts on it; no host enforces it.
 4. **Rotation is linear.** A removal from a group of `n` costs `n - 1` wraps,
    in records of up to 16; groups above a few hundred members wait for a
    tree-based construction.
 5. **Leaks name nobody.** Every member of an epoch holds the same key.
-6. **The organisation's key is everything.** Whoever holds it can grant,
-   remove, re-add and read every epoch. A compromised organisation key is a new
-   organisation; this version has no succession.
+6. **The organization's key is everything.** Whoever holds it can grant,
+   remove, re-add and read every epoch. A compromised organization key is a new
+   organization; this version has no succession.
 7. **Revocation is as fresh as the index asked.** SPV cannot prove an output
    unspent; a reader learns that an output is unspent only from a node or an
    index, with its lag and honesty, and a reader with no such source cannot
@@ -1608,10 +1608,10 @@ key (`keyed`). borg pins bcommon v0.6.2 in both languages.
     query, keeps that to itself.
 13. **A removed member can still write** under the epochs whose keys they
     hold; readers that check authorship against an epoch's members (section
-    6.5) are the defence.
+    6.5) are the defense.
 14. **A token's transaction can be re-encoded by a miner.** A token's
     unlocking scripts are not held to one form, so a miner can mine a copy
-    with another txid. The transition is the same, but the organisation must
+    with another txid. The transition is the same, but the organization must
     rebuild its next transition on the copy's txid.
 
 ## 17. Vectors
@@ -1635,7 +1635,7 @@ both directions).
 | --- | --- |
 | `derivation-v1.json` | the registry values; the test identities; the keys each derives for `org`, `group`, `record`, `grant` and `chain` under counterparty anyone, checked against the owner's own wallet; the SDK's refusal of `[1, "borg"]`; the grant type; halls with one readable part and two suffixes, and one suffix drawn from fixed bytes |
 | `epoch-v1.json` | BRC-369's vector reproduced (symmetric key, commitment, release key id and invoice, the release payload opened with its listed shared secret, and its version bytes, which borg refuses); the scenario's three epoch keys with their symmetric keys, commitments, epoch ids and release key ids |
-| `org-v1.json`, `org-*.hex` | the organisation's genesis (three grants), the offboarding (one revoked) and an opaque organisation's genesis, with their roll roots; the transition admitted, refusals of each transition rule, and a `member` answer's inclusion context that verifies for one grant and not for another |
+| `org-v1.json`, `org-*.hex` | the organization's genesis (three grants), the offboarding (one revoked) and an opaque organization's genesis, with their roll roots; the transition admitted, refusals of each transition rule, and a `member` answer's inclusion context that verifies for one grant and not for another |
 | `group-v1.json`, `group-*.hex` | a group's create, add, remove and scheduled rotation, with members after each, epoch ids and commitments; every transition admitted, refusals of each transition rule against its predecessor, a join with `rotateOnJoin` admitted with its new epoch and refused without it, tokens whose fold breaks (`members-mismatch`), and a removed key re-added with and without a new epoch (`rejoin-unrotated`) |
 | `grant-v1.json`, `grant-*.hex` | four grants (three revealed, one opaque) with their values in the clear, the stand-in revelation keys and IVs, the ciphertexts, the keyring, the BRC-52 binary form signed and the signature; each member opens its own and another member cannot |
 | `wrap-v1.json`, `wrap-*.hex` | the four wrap records of the scenario with each entry's IV, and what each member's wallet opens from each, with the check label of each failure: the removed member opens epoch 0 and neither epoch 1 nor epoch 2; a wrap held against another epoch's token fails check 1 |
@@ -1643,13 +1643,13 @@ both directions).
 | `refusal-v1.json` | byte strings each record's rules refuse, each with its reason (section 3.1), and the grant's content rules; a record with an unknown key, preserved |
 | `query-v1.json` | every class with its members, price and limit; questions, each with its class or refused |
 | `script-v1.json` | the classifier of section 11.1 over real locking scripts from bcommon's PushDrop, and scripts that claim nothing |
-| `transaction-v1.json` | transactions as BEEF, each with the previous coins it is admitted with, admitted or refused by the rules of section 11.1 in their order: grant and wrap carriers, organisation and group tokens (one mined in its parent's block, so its BEEF holds one merged path, and one as BEEF V2), a sweep, and a mined funding tree published alone; refusals of every carrier rule (shape, BEEF, record, hall, mineable, unlock, lock, signature, funding, grant content), every token rule (shape, BEEF, record, hall, lock, signature, unmined, token input, transitions), sweeps and transactions that are not borg's. Every input of every case passes the script interpreter, so each refusal is made by its rule alone; a few cases break two rules and are refused for the earlier. `stored` holds each admitted token as the engine stores it, read back without its parent, and the BEEF a replayer assembles from it (section 11.6), byte for byte the one first admitted |
+| `transaction-v1.json` | transactions as BEEF, each with the previous coins it is admitted with, admitted or refused by the rules of section 11.1 in their order: grant and wrap carriers, organization and group tokens (one mined in its parent's block, so its BEEF holds one merged path, and one as BEEF V2), a sweep, and a mined funding tree published alone; refusals of every carrier rule (shape, BEEF, record, hall, mineable, unlock, lock, signature, funding, grant content), every token rule (shape, BEEF, record, hall, lock, signature, unmined, token input, transitions), sweeps and transactions that are not borg's. Every input of every case passes the script interpreter, so each refusal is made by its rule alone; a few cases break two rules and are refused for the earlier. `stored` holds each admitted token as the engine stores it, read back without its parent, and the BEEF a replayer assembles from it (section 11.6), byte for byte the one first admitted |
 | `index-v1.json` | the index's rules of section 11.2: the chains of `transaction-v1.json` folded, chains whose fold breaks (`roll-mismatch`, `members-mismatch`, `commitment-reuse`, `rejoin-unrotated`), and funding-outpoint rows with each carrier's status |
 
 The vectors' hall is `example_hall_vkqzmtrwxp`; its suffix is a fixed example
 so that the vectors are reproducible. The test identities' private keys are 32
-bytes of one value (`0x51` the organisation, `0x52` to `0x54` the members,
-`0x55` a second, opaque organisation, `0x56` a key that is never a member);
+bytes of one value (`0x51` the organization, `0x52` to `0x54` the members,
+`0x55` a second, opaque organization, `0x56` a key that is never a member);
 they are public and never for real use. Every value a client draws at random
 (epoch keys, field revelation keys, IVs, serial numbers, the group id) is a
 fixed stand-in, `SHA-256("borg/vector/<label>")`. The record vectors use

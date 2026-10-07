@@ -28,10 +28,10 @@ any tag.
   `ParseEntry`, `CheckEpochToken`, `Unwrap`, `ReleaseKeyID`.
 - Tokens: `ReadToken`, `StoredToken`, `ChainToken`.
 - The signer key (spec section 7.4): `SignerKey`, which anyone derives
-  from the organisation's public key, and `SignerPrivate`, which only the
-  organisation's identity key derives. An application run from the
-  organisation's home opens the group's epoch keys with it, through the
-  wraps the organisation makes to its own signer key.
+  from the organization's public key, and `SignerPrivate`, which only the
+  organization's identity key derives. An application run from the
+  organization's home opens the group's epoch keys with it, through the
+  wraps the organization makes to its own signer key.
 - The registry values (protocol name, key ids, tags, magics, derivations,
   topic prefix and lookup service), `CheckHall`, the bounds (`Max*`, `Min*`,
   `*Len`), the `Err*` values and `Reason`.
@@ -97,7 +97,7 @@ tokens answer an older state, every token of which verifies.
   txid of the latest token the caller verified of the chain, refuses with
   a `*RollbackError` a chain that ends below that seq, sets
   `ChainView.Replaced` when the token at that seq is another one (a
-  reorganisation, or a fork: the caller decides), and hands it the latest
+  reorganization, or a fork: the caller decides), and hands it the latest
   token read. The implementation must persist what it is handed before the
   caller acts on the chain, and must not lower a seq on its own.
 - A caller with no `Floor` has no rollback memory for a group's chain. It

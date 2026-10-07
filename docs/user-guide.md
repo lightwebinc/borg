@@ -1,6 +1,6 @@
 # borg user guide
 
-This guide is for the people who run an organisation with borg and for
+This guide is for the people who run an organization with borg and for
 its members: what borg does, how to set it up, and how to use it day to
 day. [QUICKSTART.md](../QUICKSTART.md) runs all of it on one machine in a
 few minutes; [usage.md](usage.md) is the reference for every command and
@@ -8,10 +8,10 @@ setting; [spec.md](spec.md) is the contract the records follow.
 
 ## 1. What this is
 
-borg gives an organisation a membership roll and its groups a shared key
+borg gives an organization a membership roll and its groups a shared key
 that changes whenever anyone leaves.
 
-- **Membership is a certificate.** The organisation issues each member a
+- **Membership is a certificate.** The organization issues each member a
   BRC-52 certificate with a role, a scope and an expiry. Any BRC-52
   verifier can check it, and one mined spend revokes it everywhere.
 - **Changes are ordered by the chain.** The roll and each group are chains
@@ -30,68 +30,79 @@ or left are public to everyone who reads the hall (spec section 16).
 
 ## 2. Install
 
-Build `bin/borg` with `make borg` (Go 1.27.1 or later), or run the image
-`ghcr.io/lightwebinc/borg` with a volume at `/home/nonroot/.borg`. A host is
-the `borg-host` image or the module on a reference overlay host
-([host.md](host.md)). `borg doctor` shows the home and asks every
-configured endpoint whether it answers; it changes nothing.
+```console
+$ go install github.com/lightwebinc/borg/cmd/borg@latest
+```
+
+Or take a static binary from the
+[releases](https://github.com/lightwebinc/borg/releases), or run the image
+`ghcr.io/lightwebinc/borg` (built locally by `make docker-build`) with a
+volume at `/home/nonroot/.borg`. A host is the `borg-host` image or the
+module on a reference overlay host ([host.md](host.md)). `borg doctor`
+shows the home and asks every configured endpoint whether it answers; it
+changes nothing.
 
 ## 3. Concepts
 
 | Word | Meaning |
 | --- | --- |
 | home | a directory holding one identity: its key, its coin, its state and every epoch key it holds. Secret |
-| organisation | an identity key; the home that runs `org create` is the organisation |
-| hall | the topic `tm_borg_<name>_<suffix>` an organisation lives in, shared by any number of organisations |
+| organization | an identity key; the home that runs `org create` is the organization |
+| hall | the topic `tm_borg_<name>_<suffix>` an organization lives in, shared by any number of organizations |
 | grant | a member's BRC-52 certificate; its revocation outpoint is the output that funds it |
-| roll | the grants the organisation's latest token commits to, by a Merkle root |
+| roll | the grants the organization's latest token commits to, by a Merkle root |
 | group | a chain of tokens naming its members; each has epochs |
 | epoch | one generation of a group's key; every removal begins one |
 | wrap | an epoch key encrypted to one member, in a record of up to 16 |
 | rotation debt | a group member whose grant is no longer current; the group's next change removes them |
-| signer key | a key every home of the organisation derives from its identity key; as a member of a group it is wrapped each epoch's key, which is how a second home comes to hold it |
+| signer key | a key every home of the organization derives from its identity key; as a member of a group it is wrapped each epoch's key, which is how a second home comes to hold it |
 | token, carrier | a token is a mined transaction (one per change of a chain); a carrier is an unmined one that holds a grant or a wrap and spends a funding output |
 | sweep | a mined spend of funding outputs: it revokes the grants and retracts the carriers they funded |
 
 ## 4. Configuration
 
 Settings come from flags, `BORG_<KEY>` variables, and a `key = value`
-file at `~/.borg/config` ([usage.md](usage.md#configuration)). An
-organisation needs a hall, the hosts, a header source, a node (`asset`), a
+file at `~/.borg/config` ([configuration.md](configuration.md)). An
+organization needs a hall, the hosts, a header source, a node (`asset`), a
 settlement leg (`settle`), and `facade` on the plane. A member needs the
-hall, the organisation's key (`org`), the hosts, a header source, and the
+hall, the organization's key (`org`), the hosts, a header source, and the
 node for revocation checks and writer evidence.
 
 ```text
-# ~/.borg/config, a member
+# ~/.borg/config, a member on mainnet
+network    = main
 hall       = example_qzxkvbmwtr
 org        = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 hosts      = https://host-a.example.com,https://host-b.example.com
-header_url = https://headers.example.com
-asset      = http://192.0.2.10:8090
+header_url = woc:main
+asset      = https://asset.example.com
 ```
 
-No address has a default: a default would send an organisation's records,
+On testnet, `network = test` and `header_url = woc:test`, with a testnet
+node's asset API.
+
+No address has a default: a default would send an organization's records,
 or a member's questions, to a server nobody chose.
 
-## 5. Running an organisation
+## 5. Running an organization
 
 ```console
-$ borg init                     # once: the organisation's key
-$ borg fund -txid <txid>        # import a payment to the fund address
+$ borg init                     # once: the organization's key; prints the fund address
+$ # send about 20,000 sat from your own wallet to that address; wait one block
+$ borg fund -txid <txid>        # import that payment into the home's pool
 $ borg hall new example         # or use a hall your hosts carry
 $ borg org create 'Example' -member <alice> -member <bob>
 $ borg group create engineering -member <alice> -member <bob>
 ```
 
-The home's identity key is the organisation: it signs every grant, every
+The home's identity key is the organization: it signs every grant, every
 token and every wrap. Keep the home at mode 0700 and back it up as a
 secret; `borg org show` prints what it holds, and `borg doctor` what it
 still owes.
 
 Each change waits for its token to be mined, waits the propagation delay
 (60 s), publishes it, and makes the wraps it needs. A change therefore
-takes about a block and a minute, and each chain (the organisation's, each
+takes about a block and a minute, and each chain (the organization's, each
 group's) moves once a block ([limits.md](limits.md)). If a command stops
 part way (a host down, the network slow, the machine switched off), what
 it built is kept in the home and the next command finishes it first.
@@ -103,10 +114,12 @@ tells you: `funding tree ... is recovered` when the tree reached the chain
 unspent and back in the pool` when it did not. You have nothing to do; if
 the node cannot be asked, the command says so and the next one asks again.
 
-What it costs: each change is one mined transaction of about 2.5 KB, a
-few hundred satoshis at 1 satoshi a byte. Each grant and each batch of
-wraps rides a funding output of one satoshi and is never mined; the tree
-that holds 32 such outputs is one more mined transaction.
+What it costs: each change is one mined transaction of about 700 bytes to
+1.2 KB, and borg pays 1 satoshi a byte, so about 700 to 1,250 sat. Each
+grant and each batch of wraps rides a funding output of one satoshi and is
+never mined; the tree that holds 32 such outputs is one more mined
+transaction, about 1,800 sat. About 20,000 sat covers an organization, a
+group and about twenty changes ([limits.md](limits.md#what-it-costs)).
 
 ## 6. Members
 
@@ -148,7 +161,7 @@ its expiry by at most the timer's interval. Nothing is removed early.
 A group is a chain of tokens. Each token names who was added and removed
 and carries a root over the members; an epoch is the stretch of that chain
 under one key. The key of an epoch is sampled at random by the
-organisation, committed to in the token that begins the epoch before
+organization, committed to in the token that begins the epoch before
 anyone holds it, and wrapped to each member.
 
 ```console
@@ -216,7 +229,7 @@ $ borg grant revoke <key>              # by the roll and by sweep
 $ borg grant revoke <key> -by sweep    # or one of the two
 ```
 
-A grant is revoked two ways. The next organisation token leaves it out of
+A grant is revoked two ways. The next organization token leaves it out of
 the roll, which every reader of borg's records sees. And a mined sweep
 spends its revocation outpoint, which every BRC-52 verifier sees and which
 makes every host retract the grant. A revoked member still in a group is
@@ -232,8 +245,8 @@ makes, one sweep per grant tree and per record tree the home holds. It
 revokes the whole roll and retracts every grant and wrap at every honest
 host, one block a tree, and cannot be undone. The chains stay (they are
 mined), every member is then without a current grant, and epoch keys
-members already opened stay opened. Use it when the organisation's key or
-home is lost to someone else, or to end the organisation. It does not wait
+members already opened stay opened. Use it when the organization's key or
+home is lost to someone else, or to end the organization. It does not wait
 for work an earlier command left unfinished, and an output another home
 already swept is passed over, its sweep taken as done. If it says outputs
 are spent by a transaction not yet mined, run it again after a block.
@@ -246,7 +259,7 @@ and `open` say so (`DISAGREES`, exit 3). Anyone who reads the hall repairs
 it, with no coin and no key:
 
 ```console
-$ borg fill                 # the organisation's chain, the roll, every group
+$ borg fill                 # the organization's chain, the roll, every group
 $ borg fill engineering     # or the groups named
 filled  group 5a0c… seq 5 3f9ac4107d21 at https://host-b.example.com
 filled  wrap 9ade7f2e0b15 at https://host-b.example.com
@@ -260,21 +273,21 @@ before it is sent and confirmed by a lookup afterwards. Run it again:
 `filled  0 object(s)` means the hosts agree.
 
 A chain's first token needs its chain tree, which no host keeps and a node
-may have dropped once all its outputs were spent. The organisation's home
+may have dropped once all its outputs were spent. The organization's home
 keeps it: run `fill` there and the tree comes from the home, checked like
 anything else. From any other home, a host missing a chain's first token
 can be filled only while the node still answers its tree; otherwise `fill`
-names the tree and asks you to run it from the organisation's home.
+names the tree and asks you to run it from the organization's home.
 
 ## 11. A second home: `sync`
 
-An organisation is one identity key, and more than one home can hold it: a
+An organization is one identity key, and more than one home can hold it: a
 second device, a standby, or a new machine after the first was lost.
 Everything such a home needs is at the hosts, except the epoch keys, which
 reach it the way they reach any member: in a wrap, addressed to the
-organisation's **signer key**.
+organization's **signer key**.
 
-Prepare, on the home that runs the organisation:
+Prepare, on the home that runs the organization:
 
 ```console
 $ borg org signer          # grant the signer key and add it to every group
@@ -295,9 +308,9 @@ sync    took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant
 missing group 5a0c… epoch 0: the signer key was not a member of this epoch
 ```
 
-`org sync` reads the organisation as any reader does (every token against
+`org sync` reads the organization as any reader does (every token against
 your headers, the roll's root reproduced) and opens each epoch key from the
-wrap to the signer key. After it the home runs the organisation.
+wrap to the signer key. After it the home runs the organization.
 
 With `signers` above one, two homes can both be in use. When both change
 the same chain at once, one transition is mined and the other is discarded
@@ -371,7 +384,7 @@ The ones you meet first; the full table, with reasons, is
 ## 15. Troubleshooting
 
 Run `borg doctor` first: it shows the home, the pool, the trees, the
-organisation, anything persisted and not yet published, a sweep in flight
+organization, anything persisted and not yet published, a sweep in flight
 or failed, each group's rotation debt, and whether every endpoint answers.
 
 | Exit | Meaning | What to do |
@@ -385,7 +398,7 @@ Exit 1, by message:
 
 - `CANNOT OPEN ... removed at seq`: you are not a member of the current
   epoch. You keep the epochs you held.
-- `lost: its predecessor is spent by`: another home of the organisation
+- `lost: its predecessor is spent by`: another home of the organization
   changed the same chain first. Nothing was released. Run the command
   again; with `signers` above one it catches up by itself, otherwise `borg
   org sync` first.
@@ -398,7 +411,8 @@ Exit 1, by message:
 
 Exit 2, by message:
 
-- `fee input: ... no spendable output`: fund the home (`borg fund`). If it
+- `fee input: ... no spendable output`: fund the home (send a payment to
+  its fund address and `borg fund -txid <txid>`). If it
   says coins are change not yet mined, wait for a block. If it says a
   funding tree minted ahead holds a coin and has not settled, run the
   command again: the change returns once the tree settles.
@@ -430,7 +444,7 @@ Exit 3, by message:
   hosts, and look at the named one.
 - `none verifies against the header source`: every token the hosts
   answered was refused. Check `header_url` (`borg doctor`) before blaming
-  the hosts; after a reorganisation set `asset` so stale proofs are
+  the hosts; after a reorganization set `asset` so stale proofs are
   replaced.
 - `DISAGREES`: a host lacks a token another answered: it is behind, or
   withholding. `borg fill`.
@@ -443,7 +457,7 @@ Exit 3, by message:
   `-budget`. Give it a larger one, or read the rest with `-after`.
 - `refused the paid request for its session's budget (429)`: the payment
   was sent and is kept; ask again later.
-- `no host answers a wrap`: the organisation has not published your wrap
+- `no host answers a wrap`: the organization has not published your wrap
   yet (it follows the token by a block where several homes sign). Ask
   again shortly.
 - `PENDING`: the same, seen by `group show`.

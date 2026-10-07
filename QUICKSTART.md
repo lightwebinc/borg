@@ -1,19 +1,87 @@
 # Quickstart
 
+Two ways in. **On mainnet or testnet** you fund borg with a small payment
+from your own wallet and use overlay hosts that carry the borg module. **In
+the local development sandbox** a private regtest chain stands in for the
+network, so no coin is needed; it is for trying borg and for development,
+not for real use.
+
+## On mainnet or testnet
+
+You need:
+
+- BSV in a wallet you control (mainnet), or testnet coin (testnet). About
+  20,000 sat covers an organization, a group and a few dozen changes
+  ([limits.md](docs/limits.md#what-it-costs)).
+- One or more overlay hosts that carry your hall: the `borg-host` image, or
+  the borg module on any reference overlay host ([host.md](docs/host.md)).
+- A node's asset API (`asset`): a Teranode node you run or may use. It
+  serves proofs, the tip and the spent-output view.
+- A broadcast service (`settle`): `arcade:<url>` for any ARC-compatible
+  API, `rpc:<url>` for a node, or `tcp:<host:port>` for an ingress.
+- A header source: `woc:main` or `woc:test` (public WhatsOnChain), or your
+  own chaintracks service or overlay bridge.
+
+```console
+$ mkdir -p ~/.borg && cat > ~/.borg/config <<'CONF'
+network    = main
+header_url = woc:main
+asset      = https://asset.example.com
+settle     = arcade:https://arc.example.com
+mode       = unicast
+hosts      = https://host-a.example.com,https://host-b.example.com
+CONF
+$ borg init
+created /home/you/.borg
+identity     02c6...
+fund address 1Ab... (main)
+```
+
+Send about 20,000 sat from your own wallet to the fund address `init`
+printed. When the payment has one confirmation, import it by its txid:
+
+```console
+$ borg fund -txid <txid>
+$ borg hall new example              # give the printed BORG_HALLS line to your hosts
+$ borg -hall example_<suffix> doctor # every endpoint answers?
+$ borg -hall example_<suffix> org create 'Example' -member <alice key> -member <bob key>
+$ borg -hall example_<suffix> group create engineering -member <alice key> -member <bob key>
+```
+
+Each member runs `borg init` (no coin needed), sends you the `identity` line,
+and with `org`, `hall`, `hosts`, `header_url` and `asset` in their config
+reads the group's key:
+
+```console
+$ borg open engineering
+```
+
+For testnet use `network = test` and `header_url = woc:test` with a
+testnet node and broadcast service; the fund address then starts with `m`
+or `n`. Every command after that is the same. The whole walk, with removal,
+revocation, a second home and the priced question, is
+[docs/examples.md](docs/examples.md).
+
+## Local development sandbox (no coin needed, a private regtest chain)
+
 In about five minutes, on one machine: run two overlay hosts that carry a
-hall, create an organisation with three members in unicast mode, give them
+hall, create an organization with three members in unicast mode, give them
 a group whose key each of them opens, remove one member and watch the key
 change under them, revoke a grant by sweep, pay a host's 402 for the
 priced history question, make the removal a revoked member is owed, and
-check that the two hosts hold the same. No coin is needed, because a local chain stands
-in for the network; the last section says what changes on the real one.
+check that the two hosts hold the same. A local regtest chain stands in for
+the network and mines coinbase to each home (coinbase: only on a regtest
+chain you run, for development and tests); nothing it mines is money.
 
 You need [Docker](https://docs.docker.com/get-docker/) with Compose, and
-this repository (or just its `deploy/quickstart/compose.yaml`).
+this repository. Build the three images first (`make docker-build` and
+`make docker-build-host REFERENCE_HOST_IMAGE=<the reference overlay host
+image>`), or set `BORG_IMAGE`, `BORG_HOST_IMAGE` and `DEVCHAIN_IMAGE` to
+published ones.
 
 ```mermaid
 flowchart LR
-  O["borg (the organisation)"] -->|"submit, each host"| HA["host-a"]
+  O["borg (the organization)"] -->|"submit, each host"| HA["host-a"]
   O -->|"submit, each host"| HB["host-b"]
   M["borg (alice, bob, carol)"] -->|"lookup, both"| HA
   M -->|lookup| HB
@@ -26,7 +94,7 @@ flowchart LR
   HB -->|headers| C
 ```
 
-## 1. Start the local chain
+### 1. Start the local chain
 
 ```console
 $ cd deploy/quickstart
@@ -38,15 +106,13 @@ $ as() { who=$1; shift; docker compose run --rm -T -e BORG_HOME=/home/nonroot/.b
 transaction it is sent at once, and is the header source the hosts and
 `borg` check proofs against. Nothing it mines is money. The `borg` service
 is configured for it and for the two hosts, in unicast mode (the settings
-are in `compose.yaml`). `as org ...` runs it with the organisation's home;
+are in `compose.yaml`). `as org ...` runs it with the organization's home;
 each identity has its own.
 
 The images are `ghcr.io/lightwebinc/borg`, `borg-host` and
-`borg-devchain`. To build them from a checkout instead of pulling them:
-`make docker-build` and `make docker-build-host REFERENCE_HOST_IMAGE=<the
-reference overlay host image>`.
+`borg-devchain`, tag `latest` unless the variables above name others.
 
-## 2. An organisation, three members, a hall, the payee key
+### 2. An organization, three members, a hall, the payee key
 
 ```console
 $ as org init | tee org.txt && as org fund
@@ -64,16 +130,19 @@ $ echo "BORG_ORG=$ORG" >> .env
 $ as payee payee key -out - >> .env
 ```
 
-`init` made an identity key for each. The organisation is an identity key:
-the org home's key will sign every grant and every change. `fund` mined
-101 blocks to a fund address, so one block's coin is mature; the members
+`init` made an identity key for each. The organization is an identity key:
+the org home's key will sign every grant and every change. `fund` (no
+`-txid`) mined 101 blocks of coinbase to a fund address on the sandbox
+chain, so one block's coin is mature (coinbase: only on a regtest chain you
+run, for development and tests; on mainnet or testnet you import a payment
+with `fund -txid` instead); the members
 need none (bob is funded only to pay for the priced question later). The
 hall's name gets a random suffix, so nobody else's hall shares its topic,
 and the `host` line is what a host needs to carry it. `.env` hands the
-hall to the hosts and to the `borg` service, the organisation's key to the
+hall to the hosts and to the `borg` service, the organization's key to the
 members, and the payee key to host-a.
 
-## 3. Start two hosts
+### 3. Start two hosts
 
 ```console
 $ docker compose up -d
@@ -85,16 +154,16 @@ host        http://host-b:8080 answering
 history     http://host-a:8090 serves terms (2 priced class(es))
 ```
 
-The first start takes a few seconds while MySQL initialises; run `doctor`
+The first start takes a few seconds while MySQL initializes; run `doctor`
 again until both hosts answer.
 
-## 4. The organisation and a group
+### 4. The organization and a group
 
 ```console
-$ as org org create 'Example Organisation' -member $ALICE -member $BOB -member $CAROL
+$ as org org create 'Example Organization' -member $ALICE -member $BOB -member $CAROL
 org     02c6…9a1e
 hall    example_qzxkvbmwtr
-name    Example Organisation
+name    Example Organization
 seq     0 8b0e…12fa
 grant   1c7d…0b3e 03a1…77c2 member
 ...
@@ -105,15 +174,15 @@ seq     0 3f9a…c410 epoch 0, 3 member(s), wrapped to each
 $ GROUP=$(sed -n 's/^group *//p' group.txt)
 ```
 
-`org create` minted the organisation's funding trees, signed a BRC-52
+`org create` minted the organization's funding trees, signed a BRC-52
 membership grant to each member and sent it to both hosts, then minted the
-organisation's first token, whose record admits the three grants to the
+organization's first token, whose record admits the three grants to the
 roll; once it was mined it went to both hosts. `group create` drew a group
 id and a random epoch key, committed to the key in the group's first
 token, and once that was mined wrapped the key to each member: one record
 on the plane per batch of members, each entry readable by one member's key.
 
-## 5. Every member opens the key
+### 5. Every member opens the key
 
 ```console
 $ as alice open engineering
@@ -128,7 +197,7 @@ wallet, and checked the key against the commitment the token made before
 anyone held it. The key is kept in alice's home. Bob and carol do the
 same.
 
-## 6. Remove bob
+### 6. Remove bob
 
 ```console
 $ as org org remove $BOB -group engineering
@@ -147,7 +216,7 @@ A removal must begin a new epoch: every host refuses a token that removes
 anyone without one. The new key was sampled fresh and wrapped only to
 alice and carol. Bob keeps what he could read before, and nothing after.
 
-## 7. The roll, and a revocation by sweep
+### 7. The roll, and a revocation by sweep
 
 ```console
 $ as alice roll
@@ -162,7 +231,7 @@ grant   … : not current, revoked: its revocation outpoint is spent by 74ba…8
 ```
 
 `roll` asked both hosts for every grant, verified each, and checked that
-what each host answered hashes to the root the organisation's token
+what each host answered hashes to the root the organization's token
 committed to: a host cannot leave a grant out unseen. A grant's revocation
 outpoint is the output that funded it; the sweep spent it, so every BRC-52
 verifier now treats the grant as revoked and both hosts retract it. Carol
@@ -170,7 +239,7 @@ is now rotation debt in the group: the group's next transition removes her
 first (`borg epoch rotate engineering` does it now). `grant revoke` without
 `-by` also revokes in the roll.
 
-## 8. The priced question, and the payee
+### 8. The priced question, and the payee
 
 ```console
 $ as bob terms
@@ -191,7 +260,7 @@ free classes give the same tokens one at a time; the priced class sells
 the bulk walk. `payee settle` took the payment into the payee's wallet:
 checked, broadcast, mined, pooled.
 
-## 9. The removal owed, and do the hosts agree?
+### 9. The removal owed, and do the hosts agree?
 
 ```console
 $ as org org due
@@ -204,44 +273,28 @@ $ as alice fill
 filled  0 object(s) at 0 host(s)
 ```
 
-Carol's grant is revoked, so the organisation owes her a removal from the
+Carol's grant is revoked, so the organization owes her a removal from the
 group: `org due` lists it (and exits 3), and `-apply` makes it, with a new
 epoch that only alice opens. It lists a grant that is about to expire the
 same way, before it does; run from a timer, `org due -apply` removes each
 member when their grant lapses.
 
-`fill` compared what the two hosts answer (the organisation's chain, the
+`fill` compared what the two hosts answer (the organization's chain, the
 roll's grants, the group's chain and its wraps) and found nothing to copy.
-Had host-b been down while the organisation published, it would lack
+Had host-b been down while the organization published, it would lack
 tokens and wraps, every reading command would say `DISAGREES`, and `fill`
 would replay each one to it from host-a's answers, verified first: anyone
 can run it, and it needs no coin.
 
-## 10. Clean up
+### 10. Clean up
 
 ```console
 $ docker compose --profile cli down -v
 ```
 
-## On a real network
+### Next
 
-- **The chain.** Point `asset`, `settle` and `header_url` at a node, a
-  settlement leg and a header source you trust, set `network`, leave
-  `delay` at its default of 60 seconds, and fund the organisation's home
-  with `borg fund -txid` from a payment to its fund address
-  (docs/usage.md). Every token and sweep is then a mined transaction of a
-  few hundred bytes, and every grant and wrap rides a funding output.
-- **The plane.** With a multicast plane, set `mode = plane` and `facade`:
-  each carrier is submitted once and every subscribed host receives it;
-  tokens and sweeps also go to every host named.
-- **Hosts.** A host is the `borg-host` image, or the module on any
-  reference overlay host (docs/host.md).
-- **Members.** A member's home needs `hosts`, `header_url`, `hall`, `org`,
-  and `asset` for revocation checks and writer evidence; no coin.
-- **A second home.** Run `borg org signer` once, and a home made on
-  another machine with `borg init -from identity.json` rebuilds the
-  organisation's state from the hosts with `borg org sync`
-  (docs/user-guide.md section 11).
-- **Next.** [docs/user-guide.md](docs/user-guide.md) explains the concepts
-  and the day-to-day use; [docs/usage.md](docs/usage.md) every command and
-  setting; [docs/limits.md](docs/limits.md) every default and cap.
+[docs/examples.md](docs/examples.md) runs the same on mainnet or testnet;
+[docs/user-guide.md](docs/user-guide.md) explains the concepts and the
+day-to-day use; [docs/configuration.md](docs/configuration.md) every setting;
+[docs/limits.md](docs/limits.md) every default and cap.

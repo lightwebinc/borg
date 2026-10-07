@@ -1,9 +1,9 @@
 # Limits
 
-What an organisation publishes, how fast, and what a host answers are bounded
+What an organization publishes, how fast, and what a host answers are bounded
 twice. The record bounds every reader accepts ([spec.md](spec.md) section 14)
 are protocol and sit above everything here. The limits below are policy:
-recommended defaults and caps for the organisation's tooling, members'
+recommended defaults and caps for the organization's tooling, members'
 clients and hosts, none of them a wire format or a frozen bound
 ([frozen.md](frozen.md)), and a later version may change any of them without
 a new record version.
@@ -18,26 +18,26 @@ borg: tree_count 1200 is over the limit of 1000: every carrier's BEEF carries it
 A **recommendation** passed is a `warning: ...` line on stderr, and the
 command goes on. A **host** limit is the host operator's, set in the host's
 environment ([host.md](host.md)); a client cannot change it. The `borg`
-command applies every row below that concerns the organisation's tooling
+command applies every row below that concerns the organization's tooling
 or a member's client ([usage.md](usage.md)).
 
 ## The table
 
-### The organisation and its groups
+### The organization and its groups
 
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
 | Members of a group | as needed | 1024 (the record bound) | Every removal wraps the new key to every remaining member | Warns above 256: a removal then costs at least 32 wrap carriers |
 | Wraps per wrap record (`entries`) | 8 on the plane, 16 in unicast | 16 (the record bound) | An 8-entry carrier is 4 packets, 16 is 6 | Plane warns above 8 |
-| Groups of an organisation | as needed | none in the records; a client lists 4096 a host (64 pages) | Each group is its own chain and costs one chain-tree output and one mined token to begin; the groups do not slow each other | Same |
+| Groups of an organization | as needed | none in the records; a client lists 4096 a host (64 pages) | Each group is its own chain and costs one chain-tree output and one mined token to begin; the groups do not slow each other | Same |
 | Grants in the roll | as needed | 65536 (the record bound) | The roll is one Merkle root; a member is checked by an inclusion path, the whole roll by reading it | A client reads at most 4096 grants a host (64 pages); a larger roll is checked one member at a time |
 | Grants one key holds in the roll | 1 | 8 | A renewal overlaps the grant it replaces; more is a mistake | Same |
 | Changes per transition (`admit`, `revoke`, `add`, `remove`) | as needed | 64 each (the record bound) | A larger change is several tokens, one block apart | Plane warns above 16 in all (a token and its parent then pass 4 packets); unicast: 64 |
-| Transitions per chain | one at a time | one a block | Each token spends the one before it, mined; the next is built only once the previous is proven in the tooling's own headers. Different chains (the organisation's, each group's) move in the same block | Same |
+| Transitions per chain | one at a time | one a block | Each token spends the one before it, mined; the next is built only once the previous is proven in the tooling's own headers. Different chains (the organization's, each group's) move in the same block | Same |
 | Propagation delay before publishing a mined token or sweep (`delay`) | 60 s after its block is in the publisher's headers | 0 s to 10 min | A host whose headers lack the block refuses it, and the plane does not deliver it again. So a change is at the hosts about one block and 60 s after it is decided | Plane and unicast; the publisher then confirms by lookup and resubmits |
-| Blocks before publishing wraps | the token's own block | one further block when `signers` is above one | A transition displaced by a reorganisation in favour of another instance's must not have released its key | Same |
+| Blocks before publishing wraps | the token's own block | one further block when `signers` is above one | A transition displaced by a reorganization in favor of another instance's must not have released its key | Same |
 | Grant lifetime (`-expiry`) | 365 days | the year 9999 | An expired grant is rotation debt: the member is owed a removal | Same |
-| Signer key's grant lifetime | 10 years, renewed by the tooling before any group transition | fixed | It is the organisation's own key, not a person's: nobody is there to renew it | Same |
+| Signer key's grant lifetime | 10 years, renewed by the tooling before any group transition | fixed | It is the organization's own key, not a person's: nobody is there to renew it | Same |
 | Window `org due` and `doctor` look ahead (`-within`) | 30 days | the flag | Long enough to renew a grant before its holder is removed | Same |
 | Funding tree outputs (`tree_count`) | 32 | 1000 | Every carrier's BEEF carries its whole tree, about 49 bytes an output | Plane warns above 100 |
 | Chain tree outputs (`chain_tree_count`) | 8 | 32 | A chain's first token carries its chain tree whole | Same |
@@ -45,13 +45,13 @@ or a member's client ([usage.md](usage.md)).
 | Tree minted ahead | one, when 4 outputs are left (half the tree when it has 4 or fewer) | one at a time per kind | The next tree is settled while the last outputs are spent, so a change seldom waits a block for a tree | Same |
 | `object_bound` | 1048576 | 8388608 | BRC-149: 1 MiB on the open path, 8 MiB on an authenticated one; no plane admits more | Plane only |
 
-### More than one home of an organisation
+### More than one home of an organization
 
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
 | Instances that can sign (`signers`) | 1 | 16 | Above one: wraps wait a block, the signer key is kept a member of every group, and each command first catches up when the node shows a latest token spent | Same |
 | Concurrent changes to one chain | one wins | one mined a block | Two transitions on one tip spend the same output; the loser is discarded with its key, having released nothing, catches up and builds again (exit 1, then run it again) | Same |
-| What a catch-up reads (`org sync`) | every token of every chain from seq 0, the whole roll, the wraps of every epoch, at every host | the reading caps below | It trusts no host: it folds each chain and reproduces the roll's root itself. Cost grows with the organisation's history times the host count | Same |
+| What a catch-up reads (`org sync`) | every token of every chain from seq 0, the whole roll, the wraps of every epoch, at every host | the reading caps below | It trusts no host: it folds each chain and reproduces the roll's root itself. Cost grows with the organization's history times the host count | Same |
 | What a catch-up asks the node | one spent-output question per coin in the pool, per latest token and per grant in the roll | none | The pool is made the home's unspent coins again, and a grant swept elsewhere is marked | Not on the plane |
 | Funding trees two homes share | none | none; a tree another home spends is retired by `org sync` | A funding output answers one carrier: of two on one output a host answers one and keeps the other as superseded, and one sweep retracts both | Same |
 
@@ -75,7 +75,7 @@ or a member's client ([usage.md](usage.md)).
 | Revocation check age, for anything that moves value | 60 s | the reader's resolution lifetime | BRC-169 section 4.2 | Same |
 | Expiry skew | 300 s | 300 s (spec) | BRC-169 section 9.6 | Same |
 | What `fill` copies | every token, roll grant and wrap a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it | Off the plane, or a host a publisher missed |
-| Where `fill` finds a chain's first token's parent (the chain tree) | the home's own record, when it runs in the organisation's home; else the node (`asset`) | none | No host keeps a chain tree, and a node may drop it once all its outputs are spent. The publishing home records every tree it mints, a second home records each chain tree when `org sync` first takes the chain; a home made by `org sync` before v0.1.6 has no record, and a home that is not the organisation's has none: from those, a host that lost a chain's first token is filled only while the node answers the tree. Hosts do not keep chain trees: that would change the host contract | Same |
+| Where `fill` finds a chain's first token's parent (the chain tree) | the home's own record, when it runs in the organization's home; else the node (`asset`) | none | No host keeps a chain tree, and a node may drop it once all its outputs are spent. The publishing home records every tree it mints, a second home records each chain tree when `org sync` first takes the chain; a home made by `org sync` before v0.1.6 has no record, and a home that is not the organization's has none: from those, a host that lost a chain's first token is filled only while the node answers the tree. Hosts do not keep chain trees: that would change the host contract | Same |
 
 ### Revoking and the kill switch
 
@@ -131,6 +131,40 @@ or a member's client ([usage.md](usage.md)).
 | Authenticated requests remembered, to refuse one sent twice | the last 65536 | fixed | A replay is refused 401 before any signature; the session budget bounds an older one | Not on the plane |
 | Lookup rate a host accepts | host policy | host policy; 429 with `Retry-After` | Lookup is an unauthenticated surface | Same |
 
+## What it costs
+
+borg pays its miner fees from the home's pool at 1 satoshi a byte, with a
+250-satoshi floor a transaction. That is ten times the BSV mainnet miner
+minimum of 100 satoshis a kilobyte, so a transaction is never held back for
+its fee; the rate is not configurable. Only tokens, funding trees, sweeps
+and payments are mined. Grants and wraps ride a 1-satoshi funding output
+and are never mined.
+
+| Mined transaction | Size | Fee |
+| --- | --- | --- |
+| organization token, 3 admitted | 711 bytes | 711 sat |
+| group token, no change (a rotation) | 673 bytes | 673 sat |
+| group token, 2 added | 744 bytes | 744 sat |
+| group token, 16 added | 1,235 bytes | 1,235 sat |
+| chain funding tree, 8 outputs | 583 bytes | about 590 sat |
+| grant or record funding tree, 32 outputs | 1,759 bytes | about 1,790 sat with its 32 outputs |
+
+Sizes are of real transactions built with bcommon (a token with a fee
+input, a predecessor input and change; see below). In practice:
+
+- `org create` with a few members mints a chain tree, a grant tree and the
+  first organization token: about 3,100 sat.
+- `group create` adds a record tree and the group's first token: about
+  2,500 sat.
+- Each later change (an addition, a removal, a revocation by the roll, a
+  rotation) is one token, about 700 to 1,250 sat. A sweep costs about the
+  same. A new grant or record tree is minted when the last one runs out,
+  every 32 grants or wrap records.
+
+About 20,000 sat (0.0002 BSV) covers an organization, a group and about
+twenty changes. A member needs no coin unless it asks the priced history
+question (at most `-max-sats`, 1000 sat by default, a question).
+
 ## Where the numbers come from
 
 **Sizes, measured.** `internal/limits` builds real objects with bcommon: grant
@@ -154,7 +188,7 @@ fragment headers).
 | group token, 1 removed | 277 | 2,594 | 3 |
 | group token, 16 added | 802 | 3,646 | 4 |
 | group token, 64 added and 64 removed | 4,724 | 11,487 | 11 |
-| organisation token, 3 admitted | 278 | 2,598 | 3 |
+| organization token, 3 admitted | 278 | 2,598 | 3 |
 | group token at seq 0, chain tree of 8 | 296 | 2,373 | 3 |
 | group token at seq 0, chain tree of 32 | 296 | 3,550 | 4 |
 
@@ -193,12 +227,12 @@ decided, plus their freshness bound.
 published 60 s after its block reaches the publisher's headers. Adding ten
 people to one group is one token (up to 64 keys a token); removing one
 person from ten groups is ten tokens, one in each group's chain, which can
-all mine in the same block. An offboarding is an organisation token (the
+all mine in the same block. An offboarding is an organization token (the
 roll), one sweep per grant tree, and one token per group: on a chain with
 a block every ten minutes, about three blocks.
 
-**Catching up.** `org sync` reads the organisation as a stranger would. For
-an organisation of `g` groups with `t` tokens and `e` epochs each, at `h`
+**Catching up.** `org sync` reads the organization as a stranger would. For
+an organization of `g` groups with `t` tokens and `e` epochs each, at `h`
 hosts, that is about `h * (g * (t + e) + roll pages)` lookups, each answer
 verified against the headers. It runs only when another home changed
 something: with `signers` above one, a command asks the node whether any of

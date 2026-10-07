@@ -34,7 +34,7 @@ derives `OVERLAY_TOPICS` from it when unset.
 `deploy/quickstart/compose.yaml` runs two of them.
 
 The host must run with no broadcaster, and must not enable an unordered
-synchronisation of unspent outputs for `tm_borg_` topics (spec sections
+synchronization of unspent outputs for `tm_borg_` topics (spec sections
 11.1 and 11.6). The reference host has neither unless configured.
 
 ## Configuration
@@ -128,7 +128,7 @@ No answer carries a token's status: a reader folds the chain itself
 log: `borg_token_status_total{status}` counts each token's status once it is
 decided, `borg_tokens_pending` is the tokens still waiting for a
 predecessor, and every status other than `consistent` is logged with its
-hall, organisation, chain, `seq` and txid.
+hall, organization, chain, `seq` and txid.
 
 ### The spend table
 
@@ -333,7 +333,7 @@ The ledger line carries `decision` (`fast`, `hold` or `mined`) and
 `make e2e REFERENCE_HOST=/path/to/reference-host` runs the bundle on a
 local reference host (its compiled `dist/index.js` and its `node_modules`)
 with a throwaway MySQL in Docker and a local chain: it creates an
-organisation, grants three members, puts them in a group, opens the epoch
+organization, grants three members, puts them in a group, opens the epoch
 key as each from the host's answers, removes one (who cannot open the next
 epoch), rotates, revokes by the roll and by a sweep, replays a suppression
 attempt, pays a priced question's 402, restarts the host and asks

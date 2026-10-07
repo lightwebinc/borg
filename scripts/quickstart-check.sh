@@ -73,7 +73,7 @@ printf '%s\n' "$out"
 [ "$(printf '%s\n' "$out" | grep -c '^host .* answering')" = 2 ] || fail "the hosts did not come up"
 
 step "4. the organisation and a group"
-as org org create 'Example Organisation' -member "$ALICE" -member "$BOB" -member "$CAROL" | tee create.txt
+as org org create 'Example Organization' -member "$ALICE" -member "$BOB" -member "$CAROL" | tee create.txt
 [ "$(grep -c '^grant ' create.txt)" = 3 ] || fail "org create did not issue three grants"
 grep -q '^host http://host-b:8080: took .* missed 0' create.txt || fail "host-b missed something"
 as org group create engineering -member "$ALICE" -member "$BOB" -member "$CAROL" | tee group.txt
