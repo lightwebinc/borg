@@ -19,12 +19,12 @@ flowchart LR
   end
   OB -->|"carriers: grants, wraps"| H1
   OB -->|"tokens, sweeps"| H2
-  OB -->|"settle: arcade, rpc or tcp"| BSV[("BSV blockchain")]
-  OB -->|"asset: proofs, tip, spends"| N["node asset API"]
+  OB -->|"settle: arcade (default), arc, rpc or tcp"| BSV[("BSV blockchain")]
+  OB -->|"chain: transactions, proofs, spends"| N["chain view<br/>woc:main (default) or a node"]
   MB -->|lookups| H1
   MB -->|lookups| H2
-  MB -->|"spends (asset)"| N
-  OB -->|headers| HS["header source<br/>woc:main, chaintracks, bridge"]
+  MB -->|"spends (chain)"| N
+  OB -->|headers| HS["header source<br/>woc:main (default), bhs, arcade, chaintracks, bridge"]
   MB -->|headers| HS
   BSV -.-> N
   BSV -.-> HS
@@ -36,8 +36,8 @@ flowchart LR
 | home | one identity's directory: `identity.json`, `wallet.json`, `state.json`, mode 0700 | `~/.borg` |
 | host module | the topic manager `tm_borg_<hall>` and the lookup service `ls_borg`, loaded by a reference overlay host | `host/` (TypeScript), [host.md](host.md) |
 | header source | the block headers every proof is checked against | `header_url` |
-| node asset API | proofs, the chain tip, raw transactions, and which outputs are spent | `asset` |
-| settlement leg | where mined transactions are broadcast | `settle` |
+| chain view | raw transactions, proofs, and which outputs are spent: WhatsOnChain by default on mainnet and testnet, or a node's asset API | `chain` |
+| settlement leg | where mined transactions are broadcast: GorillaPool's public arcade by default on mainnet and testnet | `settle` |
 | plane | optional: a multicast plane that delivers one submission to every subscribed host | `mode = plane`, `facade` |
 | `devchain` | a local regtest chain for the sandbox and tests; nothing it mines is money | `cmd/devchain` |
 
@@ -100,10 +100,12 @@ A host can withhold; it cannot forge.
 
 A home holds its own coin. On mainnet and testnet the user sends a payment
 from their own wallet to the fund address `init` prints and imports it with
-`borg fund -txid`, which reads the transaction and its proof from `asset`
-and checks the proof against `header_url`. Fees are 1 sat a byte with a
-250-sat floor ([limits.md](limits.md#what-it-costs)). `fund` without
-`-txid` mines coinbase (coinbase: only on a regtest chain you run, for
+`borg fund -txid`, which reads the transaction and its proof from the
+chain view and checks the proof against `header_url`, or hands over the
+BEEF its wallet made with `borg fund -beef`, which needs no lookup. No node
+is needed. Fees are the network's 100 sat per 1000 bytes with a 250-sat
+floor ([limits.md](limits.md#what-it-costs)). `fund` without `-txid` or
+`-beef` mines coinbase (coinbase: only on a regtest chain you run, for
 development and tests).
 
 ## Trust
@@ -111,7 +113,8 @@ development and tests).
 | You trust | For | Not for |
 | --- | --- | --- |
 | the header source | which blocks exist | anything a host says |
-| the node (`asset`) | whether an output is spent now (revocation, writer evidence) | the content of a record |
+| the chain view (`chain`: WhatsOnChain by default, or your node) | whether an output is spent now (revocation, writer evidence) | the content of a record, a transaction or a proof: each is checked |
+| the broadcaster (`settle`) | taking a transaction to the miners | whether it is valid: its "accepted" is held to the chain view's spends |
 | the hosts | availability | integrity: every answer is verified, and roots expose withholding |
 | the organization's key | who is a member | nothing else; hosts enforce the transition rules on it too |
 

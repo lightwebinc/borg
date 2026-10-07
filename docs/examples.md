@@ -10,32 +10,45 @@ lines are abbreviated with `…`. The concepts are in
 
 | For | You need |
 | --- | --- |
-| reading as a member | overlay hosts that carry the hall, a header source (`woc:main`), and for revocation checks a node's asset API |
-| running an organization | the above, a broadcast service (`settle`), and about 20,000 sat in a wallet you control |
+| reading as a member | overlay hosts that carry the hall; nothing else: headers and the chain view default to WhatsOnChain |
+| running an organization | the above, and about 20,000 sat in a wallet you control; broadcasting defaults to GorillaPool's public arcade |
 | hosts | the `borg-host` image or the module on a reference overlay host ([host.md](host.md)) |
+
+No node is needed. On mainnet and testnet borg reads headers,
+transactions, proofs and spends from WhatsOnChain and broadcasts through
+arcade, each checked as [configuration.md](configuration.md#no-node-needed)
+describes; a node of your own (`chain = asset:<URL>`) is the better option
+where you have one.
 
 There is no coinbase on mainnet or testnet for you to mine: a home is
 funded by a payment you send from your own wallet. `borg fund` without
-`-txid` is for a regtest chain you run (coinbase: only on a regtest chain
-you run, for development and tests).
+`-txid` or `-beef` is for a regtest chain you run (coinbase: only on a
+regtest chain you run, for development and tests).
 
 ## 2. Check the network from your machine
 
 Reads only, needs no coin and no hosts:
 
 ```console
-$ borg -network main -header-url woc:main doctor
+$ borg -network main doctor
 home        /home/you/.borg
 network     main
+hall        not configured
+chain       woc:main
 …
-headers     woc:main tip 970055
+headers     woc:main tip 970082
+fee         100/1000 sat/bytes, floor 250 sat (static)
+…
+settle      arcade:main
 ```
 
 On testnet:
 
 ```console
-$ borg -network test -header-url woc:test doctor | grep headers
-headers     woc:test tip 1761974
+$ borg -network test doctor | grep -E 'chain|headers|settle'
+chain       woc:test
+headers     woc:test tip 1761988
+settle      arcade:test
 ```
 
 A source for the other network is refused before anything is asked:
@@ -52,17 +65,15 @@ $ echo $?
 ```console
 $ mkdir -p ~/.borg && cat > ~/.borg/config <<'CONF'
 network    = main
-header_url = woc:main
-asset      = https://asset.example.com
-settle     = arcade:https://arc.example.com
 mode       = unicast
 hosts      = https://host-a.example.com,https://host-b.example.com
 CONF
 ```
 
-For testnet: `network = test`, `header_url = woc:test`, and a testnet
-node and broadcast service. With a multicast plane: `mode = plane` and
-`facade = <the host the plane takes submissions at>`.
+For testnet: `network = test`. With a multicast plane: `mode = plane` and
+`facade = <the host the plane takes submissions at>`. With a node and a
+broadcaster of your own: `chain = asset:<URL>` and `settle =
+arcade:<URL>` (or `arc:<URL>`, `rpc:<URL>`).
 
 ## 4. Create the identity and fund it
 
@@ -75,27 +86,47 @@ fund address 1EUY…zipY (main)
 
 The identity key is the organization's name in every grant and token.
 Back up `~/.borg` as a secret. Send about 20,000 sat from your own wallet to
-the fund address (on testnet the address starts with `m` or `n`). After one
-confirmation, import it:
+the fund address (on testnet the address starts with `m` or `n`), then
+import the payment one of two ways.
+
+After one confirmation, by its txid:
 
 ```console
 $ borg fund -txid 9ade…7f2e
+imported 1 of 1 output(s) paying 1EUY…zipY, 20000 sat, mined at height 970090; pool 1 output(s), 20000 sat
 ```
 
-`fund -txid` reads the transaction and its proof from `asset`, checks the
-proof against `header_url`, and adds every output paying the fund address
-to the pool. Without `asset` it exits 2:
+`fund -txid` reads the transaction and its proof from the chain view
+(WhatsOnChain by default), checks the proof against the header source, and
+adds every output paying the fund address to the pool.
+
+Or at once, from the BEEF your wallet handed over (a file, or `-` for
+standard input), with no lookup at all:
 
 ```console
-$ borg fund -txid 9ade…7f2e
-borg: fund -txid reads the payment from the node: asset must be configured (config key asset): proofs and spends are read from the node
+$ borg fund -beef payment.beef
+imported 1 of 1 output(s) paying 1EUY…zipY, 20000 sat, from 9ade…7f2e, not mined yet: held back until it mines; pool 1 output(s), 20000 sat
 ```
 
-On mainnet, `fund` without `-txid` is refused:
+A payment not mined yet is taken when every parent it spends is proven and
+it verifies against them; it is also sent to the broadcaster, in case your
+wallet did not, and spent only once it mines. `-refuse-unmined` (or
+`fund_unmined = refuse`) takes only a mined one.
+
+A payment that pays the fund address nothing is refused:
+
+```console
+$ borg fund -txid 3281…2d86
+borg: the payment pays nothing to the fund address 1EUY…zipY
+$ echo $?
+2
+```
+
+On mainnet, `fund` without `-txid` or `-beef` is refused:
 
 ```console
 $ borg fund
-borg: fund without -txid mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid
+borg: fund without -txid or -beef mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid or fund -beef
 ```
 
 ## 5. Create a hall and give it to your hosts
@@ -148,8 +179,6 @@ network    = main
 hall       = example_qzxkvbmwtr
 org        = 02c6…9a1e
 hosts      = https://host-a.example.com,https://host-b.example.com
-header_url = woc:main
-asset      = https://asset.example.com
 ```
 
 ```console
@@ -260,10 +289,10 @@ $ borg kill -confirm KILL -yes      # revokes the whole roll, one sweep per tree
 
 ```console
 $ docker run --rm -v borg-home:/home/nonroot/.borg \
-    -e BORG_NETWORK=main -e BORG_HEADER_URL=woc:main \
+    -e BORG_NETWORK=main \
     ghcr.io/lightwebinc/borg init
 $ docker run --rm -v borg-home:/home/nonroot/.borg \
-    -e BORG_NETWORK=main -e BORG_HEADER_URL=woc:main \
+    -e BORG_NETWORK=main \
     ghcr.io/lightwebinc/borg doctor
 ```
 

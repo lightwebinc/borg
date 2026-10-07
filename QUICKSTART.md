@@ -15,19 +15,18 @@ You need:
   ([limits.md](docs/limits.md#what-it-costs)).
 - One or more overlay hosts that carry your hall: the `borg-host` image, or
   the borg module on any reference overlay host ([host.md](docs/host.md)).
-- A node's asset API (`asset`): a Teranode node you run or may use. It
-  serves proofs, the tip and the spent-output view.
-- A broadcast service (`settle`): `arcade:<url>` for any ARC-compatible
-  API, `rpc:<url>` for a node, or `tcp:<host:port>` for an ingress.
-- A header source: `woc:main` or `woc:test` (public WhatsOnChain), or your
-  own chaintracks service or overlay bridge.
+
+No node is needed. borg reads headers, transactions, proofs and spends from
+WhatsOnChain and broadcasts through GorillaPool's public arcade by default,
+checking every proof against the headers
+([configuration.md](docs/configuration.md#no-node-needed)). A node of your
+own (`chain = asset:<URL>`), your own header service (`header_url =
+bhs:<URL>`) and your own broadcaster (`settle = arcade:<URL>`) are the
+better options where you have them.
 
 ```console
 $ mkdir -p ~/.borg && cat > ~/.borg/config <<'CONF'
 network    = main
-header_url = woc:main
-asset      = https://asset.example.com
-settle     = arcade:https://arc.example.com
 mode       = unicast
 hosts      = https://host-a.example.com,https://host-b.example.com
 CONF
@@ -38,10 +37,11 @@ fund address 1Ab... (main)
 ```
 
 Send about 20,000 sat from your own wallet to the fund address `init`
-printed. When the payment has one confirmation, import it by its txid:
+printed, then import the payment: by its txid once it has one
+confirmation, or at once from the BEEF your wallet handed over:
 
 ```console
-$ borg fund -txid <txid>
+$ borg fund -txid <txid>             # or: borg fund -beef payment.beef
 $ borg hall new example              # give the printed BORG_HALLS line to your hosts
 $ borg -hall example_<suffix> doctor # every endpoint answers?
 $ borg -hall example_<suffix> org create 'Example' -member <alice key> -member <bob key>
@@ -49,16 +49,14 @@ $ borg -hall example_<suffix> group create engineering -member <alice key> -memb
 ```
 
 Each member runs `borg init` (no coin needed), sends you the `identity` line,
-and with `org`, `hall`, `hosts`, `header_url` and `asset` in their config
-reads the group's key:
+and with `org`, `hall` and `hosts` in their config reads the group's key:
 
 ```console
 $ borg open engineering
 ```
 
-For testnet use `network = test` and `header_url = woc:test` with a
-testnet node and broadcast service; the fund address then starts with `m`
-or `n`. Every command after that is the same. The whole walk, with removal,
+For testnet use `network = test`; the headers, chain view and broadcaster
+follow it, and the fund address then starts with `m` or `n`. Every command after that is the same. The whole walk, with removal,
 revocation, a second home and the priced question, is
 [docs/examples.md](docs/examples.md).
 
@@ -135,7 +133,7 @@ the org home's key will sign every grant and every change. `fund` (no
 `-txid`) mined 101 blocks of coinbase to a fund address on the sandbox
 chain, so one block's coin is mature (coinbase: only on a regtest chain you
 run, for development and tests; on mainnet or testnet you import a payment
-with `fund -txid` instead); the members
+with `fund -txid` or `fund -beef` instead); the members
 need none (bob is funded only to pay for the priced question later). The
 hall's name gets a random suffix, so nobody else's hall shares its topic,
 and the `host` line is what a host needs to carry it. `.env` hands the

@@ -98,7 +98,7 @@ services:
       # default of 60s.
       BORG_DELAY: 0s
       BORG_HEADER_URL: http://chain:8080
-      BORG_ASSET: http://chain:8080
+      BORG_CHAIN: asset:http://chain:8080
       BORG_RPC: http://chain:8080/rpc
       BORG_SETTLE: rpc:http://chain:8080/rpc
     volumes:

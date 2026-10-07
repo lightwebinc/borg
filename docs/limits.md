@@ -75,7 +75,7 @@ or a member's client ([usage.md](usage.md)).
 | Revocation check age, for anything that moves value | 60 s | the reader's resolution lifetime | BRC-169 section 4.2 | Same |
 | Expiry skew | 300 s | 300 s (spec) | BRC-169 section 9.6 | Same |
 | What `fill` copies | every token, roll grant and wrap a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it | Off the plane, or a host a publisher missed |
-| Where `fill` finds a chain's first token's parent (the chain tree) | the home's own record, when it runs in the organization's home; else the node (`asset`) | none | No host keeps a chain tree, and a node may drop it once all its outputs are spent. The publishing home records every tree it mints, a second home records each chain tree when `org sync` first takes the chain; a home made by `org sync` before v0.1.6 has no record, and a home that is not the organization's has none: from those, a host that lost a chain's first token is filled only while the node answers the tree. Hosts do not keep chain trees: that would change the host contract | Same |
+| Where `fill` finds a chain's first token's parent (the chain tree) | the home's own record, when it runs in the organization's home; else the chain view (`chain`) | none | No host keeps a chain tree, and a node may drop it once all its outputs are spent. The publishing home records every tree it mints, a second home records each chain tree when `org sync` first takes the chain; a home made by `org sync` before v0.1.6 has no record, and a home that is not the organization's has none: from those, a host that lost a chain's first token is filled only while the node answers the tree. Hosts do not keep chain trees: that would change the host contract | Same |
 
 ### Revoking and the kill switch
 
@@ -133,37 +133,40 @@ or a member's client ([usage.md](usage.md)).
 
 ## What it costs
 
-borg pays its miner fees from the home's pool at 1 satoshi a byte, with a
-250-satoshi floor a transaction. That is ten times the BSV mainnet miner
-minimum of 100 satoshis a kilobyte, so a transaction is never held back for
-its fee; the rate is not configurable. Only tokens, funding trees, sweeps
-and payments are mined. Grants and wraps ride a 1-satoshi funding output
-and are never mined.
+borg pays its miner fees from the home's pool at the network's rate, 100
+satoshis per 1000 bytes, with a 250-satoshi floor a transaction. A token or a funding tree is under 2,500
+bytes, so each pays the floor; a sweep of a full tree is larger and pays
+the rate on its size, a few hundred satoshis. The rate,
+the floor and a ceiling are settings (`fee_rate`, `fee_floor`,
+`fee_max_rate`, `fee_max_tx`), and `fee_source = arc` follows the
+broadcaster's published policy instead ([configuration.md](configuration.md)).
+Only tokens, funding trees, sweeps and payments are mined. Grants and wraps
+ride a 1-satoshi funding output and are never mined.
 
-| Mined transaction | Size | Fee |
+| Mined transaction | Size | Fee at the defaults |
 | --- | --- | --- |
-| organization token, 3 admitted | 711 bytes | 711 sat |
-| group token, no change (a rotation) | 673 bytes | 673 sat |
-| group token, 2 added | 744 bytes | 744 sat |
-| group token, 16 added | 1,235 bytes | 1,235 sat |
-| chain funding tree, 8 outputs | 583 bytes | about 590 sat |
-| grant or record funding tree, 32 outputs | 1,759 bytes | about 1,790 sat with its 32 outputs |
+| organization token, 3 admitted | 711 bytes | 250 sat (72 at the rate) |
+| group token, no change (a rotation) | 673 bytes | 250 sat (68 at the rate) |
+| group token, 2 added | 744 bytes | 250 sat (75 at the rate) |
+| group token, 16 added | 1,235 bytes | 250 sat (124 at the rate) |
+| chain funding tree, 8 outputs | 583 bytes | 250 sat, and 8 sat in its outputs |
+| grant or record funding tree, 32 outputs | 1,759 bytes | 250 sat, and 32 sat in its outputs |
 
 Sizes are of real transactions built with bcommon (a token with a fee
 input, a predecessor input and change; see below). In practice:
 
 - `org create` with a few members mints a chain tree, a grant tree and the
-  first organization token: about 3,100 sat.
+  first organization token: about 800 sat.
 - `group create` adds a record tree and the group's first token: about
-  2,500 sat.
+  550 sat.
 - Each later change (an addition, a removal, a revocation by the roll, a
-  rotation) is one token, about 700 to 1,250 sat. A sweep costs about the
-  same. A new grant or record tree is minted when the last one runs out,
-  every 32 grants or wrap records.
+  rotation) is one token, about 250 sat. A sweep costs a few hundred. A
+  new grant or record tree is minted when the last one runs out, every 32
+  grants or wrap records.
 
-About 20,000 sat (0.0002 BSV) covers an organization, a group and about
-twenty changes. A member needs no coin unless it asks the priced history
-question (at most `-max-sats`, 1000 sat by default, a question).
+About 20,000 sat (0.0002 BSV) covers an organization, a group and more
+than seventy changes. A member needs no coin unless it asks the priced
+history question (at most `-max-sats`, 1000 sat by default, a question).
 
 ## Where the numbers come from
 
@@ -215,8 +218,8 @@ and its retries, multiplied by the host count.
 **Cost of a removal.** One mined token (about 2,600 bytes as published) and, for a group
 of `n`, `ceil((n - 1) / 8)` wrap carriers on the plane, never mined. A group
 of 100 is one token and 13 carriers, about 58 KB delivered to every host in
-the hall. At a fee of 1 satoshi per byte the token costs a few hundred
-satoshis, and a funding output pays for each carrier.
+the hall. At the default fees the token costs 250 satoshis, and a funding
+output pays for each carrier.
 
 **Time of a removal.** A token is published only once mined, and the next
 token of the same chain is built on it, so each chain moves at most once a

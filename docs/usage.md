@@ -59,8 +59,9 @@ variables.
 | Command | Needs a home | Needs | What it does |
 | --- | --- | --- | --- |
 | `init [-from FILE]` | creates it | nothing | identity key and empty coin pool; prints the identity and the fund address. `-from` makes the home around another home's `identity.json`: an organization's second home |
-| `fund -txid TXID` | yes | `asset`, `header_url` | imports a mined payment you sent from your own wallet to the fund address, once its proof checks. How a home is funded on mainnet and testnet |
-| `fund [-blocks N] [-batch N] [-rescan]` | yes | `rpc`, `asset` | coinbase: only on a regtest chain you run (development and tests). Mines coinbase to the fund address through `generatetoaddress`; `-rescan` re-reads recent blocks for coinbase the pool lacks. Refused on network `main` |
+| `fund -txid TXID` | yes | `chain`, `header_url` (defaults on main and test) | imports a mined payment you sent from your own wallet to the fund address, read from the chain view, once its proof checks. How a home is funded on mainnet and testnet |
+| `fund -beef FILE\|- [-refuse-unmined]` | yes | `header_url` | imports that payment from the BEEF your wallet handed over, with no lookup: a mined one once its proof checks, an unmined one (unless `-refuse-unmined` or `fund_unmined = refuse`) once its parents' proofs check and it verifies against them, held back until it mines and sent to `settle` in case the wallet did not |
+| `fund [-blocks N] [-batch N] [-rescan]` | yes | `rpc`, `chain = asset:<URL>` | coinbase: only on a regtest chain you run (development and tests). Mines coinbase to the fund address through `generatetoaddress`; `-rescan` re-reads recent blocks for coinbase the pool lacks. Refused on network `main` |
 | `hall new <name>` | optional | nothing | draws the 10-letter random suffix; prints the hall, its topic, and the host's `BORG_HALLS` line |
 | `hall list` | yes | nothing | the halls this home created |
 | `org create <name>` | yes, funded | `hall`, a publisher's settings (below) | begins the organization: a chain tree and a grant tree, a grant to each `-member`, and the first organization token admitting them |
@@ -82,18 +83,21 @@ variables.
 | `roll` | optional | a reader's settings | the roll from every host, every grant verified and judged, the root of each host's answer compared with the latest token's |
 | `member <key>` | optional | a reader's settings | whether the key is a current member, and its grants; for this home's own key, each grant is kept whole in the home and opened through its keyring |
 | `member-of <key>` | optional | a reader's settings | the groups whose members include the key, each group's chain folded here |
-| `history` | yes, funded | a reader's settings, `history_host`, `asset`, `settle` | the priced question: pays the host's 402 from the pool and prints every token of a chain (`-chain org` or a group id), one page, or every page with `-all`. One payment a question, at most `-max-sats`, and at most `-budget` in all |
-| `fill [group...]` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the organization's chain, the roll's grants, and each group's chain and wraps (spec section 12); signs nothing |
+| `history` | yes, funded | a reader's settings, `history_host`, `chain`, `settle` | the priced question: pays the host's 402 from the pool and prints every token of a chain (`-chain org` or a group id), one page, or every page with `-all`. One payment a question, at most `-max-sats`, and at most `-budget` in all |
+| `fill [group...]` | optional | a reader's settings, `chain` | replays to each host what another host answered and it lacks: the organization's chain, the roll's grants, and each group's chain and wraps (spec section 12); signs nothing |
 | `terms [URL]` | no | `history_host` or URL | prints a host's terms document |
 | `payee key -out FILE` | yes | nothing | writes `BORG_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
-| `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `asset`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
-| `doctor` | optional | nothing | the home's state (trees, organization, transition in flight, outbox, rotation debt, grants expiring, rotations due, an epoch key not held, unmined payments) and whether the node, headers, hosts and priced host answer; reads only |
+| `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `chain`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
+| `doctor` | optional | nothing | the home's state (trees, organization, transition in flight, outbox, rotation debt, grants expiring, rotations due, an epoch key not held, unmined payments), the chain view, broadcaster and fee policy in use, and whether the headers, hosts and priced host answer; reads only |
 | `version` | no | nothing | prints the version |
 
 A reader's settings are `hosts`, `header_url`, `hall` and `org` (the
 organization's identity key; a home that runs an organization reads its
-own by default). A publisher's settings are those, and `asset`, `settle`,
-and `facade` in mode `plane`. `<key>` is an identity key, 66 lowercase hex
+own by default). A publisher's settings are those, and `chain`, `settle`,
+and `facade` in mode `plane`. On `main` and `test`, `header_url`, `chain`
+and `settle` default to WhatsOnChain and GorillaPool's public arcade, so no
+node is needed ([configuration.md](configuration.md#no-node-needed)).
+Below, "the node" means the chain view (`chain`), whichever it is. `<key>` is an identity key, 66 lowercase hex
 digits. A group is its id (32 lowercase hex digits) or its name; a name
 two groups share is refused. A hall is always the full identifier
 `<name>_<suffix>`. A txid is 64 lowercase hex digits, in display order.
@@ -105,7 +109,7 @@ Settings come from, highest first: the global flags, `BORG_<KEY>` in the
 environment, the config file, and the defaults. Every key, flag and
 environment variable, with its default, is in
 [configuration.md](configuration.md). A reader's settings are `hosts`,
-`header_url`, `hall` and `org`; a publisher's are those and `asset`,
+`header_url`, `hall` and `org`; a publisher's are those and `chain`,
 `settle`, and `facade` in mode `plane`.
 
 ## Exit codes
@@ -226,7 +230,7 @@ and its fee coin given back, on the same evidence only.
 funding tree is the one the node gave when it mined. Before a token is
 built on, published as a parent, or a tree's output is spent, the kept
 proof is checked against `header_url`; one that no longer verifies is
-replaced by the transaction's current proof from `asset`, in the home too
+replaced by the transaction's current proof from `chain`, in the home too
 (spec section 11.5). A header source that fails is an error, never a
 verdict.
 
@@ -373,9 +377,9 @@ against `header_url`: a token by its record, its lock and field signature
 and its proof; a carrier by the host's own admission rules and SPV through
 its funding parent; a sweep by its proof. A proof a host stored that no
 longer verifies (a reorganization mined the transaction again elsewhere)
-is replaced by the transaction's current proof from `asset`, when one is
+is replaced by the transaction's current proof from `chain`, when one is
 configured, and verified against `header_url` like any other; without
-`asset` such an answer is refused as unmined. A chain is read by asking
+`chain` such an answer is refused as unmined. A chain is read by asking
 each host the latest class and then every seq from 0, so the reader folds
 it itself: the canonical chain runs by spends from the first-mined seq 0
 token, and a host that lacks a token another host answered is reported
@@ -422,7 +426,7 @@ is an absence, and the hosts are named.
 token (its inclusion path checked, else the roll folded here), a scope
 that grants `member`, not expired (300 s of skew allowed), revealed unless
 the organization is opaque, and its revocation outpoint unspent per
-`asset`. Without a spend source a grant is never current (exit 3).
+`chain`. Without a spend source a grant is never current (exit 3).
 
 ## Filling a host
 
@@ -439,8 +443,8 @@ went to. Anyone who reads the hall can run it; it needs no coin.
 The chain tree at `seq` 0 is the one part no host keeps. Run in the
 organization's home, `fill` takes it from the home's own record of its
 funding trees, which keeps every tree it minted with its proof, and asks
-`asset` only when the home holds no record of it. Elsewhere it asks
-`asset`, which may have dropped the tree: a node can prune a transaction
+`chain` only when the home holds no record of it. Elsewhere it asks
+`chain`, which may have dropped the tree: a node can prune a transaction
 whose outputs are all spent, and each chain tree output is spent by a
 chain's first token. A tree taken from the home is checked as the node's
 answer would be: its txid must be the one the token spends, its proof must
@@ -483,22 +487,24 @@ token, with positive evidence at most `freshness` old (spec section 6.5).
    about to change.
 2. **the proof.** The latest token of the canonical chain verifies against
    this home's headers.
-3. **the node's spent-output check.** `asset`'s view of the token's
+3. **the node's spent-output check.** `chain`'s view of the token's
    1-satoshi output (bcommon's `nodeapi`): unspent is the evidence. Spent
    by a transaction not yet mined, that transaction is read from the node:
    the group's next token keeping the epoch lets the writer go on; one
    beginning an epoch, or anything else (which terminates the chain), is no
-   evidence. Only the node's status `OK` is unspent: a node that cannot
-   answer, or answers any other status (`NOT_FOUND`, which a node also
+   evidence. Only a positive "unspent" counts: a node's status `OK`, or
+   WhatsOnChain's "known output, no spend" (404). A source that cannot
+   answer, or answers anything else (a node's `NOT_FOUND`, which it also
    answers for an output it pruned or could not read, `IMMATURE`,
-   `FROZEN`, a `SPENT` naming no spender), is no evidence, and the writer
-   fails closed (exit 3).
+   `FROZEN`, a `SPENT` naming no spender; WhatsOnChain's "unknown output"
+   (400)), is no evidence, and the writer fails closed (exit 3).
 
 Evidence is recorded in the home with its time and source, and reused
 while it is younger than `freshness` and names the same token. The same
 node answers the revocation check of `member` and `roll`. Asking a third
-party every minute tells it which groups a writer writes to; a writer's
-own node keeps that to itself (spec section 16.12).
+party (WhatsOnChain, the default) every minute tells it which groups a
+writer writes to; a writer's own node keeps that to itself (spec section
+16.12).
 
 ## The priced question
 

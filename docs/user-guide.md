@@ -63,10 +63,19 @@ changes nothing.
 
 Settings come from flags, `BORG_<KEY>` variables, and a `key = value`
 file at `~/.borg/config` ([configuration.md](configuration.md)). An
-organization needs a hall, the hosts, a header source, a node (`asset`), a
-settlement leg (`settle`), and `facade` on the plane. A member needs the
-hall, the organization's key (`org`), the hosts, a header source, and the
-node for revocation checks and writer evidence.
+organization needs a hall, the hosts, and `facade` on the plane. A member
+needs the hall, the organization's key (`org`) and the hosts.
+
+No node is needed. On mainnet and testnet the header source, the chain
+view and the broadcaster default to public services: headers and the
+chain view (transactions, proofs, and which outputs are spent) from
+WhatsOnChain, and broadcasts through GorillaPool's public arcade. Every
+proof is checked against the headers, and every header against its proof
+of work; what cannot be checked is the chain view's word that an output is
+unspent. A node of your own (`chain = asset:<URL>`) removes that trust and
+is the better option where you have one
+([configuration.md](configuration.md#no-node-needed)). Below, "the node"
+means the chain view, whichever it is.
 
 ```text
 # ~/.borg/config, a member on mainnet
@@ -74,22 +83,21 @@ network    = main
 hall       = example_qzxkvbmwtr
 org        = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 hosts      = https://host-a.example.com,https://host-b.example.com
-header_url = woc:main
-asset      = https://asset.example.com
 ```
 
-On testnet, `network = test` and `header_url = woc:test`, with a testnet
-node's asset API.
+On testnet, `network = test`; the defaults follow it.
 
-No address has a default: a default would send an organization's records,
-or a member's questions, to a server nobody chose.
+The overlay addresses have no default: a default would send an
+organization's records, or a member's questions, to a server nobody
+chose.
 
 ## 5. Running an organization
 
 ```console
 $ borg init                     # once: the organization's key; prints the fund address
-$ # send about 20,000 sat from your own wallet to that address; wait one block
-$ borg fund -txid <txid>        # import that payment into the home's pool
+$ # send about 20,000 sat from your own wallet to that address
+$ borg fund -txid <txid>        # import that payment once mined; or:
+$ borg fund -beef payment.beef  # import it at once, from the BEEF your wallet handed over
 $ borg hall new example         # or use a hall your hosts carry
 $ borg org create 'Example' -member <alice> -member <bob>
 $ borg group create engineering -member <alice> -member <bob>
@@ -235,9 +243,9 @@ spends its revocation outpoint, which every BRC-52 verifier sees and which
 makes every host retract the grant. A revoked member still in a group is
 rotation debt until the group's next change removes them.
 
-Revocation is as fresh as the node you ask: a reader with no node cannot
-tell a revoked member from a current one, and borg then says so rather
-than guess. A sweep is not erasure: a copy of a grant anyone kept is still
+Revocation is as fresh as the chain view you ask: a reader with none (a
+regtest home with no `chain`) cannot tell a revoked member from a current
+one, and borg then says so rather than guess. A sweep is not erasure: a copy of a grant anyone kept is still
 a copy, only no longer a valid certificate.
 
 **The kill switch.** `borg kill -confirm KILL` lists, and with `-yes`
@@ -412,7 +420,7 @@ Exit 1, by message:
 Exit 2, by message:
 
 - `fee input: ... no spendable output`: fund the home (send a payment to
-  its fund address and `borg fund -txid <txid>`). If it
+  its fund address and `borg fund -txid <txid>` or `borg fund -beef FILE`). If it
   says coins are change not yet mined, wait for a block. If it says a
   funding tree minted ahead holds a coin and has not settled, run the
   command again: the change returns once the tree settles.
@@ -444,8 +452,8 @@ Exit 3, by message:
   hosts, and look at the named one.
 - `none verifies against the header source`: every token the hosts
   answered was refused. Check `header_url` (`borg doctor`) before blaming
-  the hosts; after a reorganization set `asset` so stale proofs are
-  replaced.
+  the hosts; after a reorganization the chain view (`chain`) replaces
+  stale proofs.
 - `DISAGREES`: a host lacks a token another answered: it is behind, or
   withholding. `borg fill`.
 - `an older state`: the hosts answer an older chain than your home
@@ -462,7 +470,7 @@ Exit 3, by message:
   again shortly.
 - `PENDING`: the same, seen by `group show`.
 - `a writer does not write`: no positive evidence that the group's latest
-  token is the latest. Check `asset`. `the node does not say whether the
+  token is the latest. Check `chain` (`borg doctor`). `the node does not say whether the
   output is spent` means the node answered neither unspent nor spent for
   the token's output; ask again shortly.
 - `removal(s) due`: `borg org due -apply`.

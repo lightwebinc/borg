@@ -59,24 +59,26 @@ $ docker run --rm -v borg-home:/home/nonroot/.borg ghcr.io/lightwebinc/borg -ver
 
 ## Example: an organization on mainnet
 
-You need BSV in a wallet you control, overlay hosts that carry the borg
-module ([host.md](docs/host.md)), a node's asset API and a broadcast
-service. Nothing is mined for you: the organization is funded with a payment
-you send.
+You need BSV in a wallet you control and overlay hosts that carry the borg
+module ([host.md](docs/host.md)). No node is needed: headers, transactions,
+proofs and spends come from WhatsOnChain and broadcasts go through
+GorillaPool's public arcade by default, every proof checked against the
+headers; a node of your own is the better option where you have one.
+Nothing is mined for you: the organization is funded with a payment you
+send.
 
 ```console
 $ borg -network main init
 identity     02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 fund address 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2 (main)
-$ # send about 20,000 sat from your own wallet to the fund address, wait one block
-$ borg fund -txid <txid of that payment>
+$ # send about 20,000 sat from your own wallet to the fund address
+$ borg fund -txid <txid of that payment>   # once mined; or fund -beef FILE at once
 $ borg hall new example
 $ borg org create 'Example' -member <alice key> -member <bob key>
 $ borg group create engineering -member <alice key> -member <bob key>
 ```
 
-A member, with `org`, `hall`, `hosts` and `header_url = woc:main` in their
-config, opens the group's key with `borg open engineering`. The full walk,
+A member, with `org`, `hall` and `hosts` in their config, opens the group's key with `borg open engineering`. The full walk,
 on mainnet or testnet, is [docs/examples.md](docs/examples.md); a private
 sandbox that needs no coin is [QUICKSTART.md](QUICKSTART.md).
 
