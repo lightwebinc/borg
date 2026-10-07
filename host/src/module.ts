@@ -29,7 +29,7 @@
  *   BORG_SESSION_TTL      seconds an idle BRC-104 session is kept; default 600
  *   BORG_HANDSHAKES_PER_SEC, BORG_HANDSHAKE_BURST
  *                         the BRC-104 handshakes a second the terms route
- *                         answers, and at once; default 4 and 8 (budget.ts)
+ *                         answers, and at once; default 4 and 8 (bcommon host)
  *   BORG_HANDSHAKES_PER_ADDR_PER_SEC, BORG_HANDSHAKE_ADDR_BURST
  *                         the same for one remote address; default 1 and 4
  *   BORG_ARCADE_URL       arcade, which the host broadcasts payments through
@@ -58,14 +58,25 @@ import type { Server } from 'node:http'
 import { PrivateKey, ProtoWallet, type ChainTracker } from '@bsv/sdk'
 import { Transaction, Utils } from '@bsv/sdk'
 import type { Module, ModuleHost } from '@lightwebinc/bcommon'
-import { gateFor, parseAcceptConfig, type AcceptConfig } from './accept.js'
+import {
+  DefaultBudget,
+  DefaultMaxSessions,
+  DefaultResponseBudget,
+  DefaultSessionTTL,
+  gateFor,
+  LedgerReceiver,
+  LookupFront,
+  parseAcceptConfig,
+  type AcceptConfig,
+  type BudgetConfig,
+  type ResponseBudgetConfig,
+} from '@lightwebinc/bcommon/host'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './beef.js'
 import { LookupService, TopicPrefix, checkHall, topic } from './borgrec.js'
-import { DefaultBudget, DefaultResponseBudget, type BudgetConfig, type ResponseBudgetConfig } from './budget.js'
 import { HeaderTracker, isNativeSource } from './headers.js'
 import { FileJournal, type Journal } from './journal.js'
 import { BorgLookupService, FloorDays, MinSpendTable } from './ls_borg.js'
-import { DefaultMaxSessions, DefaultSessionTTL, LedgerReceiver, LookupFront, parsePrices } from './paid.js'
+import { Ledger, borgRoute, parsePrices } from './paid.js'
 import { AdmitKinds, BorgTopicManager, Reasons } from './tm_borg.js'
 
 /**
@@ -248,7 +259,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   for (const hall of c.halls) topics[topic(hall)] = new BorgTopicManager(topic(hall), host, tracker, c.maxBEEF, c.maxSweepInputs)
   let front: LookupFront | undefined
   const accept = c.accept ?? parseAcceptConfig('BORG', {})
-  const receiver = c.listen !== undefined && priced.size > 0 ? new LedgerReceiver(c.stateDir) : undefined
+  const receiver = c.listen !== undefined && priced.size > 0 ? new LedgerReceiver(c.stateDir, Ledger) : undefined
   const gate = receiver !== undefined ? gateFor('borg', host, tracker, accept, c.stateDir) : undefined
   if (gate !== undefined && receiver !== undefined) {
     for (const f of receiver.fast) {
@@ -261,7 +272,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   }
   if (c.listen !== undefined) {
     front = new LookupFront({
-      ls,
+      ...borgRoute(ls),
       host,
       prices: c.prices,
       wallet: c.payeeKey === undefined ? undefined : new ProtoWallet(c.payeeKey),
@@ -321,4 +332,5 @@ export default async function create(host: ModuleHost): Promise<Module> {
 
 export { BorgTopicManager, Refused } from './tm_borg.js'
 export { BorgLookupService } from './ls_borg.js'
-export { LookupFront, termsDocument } from './paid.js'
+export { LookupFront } from '@lightwebinc/bcommon/host'
+export { termsDocument } from './paid.js'
