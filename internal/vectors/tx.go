@@ -244,7 +244,7 @@ func (e *txEnv) tree(d pushdrop.Derivation, n int) (*transaction.Transaction, er
 	if !bytes.Equal(*lock, borgrec.FundingScript(e.o.key(d))) {
 		return nil, fmt.Errorf("bcommon's funding lock is not the funding script")
 	}
-	t, err := mint.FundingTree(lock, n, 1000, e.nextFee(), e.o.feeLock, mint.DefaultFees)
+	t, err := mint.FundingTree(lock, n, 1000, e.nextFee(), e.o.feeLock, mint.LegacyFees)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (e *txEnv) tree(d pushdrop.Derivation, n int) (*transaction.Transaction, er
 // spending prev (the predecessor or a chain-tree output) and a fee coin.
 func (e *txEnv) token(d pushdrop.Derivation, tag, record []byte, prev *transaction.Transaction, vout uint32) (*transaction.Transaction, error) {
 	return mint.Transition(e.o.lock(d, true, tag, record), 1,
-		&mint.Input{Tx: prev, Vout: vout, Unlocker: e.prevUnlocker(prev, vout)}, e.nextFee(), e.o.feeLock, mint.DefaultFees)
+		&mint.Input{Tx: prev, Vout: vout, Unlocker: e.prevUnlocker(prev, vout)}, e.nextFee(), e.o.feeLock, mint.LegacyFees)
 }
 
 // prevUnlocker signs for an output of prev: a chain-tree output under chain,

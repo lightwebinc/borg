@@ -426,7 +426,7 @@ func (e *txEnv) tokenCases(s *Scenario, add func(txCase)) error {
 		return err
 	}
 	add(txCase{name: "token-seq-skips", note: "a token at seq 2 spending seq 0", rule: "chain-token shape", tx: sk, beef: tokenBEEF(sk, t0), reason: "token-input"})
-	ch, err := mint.Transition(t1.Outputs[0].LockingScript, 1, &mint.Input{Tx: t0, Vout: 1, Unlocker: o.feeUnlocker()}, e.nextFee(), o.feeLock, mint.DefaultFees)
+	ch, err := mint.Transition(t1.Outputs[0].LockingScript, 1, &mint.Input{Tx: t0, Vout: 1, Unlocker: o.feeUnlocker()}, e.nextFee(), o.feeLock, mint.LegacyFees)
 	if err != nil {
 		return err
 	}
@@ -483,7 +483,7 @@ func (e *txEnv) tokenCases(s *Scenario, add func(txCase)) error {
 // mintRaw builds a token transaction with an arbitrary lock and value,
 // spending prev:vout (signed for its kind) and a fee coin.
 func mintRaw(e *txEnv, lock *script.Script, sats uint64, prev *transaction.Transaction, vout uint32) (*transaction.Transaction, error) {
-	return mint.Transition(lock, sats, &mint.Input{Tx: prev, Vout: vout, Unlocker: e.prevUnlocker(prev, vout)}, e.nextFee(), e.o.feeLock, mint.DefaultFees)
+	return mint.Transition(lock, sats, &mint.Input{Tx: prev, Vout: vout, Unlocker: e.prevUnlocker(prev, vout)}, e.nextFee(), e.o.feeLock, mint.LegacyFees)
 }
 
 // groupOn builds a group token at seq spending prev:vout, mined.
