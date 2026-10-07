@@ -132,10 +132,10 @@ func mustLock(t *testing.T, a *script.Address) *script.Script {
 func TestFeePolicyIsConfigured(t *testing.T) {
 	h := newHarness(t)
 	h.must("bob", "init")
-	if r := h.must("bob", "doctor"); !strings.Contains(r.stdout, "fee         100/1000 sat/bytes, floor 250 sat") {
+	if r := h.must("bob", "doctor"); !strings.Contains(r.stdout, "fee         100/1000 sat/bytes, floor 250 sat (static)") {
 		t.Fatalf("doctor:\n%s", r.stdout)
 	}
-	if r := h.must("bob", "-fee-rate", "1/1", "-fee-floor", "1", "doctor"); !strings.Contains(r.stdout, "fee         1/1 sat/bytes, floor 1 sat") {
+	if r := h.must("bob", "-fee-rate", "1/1", "-fee-floor", "1", "doctor"); !strings.Contains(r.stdout, "fee         1/1 sat/bytes, floor 1 sat (static)") {
 		t.Fatalf("doctor -fee-rate:\n%s", r.stdout)
 	}
 	if r := h.must("bob", "-fee-source", "arc", "doctor"); !strings.Contains(r.stdout, "fee         arc policy: fee_source arc reads a broadcaster's policy") {

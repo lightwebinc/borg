@@ -218,25 +218,41 @@ func (g *global) settler() (publish.Settler, *publish.Arcade, error) {
 // live policy (fee_source = arc) is asked of fee_policy_urls, else of the
 // settlement leg when it is an arcade or ARC.
 func (g *global) fees(ctx context.Context, arcade *publish.Arcade) (mint.Fees, error) {
+	f, _, err := g.feesFrom(ctx, arcade)
+	return f, err
+}
+
+// feesFrom is fees, and where they came from: static, or what a live
+// policy source used (arc, cache or static) and why.
+func (g *global) feesFrom(ctx context.Context, arcade *publish.Arcade) (mint.Fees, string, error) {
 	fc := g.cfg.Fee
 	if fc.Source == feepolicy.SourceARC && len(fc.PolicyURLs) == 0 {
 		if arcade == nil {
-			return mint.Fees{}, usage("fee_source arc reads a broadcaster's policy: set fee_policy_urls, or settle through an arcade or ARC")
+			return mint.Fees{}, "", usage("fee_source arc reads a broadcaster's policy: set fee_policy_urls, or settle through an arcade or ARC")
 		}
 		fc.PolicyURLs = []string{arcade.Base}
 	}
 	src, err := fc.Build(mint.DefaultFees)
 	if err != nil {
-		return mint.Fees{}, usage("%v (config keys fee_*)", err)
+		return mint.Fees{}, "", usage("%v (config keys fee_*)", err)
 	}
-	if a, ok := src.(*feepolicy.ARC); ok {
+	a, live := src.(*feepolicy.ARC)
+	if live {
 		a.Key, a.Note = g.cfg.ArcadeKey, g.say
 	}
 	f, err := src.Fees(ctx)
 	if err != nil {
-		return mint.Fees{}, usage("%v (config keys fee_*)", err)
+		return mint.Fees{}, "", usage("%v (config keys fee_*)", err)
 	}
-	return f, nil
+	from := feepolicy.SourceStatic
+	if live {
+		st := a.Status()
+		from = "policy of " + strings.Join(fc.PolicyURLs, ", ") + ": " + st.Source
+		if st.Err != nil {
+			from += " (" + st.Err.Error() + ")"
+		}
+	}
+	return f, from, nil
 }
 
 // reader is a reader over the configured hosts and header source.
@@ -894,8 +910,8 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 		}
 	}
 	_, arcade, _ := g.settler()
-	if f, err := g.fees(ctx, arcade); err == nil {
-		fmt.Fprintf(out, "fee         %s, floor %d sat\n", feeRate(f), f.Floor)
+	if f, from, err := g.feesFrom(ctx, arcade); err == nil {
+		fmt.Fprintf(out, "fee         %s, floor %d sat (%s)\n", feeRate(f), f.Floor, from)
 	} else if g.cfg.Fee.Source != "" {
 		fmt.Fprintf(out, "fee         %s policy: %v\n", g.cfg.Fee.Source, err)
 	}
