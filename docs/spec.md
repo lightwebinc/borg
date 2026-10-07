@@ -1562,7 +1562,7 @@ shares is bcommon's, unchanged in behavior and checked against the same
 vectors: the bounded record reader (`record`), the BEEF a chain token, a
 carrier and a sweep are admitted in (`chaintoken`), and in Go the BRC-369
 content key, its symmetric key, its commitment and the check on an opened
-key (`keyed`). borg pins bcommon v0.6.2 in both languages.
+key (`keyed`). borg pins bcommon v0.14.1 in both languages.
 
 ## 16. What this does not do
 
