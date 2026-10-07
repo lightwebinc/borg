@@ -43,7 +43,6 @@ import {
   type ResponseBudgetConfig,
 } from '@lightwebinc/bcommon/host'
 import { Ledger, PaymentProtocol, borgRoute, parsePrices, termsDocument } from './paid.js'
-
 import { decodeContext } from './merkle.js'
 import { config, engineOf, hall, topic } from './testhost.js'
 import { Chain, OrgSim, Party, PayingWallet, fromNowhere } from './testmint.js'
