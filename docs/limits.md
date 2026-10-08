@@ -134,8 +134,9 @@ or a member's client ([usage.md](usage.md)).
 ## What it costs
 
 borg pays its miner fees from the home's pool at the network's rate, 100
-satoshis per 1000 bytes, with a 250-satoshi floor a transaction. A token or a funding tree is under 2,500
-bytes, so each pays the floor; a sweep of a full tree is larger and pays
+satoshis per 1000 bytes, with a 100-satoshi floor a transaction (what 1000 bytes pay at the rate). A
+token under 1000 bytes pays the floor; a larger token, a full funding tree
+and a sweep pay the rate on their size, and a sweep of a full tree is larger and pays
 the rate on its size, a few hundred satoshis. The rate,
 the floor and a ceiling are settings (`fee_rate`, `fee_floor`,
 `fee_max_rate`, `fee_max_tx`), and `fee_source = arc` follows the
@@ -145,27 +146,27 @@ ride a 1-satoshi funding output and are never mined.
 
 | Mined transaction | Size | Fee at the defaults |
 | --- | --- | --- |
-| organization token, 3 admitted | 711 bytes | 250 sat (72 at the rate) |
-| group token, no change (a rotation) | 673 bytes | 250 sat (68 at the rate) |
-| group token, 2 added | 744 bytes | 250 sat (75 at the rate) |
-| group token, 16 added | 1,235 bytes | 250 sat (124 at the rate) |
-| chain funding tree, 8 outputs | 583 bytes | 250 sat, and 8 sat in its outputs |
-| grant or record funding tree, 32 outputs | 1,759 bytes | 250 sat, and 32 sat in its outputs |
+| organization token, 3 admitted | 711 bytes | 100 sat (72 at the rate) |
+| group token, no change (a rotation) | 673 bytes | 100 sat (68 at the rate) |
+| group token, 2 added | 744 bytes | 100 sat (75 at the rate) |
+| group token, 16 added | 1,235 bytes | 124 sat |
+| chain funding tree, 8 outputs | 583 bytes | 100 sat (59 at the rate), and 8 sat in its outputs |
+| grant or record funding tree, 32 outputs | 1,759 bytes | 176 sat, and 32 sat in its outputs |
 
 Sizes are of real transactions built with bcommon (a token with a fee
 input, a predecessor input and change; see below). In practice:
 
 - `org create` with a few members mints a chain tree, a grant tree and the
-  first organization token: about 800 sat.
+  first organization token: about 420 sat.
 - `group create` adds a record tree and the group's first token: about
-  550 sat.
+  310 sat.
 - Each later change (an addition, a removal, a revocation by the roll, a
-  rotation) is one token, about 250 sat. A sweep costs a few hundred. A
+  rotation) is one token, about 100 sat. A sweep costs a few hundred. A
   new grant or record tree is minted when the last one runs out, every 32
   grants or wrap records.
 
 About 20,000 sat (0.0002 BSV) covers an organization, a group and more
-than seventy changes. A member needs no coin unless it asks the priced
+than a hundred changes. A member needs no coin unless it asks the priced
 history question (at most `-max-sats`, 1000 sat by default, a question).
 
 ## Where the numbers come from
@@ -218,7 +219,7 @@ and its retries, multiplied by the host count.
 **Cost of a removal.** One mined token (about 2,600 bytes as published) and, for a group
 of `n`, `ceil((n - 1) / 8)` wrap carriers on the plane, never mined. A group
 of 100 is one token and 13 carriers, about 58 KB delivered to every host in
-the hall. At the default fees the token costs 250 satoshis, and a funding
+the hall. At the default fees the token costs 100 to 124 satoshis, and a funding
 output pays for each carrier.
 
 **Time of a removal.** A token is published only once mined, and the next

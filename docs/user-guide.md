@@ -123,11 +123,12 @@ unspent and back in the pool` when it did not. You have nothing to do; if
 the node cannot be asked, the command says so and the next one asks again.
 
 What it costs: each change is one mined transaction of about 700 bytes to
-1.2 KB, and borg pays 1 satoshi a byte, so about 700 to 1,250 sat. Each
+1.2 KB, and borg pays the network's 100 sat per 1000 bytes with a 100-sat
+floor, so about 100 to 124 sat. Each
 grant and each batch of wraps rides a funding output of one satoshi and is
 never mined; the tree that holds 32 such outputs is one more mined
-transaction, about 1,800 sat. About 20,000 sat covers an organization, a
-group and about twenty changes ([limits.md](limits.md#what-it-costs)).
+transaction, about 210 sat. About 20,000 sat covers an organization, a
+group and more than a hundred changes ([limits.md](limits.md#what-it-costs)).
 
 ## 6. Members
 

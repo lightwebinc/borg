@@ -37,7 +37,7 @@ hall        not configured
 chain       woc:main
 …
 headers     woc:main tip 970082
-fee         100/1000 sat/bytes, floor 250 sat (static)
+fee         100/1000 sat/bytes, floor 100 sat (static)
 …
 settle      arcade:main
 ```
