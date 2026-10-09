@@ -47,7 +47,7 @@ import { decodeContext } from './merkle.js'
 import { config, engineOf, hall, topic } from './testhost.js'
 import { Chain, OrgSim, Party, PayingWallet, fromNowhere } from './testmint.js'
 import { FakeHost, MemoryStorage } from './testutil.js'
-import { TestNetwork } from './testnetwork.js'
+import { TestNetwork } from '@lightwebinc/bcommon/testing'
 import { defaultAcceptancePolicy, type AcceptancePolicy } from '@lightwebinc/bcommon'
 
 /** borg's ledger: the shared receiver in the layout borg writes. */

@@ -43,7 +43,7 @@ use; this page is the reference.
 
 ```console
 $ go install github.com/lightwebinc/borg/cmd/borg@latest
-$ make borg              # or from a checkout: bin/borg (Go 1.27.1 or later)
+$ make borg              # or from a checkout: bin/borg (Go 1.27.2 or later)
 $ make docker-build      # ghcr.io/lightwebinc/borg and borg-devchain, locally
 ```
 

@@ -49,10 +49,10 @@ import (
 	"github.com/lightwebinc/bcommon/publish"
 	"github.com/lightwebinc/bcommon/pushdrop"
 
+	"github.com/lightwebinc/bcommon/unicast"
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/limits"
 	"github.com/lightwebinc/borg/internal/state"
-	"github.com/lightwebinc/borg/internal/unicast"
 	"github.com/lightwebinc/borg/reader"
 )
 

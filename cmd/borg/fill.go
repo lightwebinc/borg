@@ -16,10 +16,10 @@ import (
 	"github.com/lightwebinc/bcommon/nodeapi"
 	"github.com/lightwebinc/bcommon/termsafe"
 
+	"github.com/lightwebinc/bcommon/unicast"
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/engine"
 	"github.com/lightwebinc/borg/internal/state"
-	"github.com/lightwebinc/borg/internal/unicast"
 	"github.com/lightwebinc/borg/reader"
 )
 

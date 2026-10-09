@@ -73,7 +73,7 @@ import {
 } from '@lightwebinc/bcommon/host'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './beef.js'
 import { LookupService, TopicPrefix, checkHall, topic } from './borgrec.js'
-import { HeaderTracker, isNativeSource } from './headers.js'
+import { HeaderTracker, isNativeSource } from '@lightwebinc/bcommon/host'
 import { FileJournal, type Journal } from './journal.js'
 import { BorgLookupService, FloorDays, MinSpendTable } from './ls_borg.js'
 import { Ledger, borgRoute, parsePrices } from './paid.js'

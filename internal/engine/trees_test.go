@@ -19,9 +19,9 @@ import (
 	"github.com/lightwebinc/bcommon/publish"
 	"github.com/lightwebinc/bcommon/testchain"
 
+	"github.com/lightwebinc/bcommon/unicast"
 	"github.com/lightwebinc/borg/internal/limits"
 	"github.com/lightwebinc/borg/internal/state"
-	"github.com/lightwebinc/borg/internal/unicast"
 )
 
 // rig is one funded home over a local chain. Each open is the publisher
