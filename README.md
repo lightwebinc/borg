@@ -115,6 +115,16 @@ each side's tests read the other's, byte for byte. The end-to-end targets
 (`make e2e`, `make e2e-client`, `make quickstart-check`) need Docker and a
 reference overlay host; see the Makefile.
 
+The TypeScript codec ships as a package of its own for other applications'
+pages and helpers (bchat's verifies groups and opens epochs with it): `npm
+pack` in `host/`, from a clean clone at a tag, writes
+`lightwebinc-borg-host-<version>.tgz` (the version equals the tag), holding
+only the codec files (`admit`, `beef`, `borgrec`, `chain`, `epoch`,
+`merkle`, `query`, `scope`, `script`, `util`), imported as
+`@lightwebinc/borg-host/codec/<file>.js`. bcommon's TypeScript package is
+its peer. A consumer vendors the tarball and pins it by its hash in its
+lockfile, as with bcommon's.
+
 ## License
 
 Apache 2.0; see [LICENSE](LICENSE), [NOTICE](NOTICE) and
