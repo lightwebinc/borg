@@ -21,7 +21,7 @@ whose key the removed member never receives.
 
 ```mermaid
 flowchart LR
-  O["borg (organization)"] -->|"grants, tokens, wraps"| H["overlay hosts<br/>tm_borg_hall, ls_borg"]
+  O["borg (organization)"] -->|"grants, tokens, wraps"| H["overlay hosts<br/>tm_borg_&lt;name&gt;_&lt;suffix&gt;, ls_borg"]
   O -->|"one small tx per change"| B[("BSV blockchain")]
   M["borg (member)"] -->|"open, roll, member"| H
   M -->|headers| S["header source<br/>woc:main"]

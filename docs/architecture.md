@@ -14,8 +14,8 @@ flowchart LR
     MB["borg command"] --- MH[("home<br/>key, epoch keys")]
   end
   subgraph hosts["overlay hosts (replicas)"]
-    H1["tm_borg_&lt;hall&gt;<br/>ls_borg"]
-    H2["tm_borg_&lt;hall&gt;<br/>ls_borg"]
+    H1["tm_borg_&lt;name&gt;_&lt;suffix&gt;<br/>ls_borg"]
+    H2["tm_borg_&lt;name&gt;_&lt;suffix&gt;<br/>ls_borg"]
   end
   OB -->|"carriers: grants, wraps"| H1
   OB -->|"tokens, sweeps"| H2

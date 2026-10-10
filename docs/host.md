@@ -31,7 +31,10 @@ image>`): the reference host with the module at
 `/app/modules/borg/borg-module.js`, its state directory at `/var/lib/borg`
 (mount a volume there), and an entrypoint that requires `BORG_HALLS` and
 derives `OVERLAY_TOPICS` from it when unset.
-`deploy/quickstart/compose.yaml` runs two of them.
+`deploy/quickstart/compose.yaml` runs two of them. The reference host
+requires `OVERLAY_ADMIN_TOKEN` (the bearer token of its `/admin` routes);
+when it is unset the entrypoint sets a random one for that run and logs
+so, which leaves `/admin` unusable until you set your own.
 
 The host must run with no broadcaster, and must not enable an unordered
 synchronization of unspent outputs for `tm_borg_` topics (spec sections
@@ -66,6 +69,14 @@ synchronization of unspent outputs for `tm_borg_` topics (spec sections
 | `BORG_ACCEPT_TOTAL_LIMIT` | ten thresholds | the same across every payer |
 | `BORG_ACCEPT_WINDOW` | `1h` | how long a fast payment counts against the limits unless it mines first (`ms`, `s`, `m`, `h`) |
 | `BORG_ACCEPT_WATCH` | `0s` | how long the host keeps watching for a conflict after arcade's acceptance before it answers |
+
+The host spells its header source `BORG_HEADERS_URL`; the `borg` command
+spells its own `BORG_HEADER_URL` (the `header_url` key,
+[configuration.md](configuration.md#keys)).
+
+The generic terms route, budget, acceptance and state directory variables
+(`BORG_SESSIONS` through `BORG_ACCEPT_WATCH`) behave as
+[the host module](https://github.com/lightwebinc/bcommon/blob/main/docs/host-module.md) describes for `<APP>_`.
 
 A price needs `BORG_LISTEN` and `BORG_PAYEE_KEY`. `history` and
 `history-after` sell one walk, so a host that prices one and not the other
@@ -175,16 +186,13 @@ log once and keeps no list of it.
   carrier and keeps retention's clocks, so it is kept for the host's life,
   backed up with the database, and never edited. Each line is flushed to
   disk before the admission it records completes.
-- `payments.jsonl` holds every payment the terms route accepted: the Atomic
-  BEEF, the derivation prefix and suffix, the sender's identity key, the
-  satoshis, the class and the outpoints it spends. The route answers once
-  the line is on disk. The host broadcasts the payment ([Payment acceptance](#payment-acceptance)); the payee still settles it.
+- `payments.jsonl` and `unsettleable.jsonl` are the generic payee ledger
+  and watch files of [the host module](https://github.com/lightwebinc/bcommon/blob/main/docs/host-module.md#the-state-directory),
+  which also covers settling, the backup script and restoring.
 
-Both files are append-only, so a copy taken while the host runs is safe: at
-worst its last line is cut short, and both readers skip such a line. Copy
-the directory daily beside the database backup and keep several days.
-Restore it only when it is lost or damaged, never to roll the host back:
-rows written after the copy are gone.
+`borg-rows.jsonl` is append-only like them, so a copy taken while the host
+runs is safe. Restore it only when it is lost or damaged, never to roll the
+host back: rows written after the copy are gone.
 
 The module holds every carrier line of `borg-rows.jsonl` in memory for the
 host's life, and nothing bounds it: about 1 KB of memory and 300 bytes of
@@ -202,113 +210,23 @@ with a line it does not know (`"k":"w"`) and does not start. To run an
 earlier build again, remove those lines from a copy of `borg-rows.jsonl`
 first.
 
-A payment is money only once it is mined; until then the payer can race a conflicting spend to a miner. Settle each line promptly with
-the payee wallet's BRC-100 `internalizeAction` (protocol `wallet payment`,
-output 0, the remittance as written), which broadcasts it.
+## The terms route and payment acceptance
 
-## The terms route
+With `BORG_LISTEN` set the module serves the terms route, its session,
+handshake and response budgets, replay refusal and payment acceptance
+exactly as [the host module](https://github.com/lightwebinc/bcommon/blob/main/docs/host-module.md) describes, with `<app>` = `borg`.
+What is borg's own:
 
-The reference host lets a module add no route of its own, so with
-`BORG_LISTEN` set the module serves its own, beside the host:
-
-| Route | Answer |
-| --- | --- |
-| `GET /ls_borg/terms` | the terms document of spec section 10.3; 404 when the host prices nothing |
-| `POST /.well-known/auth` | the BRC-104 handshake |
-| `POST /lookup` | the same BRC-24 questions as the host's `/lookup`, a `member` answer's context included |
-
-Its base URL is what the host publishes as `ls_borg`'s base (BRC-180
-`metanet.overlays`), an origin with no path: a BRC-104 client shakes hands
-at the origin's `/.well-known/auth`. A reverse proxy in front of it gives
-it an origin of its own and passes the path unchanged, because a BRC-104
-signature covers it.
-
-A free question is answered with or without BRC-104. A question of a class
-the host prices must be asked over BRC-104: without an `x-bsv-payment`
-header it is answered 402 with `x-bsv-payment-version` (`1.0`),
-`x-bsv-payment-satoshis-required` and `x-bsv-payment-derivation-prefix`;
-with one, it is answered once output 0 of the payment pays at least the
-price, P2PKH, to the key BRC-29 derives for the prefix, the suffix and the
-asker, the prefix is one this route issued, the payment verifies against the host's headers, its txid was never used before, it spends no coin an accepted payment spent, and it passes [payment acceptance](#payment-acceptance). Two transactions spending one coin can both verify, and at most one can ever be mined: the second is refused 409 `ERR_PAYMENT_CONFLICT`, as a
-used txid is refused 409 `ERR_PAYMENT_REPLAYED`. The coins of every
-accepted payment are kept in `payments.jsonl` and refused again after a
-restart. A payer's next payment may spend the change of its last, which is
-another coin. One payment buys one question. The same class asked on the host's own `/lookup` is refused
-with an error that names this route.
-
-A handshake is unauthenticated and costs the host a signature, so the
-route bounds both its memory and its work:
-
-- **sessions:** at most `BORG_SESSIONS`, each forgotten once idle for
-  `BORG_SESSION_TTL` seconds, the least recently used first past the cap.
-  A client whose session was forgotten shakes hands again;
-- **handshakes:** two token buckets checked before the request body is
-  read and before any signature work, the route's
-  (`BORG_HANDSHAKES_PER_SEC`, `BORG_HANDSHAKE_BURST`) and each remote
-  address's (`BORG_HANDSHAKES_PER_ADDR_PER_SEC`,
-  `BORG_HANDSHAKE_ADDR_BURST`; IPv6 by /64). The address's is checked
-  first, so a flooding address spends its own budget. A handshake over
-  either is answered 429 with `Retry-After`. Behind a reverse proxy every
-  client shares the proxy's address: raise the per-address limit to the
-  route's, or limit at the proxy;
-- **signed responses:** every authenticated request is answered with a
-  signature, so one handshake must not buy signatures without end. Each
-  session has a token bucket (`BORG_RESPONSES_PER_SEC`,
-  `BORG_RESPONSE_BURST`), taken only by a request that verified; a request
-  over it is answered 429 with `Retry-After` and no signature. A BRC-104
-  client reports an unsigned answer as a failed authentication: `borg
-  history` waits as the header says (1 to 30 seconds) and asks once more;
-- **replays:** an authenticated request sent again byte for byte is
-  refused 401 `ERR_AUTH_REPLAYED` before any signature work. The route
-  remembers the last 65536 requests it verified; the session budget bounds
-  what an older replay can cost.
-
-
-## Payment acceptance
-
-A paid question is answered only after the payment is held to bcommon's
-acceptance rule (package `acceptance`, the same rule for every layer):
-
-1. the route's own checks (prefix, output 0 pays the derived key, SPV
-   against the host's headers, a txid and coins never used before);
-2. finality (lock time 0, or every input final) and conservation (every
-   input carries its source, and the outputs do not exceed the inputs);
-3. the value: at or below `BORG_ACCEPT_THRESHOLD_SATS`, and within the
-   payer's and the total limits, it is fast; otherwise it is held;
-4. the host broadcasts it through `BORG_ARCADE_URL`, unmined ancestors first,
-   held or fast: this is how the payee collects;
-5. on the fast path the host answers only once arcade reports the network
-   took it (`SEEN_ON_NETWORK`, `ACCEPTED_BY_NETWORK`, ...), with no
-   `DOUBLE_SPEND_ATTEMPTED` and no competing transaction, and the node shows
-   every input unspent or spent by this payment.
-
-A refusal (arcade `REJECTED`, a definitive HTTP refusal, an input spent by
-another transaction, a payment that is not final or spends more than it
-holds) is answered 400 `ERR_PAYMENT_REFUSED`. Anything else that is not
-fast (above the threshold, a limit reached, a conflict reported, no
-verdict within 10 s, a spend view that cannot say) is answered 402
-`ERR_PAYMENT_HELD` with the reason and no BRC-105 headers, so a client
-does not pay again. The held payment is recorded in `payments.jsonl` with
-`"decision":"hold"`, keeps its coins, and the same payment sent again is
-answered once the node serves its proof and that proof verifies against the
-host's headers. A host with no arcade or no node holds every payment (with
-arcade alone it still broadcasts, and with the node alone it answers a
-payment the node shows mined). At most 100,000 fast payments are watched at
-once; past that a payment is held (`watch-limit`).
-
-Every fast payment is watched on the host's background tick (every 30 s,
-the 500 least recently checked each time) until it mines. One whose input
-another transaction spent, that arcade refuses, or that has not mined
-within a day, is written to `unsettleable.jsonl` in the state directory,
-logged, and counted; its payer is then held for confirmation on every
-later payment. Flags outlive a restart: the host reads `unsettleable.jsonl`
-when it starts, so an operator unflags a payer by removing its lines and
-restarting. Nothing is clawed back: the answer was given. A restart
-watches the fast lines of the last day again, and counts those of the last
-window against the limits.
-
-The ledger line carries `decision` (`fast`, `hold` or `mined`) and
-`reason`; `borg payee settle` reads it as before.
+- the terms document is spec section 10.3, at `GET /ls_borg/terms`, and
+  the priceable classes are `history` and `history-after`;
+- `POST /lookup` answers the same BRC-24 questions as the host's
+  `/lookup`, a `member` answer's context included;
+- a payer's next payment may spend the change of its last, which is
+  another coin;
+- a held payment is answered 202 `ERR_PAYMENT_HELD`, and a response over
+  the session budget makes `borg history` wait as `Retry-After` says (1 to
+  30 seconds) and ask once more;
+- `borg payee settle` reads the ledger's `decision` and `reason`.
 
 ## Metrics
 

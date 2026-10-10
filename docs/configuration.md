@@ -3,7 +3,8 @@
 Every setting of the `borg` command, from the code
 (`internal/config` and `cmd/borg`). The overlay host's environment
 (`BORG_HALLS`, `BORG_HEADERS_URL`, prices, the payee key and the rest) is
-in [host.md](host.md#configuration).
+in [host.md](host.md#configuration). Note the spelling: the host's header
+source is `BORG_HEADERS_URL`, the command's is `BORG_HEADER_URL`.
 
 ## Where settings come from
 
@@ -142,7 +143,8 @@ A list is comma separated, and an entry may name the one method it serves
 (`tx=`, `proof=`, `spend=`, `known=`). Transactions and proofs are asked of
 each entry in turn, since each answer is checked; spends come from one
 entry only, the first that serves them, so an absence answer never falls
-through to another source.
+through to another source. The views are the bcommon `nodeapi`
+interfaces ([chain views](https://github.com/lightwebinc/bcommon/blob/main/docs/configuration.md#chain-views-nodeapi-interfaces)).
 
 ## Networks
 
