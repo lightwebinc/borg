@@ -1,6 +1,6 @@
 {
   "name": "@lightwebinc/borg-host",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "private": true,
   "description": "The borg record layer in TypeScript and the host module for an overlay host: organisation, group, grant and wrap records, hall names, scopes, lookup questions, the epoch key and its wraps, the topic manager's transaction rules and the index's chain rules, held to the Go codec's vectors, and tm_borg with ls_borg as a module the host loads by path",
   "license": "Apache-2.0",
