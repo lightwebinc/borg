@@ -258,6 +258,14 @@ free classes give the same tokens one at a time; the priced class sells
 the bulk walk. `payee settle` took the payment into the payee's wallet:
 checked, broadcast, mined, pooled.
 
+With no arcade on the local chain, the host cannot take a payment on the
+network's word: it holds it for confirmation (`202 ERR_PAYMENT_HELD`), and
+`borg` says so, broadcasts the payment, waits for it to mine (seconds
+here; up to 10 minutes) and sends the same payment again, which buys the
+answer. The host sees it mine through the local chain's asset API
+(`BORG_ASSET_URL` in compose.yaml).
+
+
 ### 9. The removal owed, and do the hosts agree?
 
 ```console

@@ -23,6 +23,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
+	"github.com/lightwebinc/bcommon/heldpay"
 	"github.com/lightwebinc/bcommon/lookup"
 	"github.com/lightwebinc/bcommon/producer"
 	"github.com/lightwebinc/bcommon/purse"
@@ -852,12 +853,21 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 	}()
 	once := &oncePurse{Purse: p, record: func(tx *transaction.Transaction) error { return recordPayment(h, tx) }}
 	body, _ := json.Marshal(lookup.Question{Service: borgrec.LookupService, Query: q})
-	watch := &limitWatch{next: http.DefaultTransport}
+	tap := &heldpay.Tap{}
+	watch := &limitWatch{next: tap}
 	af := clients.New(once, clients.WithoutLogging(), clients.WithHttpClient(&http.Client{Timeout: g.cfg.Timeout, Transport: watch}))
 	resp, ferr := g.askLimited(ctx, func() bool { return once.tx != nil }, watch, func() (*http.Response, error) {
 		return af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
 			Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json"}, Body: body})
 	})
+	if once.tx != nil && heldWhy(tap) != "" {
+		// The host took the payment and holds it for confirmation: once it
+		// is mined, the same payment, sent again, buys the answer.
+		resp, ferr = g.sendHeldAgain(ctx, p, once.tx, tap, resp, ferr, func(payment string) (*http.Response, error) {
+			return af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
+				Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json", "x-bsv-payment": payment}, Body: body})
+		})
+	}
 	var ans []byte
 	status, paid, payee := 0, "", ""
 	if ferr == nil {
@@ -885,6 +895,8 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 		g.broadcastPayment(ctx, p, once.tx)
 	}
 	switch {
+	case once.tx != nil && heldWhy(tap) != "":
+		return nil, once.sats, incomplete("history at %s: the host broadcast payment %s and holds it for confirmation: %s", base, once.tx.TxID(), termsafe.Abbrev(heldWhy(tap)))
 	case errors.Is(ferr, errLimited) && once.tx != nil:
 		return nil, once.sats, incomplete("history at %s: the host refused the paid request for its session's budget (429); nothing is asked again, since that would take a second payment; ask again later", base)
 	case errors.Is(ferr, errLimited):
