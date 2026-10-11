@@ -375,3 +375,42 @@ test('a sweep retracts a policy carrier and the next token drops it from the roo
   assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([keep.tx]))
   assert.deepEqual(await answer(s.engine, { hall, org: org.hex, role: 'releaser' }), [])
 })
+
+test('retention: a policy record stays while the set holds it, and goes the floor after it is retired or retracted', async () => {
+  const chain = new Chain(80000)
+  let clock = 1_700_000_000
+  const s = await setup({ chain, now: () => clock })
+  const org = new OrgSim(hall, 'policy retention org', chain)
+  const kept = await org.policyRecord('auditor', { permissions: ['s/read/a'] })
+  const retired = await org.policyRecord('releaser', { permissions: ['s/a/b'] })
+  const swept = await org.policyRecord('moderator', { permissions: ['s/mod/a'], vout: 5 })
+  for (const p of [kept, retired, swept]) assert.deepEqual(await submit(s.engine, p.tx.toAtomicBEEF()), [0])
+  assert.deepEqual(await submit(s.engine, (await org.orgToken([], [], { define: [kept.c, retired.c, swept.c] })).beef), [0])
+  assert.equal(s.ls.policyCount, 3)
+
+  // Nothing goes while the set holds all three, however long the host waits.
+  clock += 400 * 86400
+  assert.equal(await s.ls.prune(), 0)
+  assert.equal(s.ls.policyCount, 3)
+
+  // One is retired by a token, one is retracted by a sweep while the set
+  // still names it. The retired one goes once the floor has passed; the
+  // retracted one is kept, because a reader computing the policy root still
+  // needs every record the root holds, as a swept grant in the roll is kept.
+  assert.deepEqual(await submit(s.engine, (await org.orgToken([], [], { retire: [retired.c] })).beef), [0])
+  const sw = await sweep(org.policyTree, [5], org.party, KeyPolicy, chain)
+  assert.deepEqual(await submit(s.engine, sw.toAtomicBEEF()), [0])
+  assert.equal(await s.ls.prune(), 0)
+  assert.equal(s.ls.policyCount, 3)
+  clock += 32 * 86400
+  assert.equal(await s.ls.prune(), 1)
+  assert.deepEqual([s.ls.policyCount, (await answer(s.engine, { hall, policy: org.hex })).length], [2, 2])
+
+  // Once the root drops the retracted one too, the floor runs again and it
+  // goes; what the set still holds never does.
+  assert.deepEqual(await submit(s.engine, (await org.orgToken([], [], { retire: [swept.c] })).beef), [0])
+  clock += 32 * 86400
+  assert.equal(await s.ls.prune(), 1)
+  assert.equal(s.ls.policyCount, 1)
+  assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([kept.tx]))
+})

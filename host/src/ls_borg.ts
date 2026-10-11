@@ -539,13 +539,13 @@ export class BorgLookupService implements LookupService {
    * bound or policy answer is taken from and the root its context proves
    * against.
    */
-  private answerPolicy(hall: string, org: string): { seq: number; set: Uint8Array[]; has: Set<string> } | undefined {
+  private answerPolicy(hall: string, org: string): { seq: number; set: Uint8Array[]; has: Set<string>; path: TokenEntry[] } | undefined {
     const ch = this.chains.get(this.chainKey(hall, org, ''))
     if (ch === undefined) return undefined
     const t = this.answerToken(ch)
     if (t === undefined) return undefined
     const set = (this.foldAt(ch, t) as OrgFold).policyNow()
-    return { seq: t.seq, set, has: new Set(set.map(toHex)) }
+    return { seq: t.seq, set, has: new Set(set.map(toHex)), path: this.pathOf(ch, t) }
   }
 
   // ---- admission
@@ -871,6 +871,8 @@ export class BorgLookupService implements LookupService {
     let n = 0
     const rolls = new Map<string, ReturnType<BorgLookupService['answerRoll']>>()
     const revokedAt = new Map<string, Map<string, number>>()
+    const sets = new Map<string, ReturnType<BorgLookupService['answerPolicy']>>()
+    const retiredAt = new Map<string, Map<string, number>>()
     for (const e of [...this.carriers.values()]) {
       const l = this.lines.get(e.c)!
       const r = this.rows.get(l.op)!
@@ -890,6 +892,24 @@ export class BorgLookupService implements LookupService {
         }
         if (rolls.get(k)?.set.has(e.c) === true) continue
         const left = revokedAt.get(k)!.get(e.c)
+        if (sweptAt === undefined && left === undefined) continue
+        from = Math.max(l.at, sweptAt ?? 0, left ?? 0)
+      } else if (e.kind === 'p') {
+        // A policy record is kept while the set holds it, and for the floor
+        // after it leaves the set or is retracted: a service answering for a
+        // decision needs the record the decision rested on.
+        const k = `${e.hall}|${e.org}`
+        if (!sets.has(k)) {
+          const a = this.answerPolicy(e.hall, e.org)
+          sets.set(k, a)
+          const m = new Map<string, number>()
+          for (const t of a?.path ?? []) {
+            for (const c of (t.rec as Org).retire) if (!m.has(toHex(c))) m.set(toHex(c), this.tokenSeen.get(t.txid) ?? now)
+          }
+          retiredAt.set(k, m)
+        }
+        if (sets.get(k)?.has.has(e.c) === true) continue
+        const left = retiredAt.get(k)!.get(e.c)
         if (sweptAt === undefined && left === undefined) continue
         from = Math.max(l.at, sweptAt ?? 0, left ?? 0)
       } else {
