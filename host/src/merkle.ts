@@ -114,3 +114,10 @@ export function proveGrant(seq: number, roll: Uint8Array[], grant: Uint8Array): 
 
 /** Whether a context takes the grant's commitment to the roll root. */
 export const verifyGrant = (c: InclusionContext, grant: Uint8Array, rollRootValue: Uint8Array): boolean => verify(grant, c.path, rollRootValue)
+
+/**
+ * The same check against a policy root: the context a role or bound answer
+ * carries has a grant context's shape, and only the root it proves against
+ * differs.
+ */
+export const verifyPolicy = (c: InclusionContext, policy: Uint8Array, policyRootValue: Uint8Array): boolean => verifyGrant(c, policy, policyRootValue)

@@ -12,7 +12,14 @@
  */
 import { Hash, PrivateKey } from '@bsv/sdk'
 import { CborMap, ascending, bytesEqual, compareBytes, recordReader, strictPublicKey, strictSignature, type Pair, type RecordFields, type Value } from '@lightwebinc/bcommon'
+import { checkRoleName, grantsAny, intersect, MaxPermissions, parsePermission } from './permission.js'
+import { ExpirySkew, MaxRole, MaxScope, parseExpiry } from './scope.js'
+import { Refusal } from './refusal.js'
 import { toHex } from './util.js'
+
+export { Refusal, reasonOf } from './refusal.js'
+export { ExpirySkew, MaxRole, MaxScope } from './scope.js'
+export type { Reason } from './refusal.js'
 
 /** The BRC-43 protocol, security level 1, and the key ids under it. */
 export const ProtocolName = 'borg organisation'
@@ -20,6 +27,7 @@ export const Protocol: [1, string] = [1, ProtocolName]
 export const KeyOrg = 'org'
 export const KeyGroup = 'group'
 export const KeyRecord = 'record'
+export const KeyPolicy = 'policy'
 export const KeyGrant = 'grant'
 export const KeyChain = 'chain'
 export const KeyFund = 'fund'
@@ -45,6 +53,7 @@ export const MagicOrg = Uint8Array.of(0x62, 0x6f, 0x6f, 0x01)
 export const MagicGroup = Uint8Array.of(0x62, 0x6f, 0x67, 0x01)
 export const MagicGrant = Uint8Array.of(0x62, 0x6f, 0x6d, 0x01)
 export const MagicWrap = Uint8Array.of(0x62, 0x6f, 0x77, 0x01)
+export const MagicPolicy = Uint8Array.of(0x62, 0x6f, 0x70, 0x01)
 
 /** Bounds. A reader accepts every record within them. */
 export const MaxSafe = Number.MAX_SAFE_INTEGER
@@ -65,9 +74,8 @@ export const MaxOrgRecord = 8192
 export const MaxGroupRecord = 8192
 export const MaxGrantRecord = 4096
 export const MaxWrapRecord = 4096
+export const MaxPolicyRecord = 8192
 export const MaxKeys = 64
-export const MaxRole = 64
-export const MaxScope = 512
 export const WrapLen = 182
 export const KeyringEntryLen = 80
 export const RevealLen = 32
@@ -75,67 +83,7 @@ export const RevealLen = 32
 /** The BRC-52 field names of a grant, in the order BRC-52 serializes them. */
 export const GrantFieldNames = ['expiry', 'role', 'scope'] as const
 
-/**
- * The fixed labels a host counts refusals by: the record reasons of spec
- * section 3.1, the content and member reasons, and the transaction reasons
- * of section 11.1.
- */
-export type Reason =
-  | 'too-large'
-  | 'cbor'
-  | 'key-type'
-  | 'magic'
-  | 'missing'
-  | 'type'
-  | 'range'
-  | 'identity'
-  | 'hall'
-  | 'name'
-  | 'list'
-  | 'chain'
-  | 'members'
-  | 'fields'
-  | 'signature-form'
-  | 'entry'
-  | 'grant-revocation'
-  | 'grant-signature'
-  | 'grant-reveal'
-  | 'transition'
-  | 'rotation'
-  | 'count'
-  | 'scope'
-  | 'expiry'
-  | 'role'
-  | 'query'
-  | 'token'
-  | 'undecryptable'
-  | 'commitment'
-  | 'shape'
-  | 'beef'
-  | 'mineable'
-  | 'unlock'
-  | 'lock'
-  | 'signature'
-  | 'funding'
-  | 'unmined'
-  | 'token-input'
-  | 'not-borg'
 
-/** A refusal: the reason label, and a detail for people. */
-export class Refusal extends Error {
-  constructor(
-    readonly reason: Reason,
-    detail?: string,
-  ) {
-    super(detail === undefined ? `borgrec: ${reason}` : `borgrec: ${reason}: ${detail}`)
-    this.name = 'Refusal'
-  }
-}
-
-/** The reason of a thrown value: a Refusal's label, 'other' for anything else. */
-export function reasonOf(e: unknown): Reason | 'other' {
-  return e instanceof Refusal ? e.reason : 'other'
-}
 
 const sha256 = (b: Uint8Array): Uint8Array => Uint8Array.from(Hash.sha256(Array.from(b)))
 
@@ -262,6 +210,21 @@ function listKeys(f: Fields, k: number, max: number): Uint8Array[] {
  * The key itself is required: a record that leaves it out is 'missing', so
  * every record writes every key this version defines.
  */
+function textList(f: Fields, k: number, max: number): string[] {
+  return array(f, k, max).map((e) => {
+    if (typeof e !== 'string') throw new Refusal('list', `key ${k}`)
+    return e
+  })
+}
+
+/** Key k as a text string or as CBOR null, which this codec reads as absent. */
+function nullableText(f: Fields, k: number): string | null {
+  const v = need(f, k)
+  if (v === null) return null
+  if (typeof v !== 'string') throw new Refusal('type', `key ${k}`)
+  return v
+}
+
 function nullableBytes(f: Fields, k: number): Uint8Array | null {
   const v = need(f, k)
   if (v === null) return null
@@ -633,6 +596,175 @@ export function encodeGrant(g: Grant): Uint8Array {
   decodeGrant(b)
   return b
 }
+
+// ---- the policy record ----
+
+/** The two kinds of policy record (spec section 5A.1). */
+export const PolicyRole = 0
+export const PolicyBinding = 1
+
+/**
+ * One policy record: the payload of a policy carrier's one output. It is
+ * either a role definition or a binding, by kind. The organisation's token
+ * commits to the set of them by its policy root, so what a role may do is a
+ * committed fact of the chain and not a claim of whoever serves it.
+ *
+ * A policy record is in the clear: nothing in it is encrypted, so every host
+ * and every follower of the hall reads an organisation's roles and bindings.
+ */
+export interface Policy {
+  hall: string
+  org: Uint8Array
+  kind: number
+  role: string
+  /** A definition's permissions, or a binding's attenuation. */
+  permissions: string[]
+  /** A binding's group id (16 bytes) or identity key (33); null is CBOR null. */
+  to: Uint8Array | null
+  /** A binding's expiry; null is CBOR null. */
+  expiry: string | null
+  created: number
+  extra: Pair[]
+}
+
+/** Key 5's rule: at most MaxPermissions, ascending, unique, each one a permission. */
+function checkPermissions(a: string[]): void {
+  if (a.length > MaxPermissions) throw new Refusal('list', 'permissions')
+  a.forEach((s, i) => {
+    if (i > 0 && a[i - 1]! >= s) throw new Refusal('list', 'permissions')
+    parsePermission(s)
+  })
+}
+
+/** Key 6's rule: null, a group identifier, or an identity key that is neither the organisation nor the anyone key. */
+function checkTo(p: Policy): void {
+  if (p.to === null || p.to.length === GroupIDLen) return
+  if (p.to.length === 33) {
+    checkIdentity(p.to)
+    if (isAnyone(p.to) || bytesEqual(p.to, p.org)) {
+      throw new Refusal('identity', 'a binding to the organisation or the anyone key')
+    }
+    return
+  }
+  throw new Refusal('identity', 'to is neither a group identifier nor an identity key')
+}
+
+function policyCross(p: Policy): void {
+  if (p.kind === PolicyRole && (p.to !== null || p.expiry !== null)) {
+    throw new Refusal('binding', 'a role definition has no subject and no expiry')
+  }
+  if (p.kind === PolicyBinding && p.to === null) throw new Refusal('binding', 'a binding names a group or a key')
+}
+
+export function decodePolicy(b: Uint8Array): Policy {
+  const f = decodeRecord(b, MaxPolicyRecord, 8, MagicPolicy)
+  const hall = text(f, 1)
+  checkHall(hall)
+  const org = bytesN(f, 2, -1)
+  checkOrgKey(org)
+  const kind = uint(f, 3, PolicyRole, PolicyBinding)
+  const role = text(f, 4)
+  checkRoleName(role)
+  const permissions = textList(f, 5, MaxPermissions)
+  checkPermissions(permissions)
+  const to = nullableBytes(f, 6)
+  const expiry = nullableText(f, 7)
+  if (expiry !== null) parseExpiry(expiry)
+  const created = uint(f, 8, 1, MaxTime)
+  const p: Policy = { hall, org, kind, role, permissions, to, expiry, created, extra: f.extra }
+  checkTo(p)
+  policyCross(p)
+  return p
+}
+
+export function encodePolicy(p: Policy): Uint8Array {
+  const b = finish(
+    [
+      { key: 0n, val: MagicPolicy },
+      { key: 1n, val: p.hall },
+      { key: 2n, val: p.org },
+      { key: 3n, val: k(p.kind) },
+      { key: 4n, val: p.role },
+      { key: 5n, val: p.permissions },
+      { key: 6n, val: p.to },
+      { key: 7n, val: p.expiry },
+      { key: 8n, val: k(p.created) },
+    ],
+    p.extra,
+    MaxPolicyRecord,
+    8,
+  )
+  decodePolicy(b)
+  return b
+}
+
+/**
+ * What a service has established about one subject before it asks what that
+ * subject may do. Every field is a conclusion the caller reached by the
+ * checks of spec section 13.
+ */
+export interface Subject {
+  key: Uint8Array
+  /** false unless the caller established a current membership. */
+  member: boolean
+  /** The roles the subject's current grants name, in the clear. */
+  roles: string[]
+  /** The groups of this organisation whose latest token holds the key. */
+  groups: Uint8Array[]
+}
+
+/** Whether a binding's expiry has not passed, allowing the reader's skew. */
+function currentPolicy(p: Policy, now: number): boolean {
+  if (p.expiry === null) return true
+  try {
+    return now < parseExpiry(p.expiry) + ExpirySkew
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The effective permission set of a subject at now (Unix seconds), over the
+ * policy set of the organisation's latest token (spec section 5A.4): the
+ * union of what the subject's own roles carry and what every binding that
+ * reaches it carries, attenuated. Nothing subtracts. The result is ascending
+ * and holds no duplicate.
+ */
+export function effective(s: Subject, set: Policy[], now: number): string[] {
+  if (!s.member) return []
+  const defined = new Map<string, string[]>()
+  for (const p of set) {
+    if (p.kind !== PolicyRole) continue
+    const have = defined.get(p.role)
+    defined.set(p.role, have === undefined ? [...p.permissions] : intersect(have, p.permissions))
+  }
+  const held = new Set<string>()
+  const add = (role: string, only: string[]): void => {
+    const perms = defined.get(role)
+    if (perms === undefined) return
+    for (const x of only.length > 0 ? intersect(perms, only) : perms) held.add(x)
+  }
+  for (const role of s.roles) {
+    try {
+      checkRoleName(role)
+    } catch {
+      continue
+    }
+    add(role, [])
+  }
+  for (const p of set) {
+    if (p.kind !== PolicyBinding || p.to === null || !currentPolicy(p, now)) continue
+    if (p.to.length === GroupIDLen) {
+      if (s.groups.some((g) => bytesEqual(p.to!, g))) add(p.role, p.permissions)
+      continue
+    }
+    if (bytesEqual(p.to, s.key)) add(p.role, p.permissions)
+  }
+  return [...held].sort()
+}
+
+/** Whether an effective set grants the asked permission, which carries no wildcard. */
+export const allows = (eff: string[], ask: string): boolean => grantsAny(eff, ask)
 
 // ---- the wrap record ----
 

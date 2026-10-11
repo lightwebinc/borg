@@ -8,18 +8,19 @@
 import { bytesEqual, claimsRecord, firstPush, pushDropScript } from '@lightwebinc/bcommon'
 
 export { firstPush, minimalPushBytes, pushDropScript, pushFields } from '@lightwebinc/bcommon'
-import { MagicGrant, MagicWrap, TagFunding, TagGroup, TagOrg } from './borgrec.js'
+import { MagicGrant, MagicPolicy, MagicWrap, TagFunding, TagGroup, TagOrg } from './borgrec.js'
 
 const OP_DROP = 0x75
 
 /** What a locking script claims to be (spec section 11.1, Classify). */
-export type Kind = 'none' | 'grant' | 'wrap' | 'org-token' | 'group-token' | 'funding'
+export type Kind = 'none' | 'grant' | 'policy' | 'wrap' | 'org-token' | 'group-token' | 'funding'
 
 /** What a locking script claims, reading nothing else of it. */
 export function classify(s: Uint8Array): Kind {
   const p = firstPush(s)
   if (p === undefined) return 'none'
   if (claimsRecord(p, MagicGrant)) return 'grant'
+  if (claimsRecord(p, MagicPolicy)) return 'policy'
   if (claimsRecord(p, MagicWrap)) return 'wrap'
   if (bytesEqual(p, TagOrg)) return 'org-token'
   if (bytesEqual(p, TagGroup)) return 'group-token'

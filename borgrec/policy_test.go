@@ -16,7 +16,7 @@ func definition() *Policy {
 	return &Policy{
 		Hall:        testHall,
 		Org:         orgKey(),
-		Kind:        KindRole,
+		Kind:        PolicyRole,
 		Role:        "releaser",
 		Permissions: []string{"bsecret/release/payroll", "bstore/get/*"},
 		Created:     1,
@@ -27,7 +27,7 @@ func binding(to []byte) *Policy {
 	return &Policy{
 		Hall:    testHall,
 		Org:     orgKey(),
-		Kind:    KindBinding,
+		Kind:    PolicyBinding,
 		Role:    "releaser",
 		To:      to,
 		Expiry:  "2030-01-02T03:04:05Z",
@@ -43,7 +43,7 @@ func TestPolicyRoundTrip(t *testing.T) {
 		definition(),
 		binding(groupID()),
 		binding(key(0x52).PubKey().Compressed()),
-		{Hall: testHall, Org: orgKey(), Kind: KindBinding, Role: "a", To: groupID(),
+		{Hall: testHall, Org: orgKey(), Kind: PolicyBinding, Role: "a", To: groupID(),
 			Permissions: []string{"bstore/get/photos/*"}, Created: 1},
 	} {
 		b, err := p.Encode()
@@ -99,7 +99,7 @@ func TestPolicyNullKeysPresent(t *testing.T) {
 	// silent zero.
 	raw := cbor.Map{
 		{Key: uint64(PKMagic), Val: MagicPolicy}, {Key: uint64(PKHall), Val: testHall},
-		{Key: uint64(PKOrg), Val: orgKey()}, {Key: uint64(PKKind), Val: KindRole},
+		{Key: uint64(PKOrg), Val: orgKey()}, {Key: uint64(PKKind), Val: PolicyRole},
 		{Key: uint64(PKRole), Val: nil}, {Key: uint64(PKPermissions), Val: []cbor.Value{}},
 		{Key: uint64(PKTo), Val: nil}, {Key: uint64(PKExpiry), Val: nil},
 		{Key: uint64(PKCreated), Val: uint64(1)},
@@ -208,7 +208,7 @@ func TestPolicyDecodeRefusals(t *testing.T) {
 	// A missing key, built by hand.
 	m := cbor.Map{
 		{Key: uint64(PKMagic), Val: MagicPolicy}, {Key: uint64(PKHall), Val: testHall},
-		{Key: uint64(PKOrg), Val: orgKey()}, {Key: uint64(PKKind), Val: KindRole},
+		{Key: uint64(PKOrg), Val: orgKey()}, {Key: uint64(PKKind), Val: PolicyRole},
 		{Key: uint64(PKRole), Val: "releaser"}, {Key: uint64(PKPermissions), Val: []cbor.Value{}},
 		{Key: uint64(PKTo), Val: nil}, {Key: uint64(PKCreated), Val: uint64(1)},
 	}
@@ -280,5 +280,67 @@ func TestPolicyRecordFitsItsBound(t *testing.T) {
 	t.Logf("worst case: %d bytes of %d", len(b), MaxPolicyRecord)
 	if _, err := DecodePolicy(b); err != nil {
 		t.Fatalf("the worst case does not decode: %v", err)
+	}
+}
+
+// TestEffectiveFoldRules covers what the vectors cannot show in one pass:
+// the union deduplicates and sorts, an attenuation cannot widen, and a
+// binding to a group the subject is not in contributes nothing.
+func TestEffectiveFoldRules(t *testing.T) {
+	gid := [GroupIDLen]byte{1}
+	other := [GroupIDLen]byte{2}
+	def := func(role string, perms ...string) *Policy {
+		return &Policy{Hall: testHall, Org: orgKey(), Kind: PolicyRole, Role: role, Permissions: perms, Created: 1}
+	}
+	bind := func(role string, to []byte, expiry string, only ...string) *Policy {
+		return &Policy{Hall: testHall, Org: orgKey(), Kind: PolicyBinding, Role: role, To: to,
+			Expiry: expiry, Permissions: only, Created: 1}
+	}
+	k := key(0x52).PubKey().Compressed()
+	now, err := ParseExpiry("2026-06-01T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := []*Policy{
+		def("reader", "s/get/a", "s/get/b"),
+		def("writer", "s/put/a", "s/get/a"),
+		bind("reader", gid[:], ""),
+		bind("writer", k, ""),
+		bind("reader", other[:], ""),
+		bind("writer", k, "", "s/put/a", "s/delete/a"),
+	}
+	s := Subject{Key: k, Member: true, Groups: [][GroupIDLen]byte{gid}}
+	got := Effective(s, set, now)
+	want := []string{"s/get/a", "s/get/b", "s/put/a"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("effective %v, want %v", got, want)
+	}
+	// An attenuation naming a permission the definition does not carry adds
+	// nothing: the binding above names s/delete/a and the role does not.
+	for _, p := range got {
+		if p == "s/delete/a" {
+			t.Fatal("an attenuation widened a role")
+		}
+	}
+	// A subject that is not a current member holds nothing at all.
+	s.Member = false
+	if len(Effective(s, set, now)) != 0 {
+		t.Fatal("a subject with no current grant held permissions")
+	}
+	// An expired binding contributes nothing; the same binding before its
+	// expiry does.
+	s = Subject{Key: k, Member: true}
+	past := []*Policy{def("reader", "s/get/a"), bind("reader", k, "2020-01-01T00:00:00Z")}
+	if len(Effective(s, past, now)) != 0 {
+		t.Fatal("an expired binding granted something")
+	}
+	future := []*Policy{def("reader", "s/get/a"), bind("reader", k, "2030-01-01T00:00:00Z")}
+	if len(Effective(s, future, now)) != 1 {
+		t.Fatal("a binding that has not expired granted nothing")
+	}
+	// Within the skew an expiry just passed is still current.
+	exp := now.Add(-ExpirySkew / 2).UTC().Format(ExpiryLayout)
+	if len(Effective(s, []*Policy{def("reader", "s/get/a"), bind("reader", k, exp)}, now)) != 1 {
+		t.Fatal("a binding inside the clock skew was dropped")
 	}
 }

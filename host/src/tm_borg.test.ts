@@ -9,7 +9,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { P2PKH, PrivateKey, Transaction } from '@bsv/sdk'
-import { KeyChain, KeyGrant, KeyGroup, KeyOrg, KeyRecord, TagGroup, TagOrg, encodeGrant } from './borgrec.js'
+import { KeyChain, KeyGrant, KeyGroup, KeyOrg, KeyPolicy, KeyRecord, TagGroup, TagOrg, encodeGrant } from './borgrec.js'
 import { DefaultMaxBEEF, tokenBEEF } from './beef.js'
 import { HeaderTracker } from '@lightwebinc/bcommon/host'
 import { Chain, OrgSim, Party, carrier, fromNowhere, fundingTree, sweep, token } from './testmint.js'
@@ -70,6 +70,7 @@ test('every refusal record, carried by an otherwise valid carrier or token, is r
   const vectors = refusalVectors()
   const grants = fundingTree(vectorOrg, KeyGrant, vectors.length, chain)
   const records = fundingTree(vectorOrg, KeyRecord, vectors.length, chain)
+  const policies = fundingTree(vectorOrg, KeyPolicy, vectors.length, chain)
   const chains = fundingTree(vectorOrg, KeyChain, vectors.length, chain)
   for (const [i, r] of vectors.entries()) {
     const rec = fromHex(r.hex)
@@ -78,6 +79,8 @@ test('every refusal record, carried by an otherwise valid carrier or token, is r
       beef = (await carrier(grants, i, vectorOrg, KeyGrant, rec)).toAtomicBEEF()
     } else if (r.record === 'wrap') {
       beef = (await carrier(records, i, vectorOrg, KeyRecord, rec)).toAtomicBEEF()
+    } else if (r.record === 'policy') {
+      beef = (await carrier(policies, i, vectorOrg, KeyPolicy, rec)).toAtomicBEEF()
     } else {
       const tag = r.record === 'org' ? TagOrg : TagGroup
       const tk = await token(vectorOrg, tag, rec, r.record === 'org' ? KeyOrg : KeyGroup, [{ src: chains, vout: i, keyID: KeyChain }])

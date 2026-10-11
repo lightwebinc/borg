@@ -90,7 +90,7 @@ export interface TxVectors {
 }
 
 export interface RefusalVector {
-  record: 'org' | 'group' | 'grant' | 'wrap'
+  record: 'org' | 'group' | 'grant' | 'policy' | 'wrap'
   label: string
   hex: string
   reason: string

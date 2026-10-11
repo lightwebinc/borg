@@ -43,6 +43,7 @@ type TxKind int
 // The kinds of admitted transaction.
 const (
 	TxGrant TxKind = iota + 1
+	TxPolicy
 	TxWrap
 	TxOrgToken
 	TxGroupToken
@@ -53,6 +54,8 @@ func (k TxKind) String() string {
 	switch k {
 	case TxGrant:
 		return "grant"
+	case TxPolicy:
+		return "policy"
 	case TxWrap:
 		return "wrap"
 	case TxOrgToken:
@@ -85,10 +88,11 @@ type Host struct {
 	MaxSweepInputs int
 }
 
-// Carrier is an admitted grant or wrap carrier.
+// Carrier is an admitted grant, policy or wrap carrier.
 type Carrier struct {
-	Grant *Grant
-	Wrap  *WrapRecord
+	Grant  *Grant
+	Policy *Policy
+	Wrap   *WrapRecord
 	// Owner is the record's org, the key the carrier is bound to.
 	Owner []byte
 	// Record is the record exactly as carried.
@@ -130,7 +134,7 @@ type Admission struct {
 	Outputs []int
 	// Retain are the input indices that spend an output the topic holds.
 	Retain []int
-	// Carrier is set for TxGrant and TxWrap.
+	// Carrier is set for TxGrant, TxPolicy and TxWrap.
 	Carrier *Carrier
 	// Token, Predecessor and Parent are set for a token. Predecessor is the
 	// token at seq - 1 read from the parent the BEEF carries; nil at seq 0,
@@ -187,13 +191,16 @@ func Admit(ctx context.Context, beef []byte, held []int, h Host) (*Admission, er
 		return nil, fmt.Errorf("%w: %d outputs claim a record or a token", ErrShape, claims)
 	}
 	switch claim {
-	case KindGrant, KindWrap:
+	case KindGrant, KindPolicy, KindWrap:
 		c, err := checkCarrier(w, tx, claim, h)
 		if err != nil {
 			return nil, err
 		}
 		a.Kind, a.Carrier, a.Outputs = TxGrant, c, []int{0}
-		if claim == KindWrap {
+		switch claim {
+		case KindPolicy:
+			a.Kind = TxPolicy
+		case KindWrap:
 			a.Kind = TxWrap
 		}
 		return a, nil
@@ -255,6 +262,8 @@ func derivation(k Kind) pushdrop.Derivation {
 	switch k {
 	case KindGrant:
 		return GrantDerivation
+	case KindPolicy:
+		return PolicyDerivation
 	case KindWrap:
 		return RecordDerivation
 	case KindOrg:
@@ -311,13 +320,20 @@ func checkCarrier(w *chaintoken.Wire, tx *transaction.Transaction, claim Kind, h
 	c := &Carrier{Record: record, Commitment: carrier.Commitment(tx),
 		Funding: transaction.Outpoint{Txid: parent, Index: in.SourceTxOutIndex}}
 	var hall string
-	if claim == KindGrant {
+	switch claim {
+	case KindGrant:
 		g, err := DecodeGrant(record)
 		if err != nil {
 			return nil, err
 		}
 		c.Grant, c.Owner, hall = g, g.Org, g.Hall
-	} else {
+	case KindPolicy:
+		p, err := DecodePolicy(record)
+		if err != nil {
+			return nil, err
+		}
+		c.Policy, c.Owner, hall = p, p.Org, p.Hall
+	default:
 		r, err := DecodeWrap(record)
 		if err != nil {
 			return nil, err

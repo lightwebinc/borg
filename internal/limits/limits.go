@@ -67,9 +67,9 @@ const (
 	// SignerExpiry is how long the grant of the organisation's own signer
 	// key is current: it is renewed by the tooling, not by a person.
 	SignerExpiry = 10 * 365 * 24 * time.Hour
-	// ExpirySkew is the reader's allowance for clock skew (spec section
-	// 5.2; BRC-169 section 9.6).
-	ExpirySkew = 300 * time.Second
+	// ExpirySkew is the reader's allowance for clock skew. It is the
+	// contract's, so it is borgrec's value and not a second one.
+	ExpirySkew = borgrec.ExpirySkew
 	// MaxGrantsPerSubject is the most grants one subject holds in a roll.
 	MaxGrantsPerSubject = 8
 )

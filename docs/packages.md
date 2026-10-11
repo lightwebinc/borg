@@ -32,6 +32,16 @@ any tag.
   organization's identity key derives. An application run from the
   organization's home opens the group's epoch keys with it, through the
   wraps the organization makes to its own signer key.
+- Policy records (spec section 5A): `Policy`, `DecodePolicy`,
+  `Policy.IsBinding`, `Policy.BoundToGroup`, `PolicyRole`, `PolicyBinding`,
+  `PolicyRoot`, and on the organisation record the policy keys and
+  `Successor`.
+- The permission grammar: `Permission`, `ParsePermission`, `Asked`,
+  `Permission.Grants`, `GrantsAny`, `Intersect` and `CheckRoleName`.
+- Effective permissions (spec section 5A.4): `Subject`, `Effective` and
+  `Allows`, which fold records the caller has already verified. They reach
+  no host and check no proof; what a service must establish first is the
+  `Subject` doc comment.
 - The registry values (protocol name, key ids, tags, magics, derivations,
   topic prefix and lookup service), `CheckHall`, the bounds (`Max*`, `Min*`,
   `*Len`), the `Err*` values and `Reason`.

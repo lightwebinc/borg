@@ -2,7 +2,18 @@
  * A grant's field values: the scope grammar and its fail-closed meaning, the
  * expiry and the role. The twin of the Go borgrec/scope.go.
  */
-import { MaxRole, MaxScope, Refusal } from './borgrec.js'
+import { Refusal } from './refusal.js'
+
+/**
+ * The clock skew a reader allows an expiry, in seconds, in either direction
+ * (spec section 5.2; BRC-169 section 9.6). It is part of the contract: two
+ * readers with clocks within it reach one verdict.
+ */
+export const ExpirySkew = 300
+
+/** A grant's role and scope bounds, in bytes (spec section 14). */
+export const MaxRole = 64
+export const MaxScope = 512
 
 export const VerbMember = 'member'
 export const VerbAdmin = 'admin'

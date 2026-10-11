@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 
@@ -141,11 +142,17 @@ func aliasKey() []byte {
 func genRefusal(s *Scenario, files map[string][]byte) error {
 	ctx := context.Background()
 	decoders := map[string]func([]byte) error{
-		"org":   func(b []byte) error { _, err := borgrec.DecodeOrg(b); return err },
-		"group": func(b []byte) error { _, err := borgrec.DecodeGroup(b); return err },
-		"grant": func(b []byte) error { _, err := borgrec.DecodeGrant(b); return err },
-		"wrap":  func(b []byte) error { _, err := borgrec.DecodeWrap(b); return err },
+		"org":    func(b []byte) error { _, err := borgrec.DecodeOrg(b); return err },
+		"group":  func(b []byte) error { _, err := borgrec.DecodeGroup(b); return err },
+		"grant":  func(b []byte) error { _, err := borgrec.DecodeGrant(b); return err },
+		"wrap":   func(b []byte) error { _, err := borgrec.DecodeWrap(b); return err },
+		"policy": func(b []byte) error { _, err := borgrec.DecodePolicy(b); return err },
 	}
+	policyRecs, err := policyRecords()
+	if err != nil {
+		return err
+	}
+	def, bind := policyRecs["def-releaser"], policyRecs["bind-releaser-group"]
 	org, grp, grant, wrap := s.OrgRecs[0], s.GroupRecs[2], s.GrantRecs["alice"], s.WrapRecs[2]
 	big := bytes.Repeat([]byte{0}, 9000)
 	type c struct {
@@ -220,6 +227,27 @@ func genRefusal(s *Scenario, files map[string][]byte) error {
 		{"wrap", "another sender", mutate(wrap, 2, Alice.Pub()), "entry"},
 		{"wrap", "the version bytes of BRC-369's vector", mutate(wrap, 6, []cbor.Value{withVersion(s.Wraps[2].Entries[0], []byte{0x33, 0x10, 0x42, 0x42})}), "entry"},
 		{"wrap", "an entry of 181 bytes", mutate(wrap, 6, []cbor.Value{s.Wraps[2].Entries[0][:181]}), "entry"},
+		{"policy", "hall without a suffix", mutate(def, 1, "example_hall"), "hall"},
+		{"policy", "the organisation is the anyone key", mutate(def, 2, borgrec.AnyoneKey()), "identity"},
+		{"policy", "a kind this version does not define", mutate(def, 3, uint64(2)), "range"},
+		{"policy", "a role name in upper case", mutate(def, 4, "Releaser"), "role"},
+		{"policy", "a role name of 65 characters", mutate(def, 4, strings.Repeat("r", borgrec.MaxRoleName+1)), "role"},
+		{"policy", "permissions not ascending", mutate(def, 5, []cbor.Value{"b/b/b", "a/a/a"}), "list"},
+		{"policy", "one permission twice", mutate(def, 5, []cbor.Value{"a/a/a", "a/a/a"}), "list"},
+		{"policy", "25 permissions", mutate(def, 5, manyPermissions(borgrec.MaxPermissions+1)), "list"},
+		{"policy", "a permission that is not text", mutate(def, 5, []cbor.Value{uint64(7)}), "list"},
+		{"policy", "a permission with a wildcard service", mutate(def, 5, []cbor.Value{"*/a/a"}), "permission"},
+		{"policy", "a permission with no resource", mutate(def, 5, []cbor.Value{"a/b"}), "permission"},
+		{"policy", "created 0", mutate(def, 8, uint64(0)), "range"},
+		{"policy", "a definition with a subject", mutate(def, 6, Alice.Pub()), "binding"},
+		{"policy", "a definition with an expiry", mutate(def, 7, "2030-01-02T03:04:05Z"), "binding"},
+		{"policy", "a binding with no subject", withNull(bind, 6), "binding"},
+		{"policy", "a subject of 20 bytes", mutate(bind, 6, bytes.Repeat([]byte{3}, 20)), "identity"},
+		{"policy", "a subject that is the organisation", mutate(bind, 6, Org.Pub()), "identity"},
+		{"policy", "a subject that is the anyone key", mutate(bind, 6, borgrec.AnyoneKey()), "identity"},
+		{"policy", "an expiry that is not the one spelling", mutate(bind, 7, "2030-01-02 03:04:05"), "expiry"},
+		{"policy", "an expiry that is not a date", mutate(bind, 7, "2030-02-30T03:04:05Z"), "expiry"},
+		{"policy", "no expiry key at all", mutate(bind, 7, deleted{}), "missing"},
 	}
 	var out []refusalVec
 	for _, x := range cases {

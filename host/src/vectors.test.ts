@@ -28,11 +28,15 @@ import {
   checkOrgTransition,
   decodeGrant,
   decodeGroup,
+  allows,
   decodeOrg,
+  decodePolicy,
+  effective,
   decodeWrap,
   encodeGrant,
   encodeGroup,
   encodeOrg,
+  encodePolicy,
   encodeWrap,
   grantTypeBase64,
   newHall,
@@ -45,9 +49,10 @@ import { admit, readToken, storedToken, seqOf, type Admission } from './admit.js
 import { tokenBEEF } from './beef.js'
 import { GroupFold, OrgFold, carrierStatus, winner, type TokenStatus } from './chain.js'
 import { checkCertificate, checkEpochToken, checkReveal, commitmentOf, epochID, openFields, preimage, releaseInvoice, releaseKeyIDString, symmetricKey, unwrap } from './epoch.js'
-import { decodeContext, encodeContext, membersRoot, rollRoot, verifyGrant } from './merkle.js'
+import { decodeContext, encodeContext, membersRoot, policyRoot, rollRoot, verifyGrant, verifyPolicy } from './merkle.js'
+import { asked, checkRoleName, grantsAny, grantsPermission, intersect, parsePermission, write as writePermission } from './permission.js'
 import { parseQuery } from './query.js'
-import { checkFieldValue, grants, isMembership, parseScope } from './scope.js'
+import { checkFieldValue, grants, isMembership, parseExpiry, parseScope } from './scope.js'
 import { classify } from './script.js'
 import { concat, fromHex, toHex } from './util.js'
 
@@ -246,7 +251,7 @@ test('scope-v1: the grammar and its fail-closed meaning', () => {
 
 test('refusal-v1: every record refused for the same reason, unknown keys kept', async () => {
   const f = load('refusal-v1.json')
-  const dec: Record<string, (b: Uint8Array) => unknown> = { org: decodeOrg, group: decodeGroup, grant: decodeGrant, wrap: decodeWrap }
+  const dec: Record<string, (b: Uint8Array) => unknown> = { org: decodeOrg, group: decodeGroup, grant: decodeGrant, wrap: decodeWrap, policy: decodePolicy }
   for (const r of f.refusals) {
     if (r.stage === 'record') {
       assert.equal(reason(() => dec[r.record]!(fromHex(r.hex))), r.reason, `${r.record}: ${r.label}`)
@@ -264,6 +269,81 @@ test('refusal-v1: every record refused for the same reason, unknown keys kept', 
     wrap: (b) => encodeWrap(decodeWrap(b)),
   }
   assert.equal(hex(enc[k.record]!(fromHex(k.hex))), k.hex)
+})
+
+test('permission-v1: the grammar, matching, role names and attenuation', () => {
+  const f = load('permission-v1.json')
+  for (const c of f.permissions) {
+    const r = reason(() => parsePermission(c.value))
+    assert.equal(r === 'ok', c.parses, `${c.value}: ${c.why}`)
+    if (!c.parses) {
+      assert.equal(r, 'permission', c.value)
+      continue
+    }
+    const p = parsePermission(c.value)
+    assert.deepEqual({ service: p.service, action: p.action, resource: p.resource, prefix: p.prefix },
+      { service: c.service, action: c.action, resource: c.resource, prefix: c.prefix }, c.value)
+    assert.equal(writePermission(p), c.value, c.value)
+  }
+  for (const m of f.matches) {
+    assert.equal(grantsPermission(parsePermission(m.held), asked(m.asked)), m.grants, `${m.held} grants ${m.asked}: ${m.why}`)
+    assert.equal(grantsAny([m.held], m.asked), m.grants, `${m.held} grants ${m.asked}`)
+  }
+  for (const a of f.asked) assert.equal(reason(() => asked(a.value)) === 'ok', a.ok, `${a.value}: ${a.why}`)
+  for (const r of f.roleNames) {
+    const got = reason(() => checkRoleName(r.value))
+    assert.equal(got === 'ok', r.ok, `${r.value}: ${r.why}`)
+    if (!r.ok) assert.equal(got, 'role', r.value)
+  }
+  for (const i of f.intersect) assert.deepEqual(intersect(i.role, i.keep ?? []), i.kept, i.why)
+})
+
+test('policy-v1: records, the policy set and its root, and a context into it', () => {
+  const f = load('policy-v1.json')
+  for (const r of f.records) {
+    const p = decodePolicy(fromHex(r.hex))
+    assert.equal(p.kind, r.kind, r.name)
+    assert.equal(p.role, r.role, r.name)
+    assert.deepEqual(p.permissions, r.permissions, r.name)
+    assert.equal(p.expiry, r.expiry ?? null, r.name)
+    assert.equal(p.to === null ? '' : hex(p.to), r.to ?? '', r.name)
+    if (r.toKind !== undefined) assert.equal(p.to!.length === 16 ? 'group' : 'key', r.toKind, r.name)
+    assert.equal(hex(encodePolicy(p)), r.hex, `${r.name} re-encodes`)
+  }
+  let prev: ReturnType<typeof decodeOrg> | undefined
+  for (const c of f.chain) {
+    const o = decodeOrg(fromHex(c.hex))
+    assert.equal(o.seq, c.seq)
+    assert.deepEqual(o.define.map(hex), c.define, `seq ${c.seq} define`)
+    assert.deepEqual(o.retire.map(hex), c.retire, `seq ${c.seq} retire`)
+    assert.equal(o.policyCount, c.set.length, `seq ${c.seq} policyCount`)
+    assert.equal(hex(policyRoot(c.set.map(fromHex))), c.policy, `seq ${c.seq} policy root`)
+    assert.equal(hex(o.policy), c.policy, `seq ${c.seq} record root`)
+    if (prev !== undefined) checkOrgTransition(prev, o.prev, o)
+    prev = o
+  }
+  const ctx = decodeContext(fromHex(f.context.hex))
+  assert.equal(verifyPolicy(ctx, fromHex(f.context.of), fromHex(f.context.root)), true, 'the context verifies against its own root')
+  assert.equal(verifyPolicy(ctx, fromHex(f.context.of), fromHex(f.context.wrongRoot)), false, 'and against no other')
+})
+
+test('authz-v1: the effective permissions of each subject, and what each may do', () => {
+  const f = load('authz-v1.json')
+  const byName = new Map<string, ReturnType<typeof decodePolicy>>()
+  for (const r of load('policy-v1.json').records) byName.set(r.name, decodePolicy(fromHex(r.hex)))
+  const set = f.set.map((n: string) => byName.get(n)!)
+  const now = parseExpiry(f.now)
+  for (const s of f.subjects) {
+    const subject = {
+      key: fromHex(s.key),
+      member: s.member,
+      roles: s.roles,
+      groups: s.groups.map(fromHex),
+    }
+    const eff = effective(subject, set, now)
+    assert.deepEqual(eff, s.effective, `${s.name}: ${s.why}`)
+    for (const a of s.asked) assert.equal(allows(eff, a.permission), a.allowed, `${s.name} asks ${a.permission}`)
+  }
 })
 
 test('query-v1: every question classed or refused', () => {

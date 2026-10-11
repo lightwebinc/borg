@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"time"
 
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
@@ -165,6 +166,10 @@ const (
 	MaxPolicySet = 65536
 	// MaxKeys bounds the entries of a record map, unknown keys included.
 	MaxKeys = 64
+	// ExpirySkew is the clock skew a reader allows an expiry, in either
+	// direction (spec section 5.2; BRC-169 section 9.6). It is part of the
+	// contract: two readers with clocks within it reach one verdict.
+	ExpirySkew = 300 * time.Second
 	// MaxRole and MaxScope bound a grant's role and scope, in bytes.
 	MaxRole  = 64
 	MaxScope = 512

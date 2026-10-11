@@ -1,0 +1,173 @@
+{
+  "now": "2026-06-01T00:00:00Z",
+  "rules": "the union of the roles a subject's grants name and every current binding that reaches it, attenuated; nothing subtracts, and a subject that is not a current member holds nothing",
+  "set": [
+    "def-releaser",
+    "def-moderator",
+    "def-releaser-again",
+    "bind-releaser-group",
+    "bind-releaser-bob",
+    "bind-archivist-carol",
+    "bind-moderator-carol"
+  ],
+  "subjects": [
+    {
+      "name": "alice",
+      "key": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+      "member": true,
+      "roles": [
+        "releaser"
+      ],
+      "groups": [],
+      "effective": [
+        "bstore/get/*"
+      ],
+      "asked": [
+        {
+          "permission": "bsecret/release/payroll",
+          "allowed": false
+        },
+        {
+          "permission": "bstore/get/photos/a.jpg",
+          "allowed": true
+        },
+        {
+          "permission": "bchat/moderate/general",
+          "allowed": false
+        }
+      ],
+      "why": "her grant names releaser, which two definitions define: a reader takes their intersection, so the role carries less than either says alone"
+    },
+    {
+      "name": "alice-in-group",
+      "key": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+      "member": true,
+      "roles": [],
+      "groups": [
+        "406504d3fbe1ae098f09a49dffa12222"
+      ],
+      "effective": [
+        "bstore/get/*"
+      ],
+      "asked": [
+        {
+          "permission": "bsecret/release/payroll",
+          "allowed": false
+        },
+        {
+          "permission": "bstore/get/photos/a.jpg",
+          "allowed": true
+        },
+        {
+          "permission": "bchat/moderate/general",
+          "allowed": false
+        }
+      ],
+      "why": "the same key with no role of its own: everything it holds comes from the binding to its group"
+    },
+    {
+      "name": "bob",
+      "key": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+      "member": true,
+      "roles": [
+        "member"
+      ],
+      "groups": [],
+      "effective": [
+        "bstore/get/*"
+      ],
+      "asked": [
+        {
+          "permission": "bsecret/release/payroll",
+          "allowed": false
+        },
+        {
+          "permission": "bstore/get/photos/a.jpg",
+          "allowed": true
+        },
+        {
+          "permission": "bchat/moderate/general",
+          "allowed": false
+        }
+      ],
+      "why": "his grant names no role any definition defines; his own binding is attenuated, and attenuation keeps the intersection"
+    },
+    {
+      "name": "carol",
+      "key": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+      "member": true,
+      "roles": [
+        "member"
+      ],
+      "groups": [],
+      "effective": [],
+      "asked": [
+        {
+          "permission": "bsecret/release/payroll",
+          "allowed": false
+        },
+        {
+          "permission": "bstore/get/photos/a.jpg",
+          "allowed": false
+        },
+        {
+          "permission": "bchat/moderate/general",
+          "allowed": false
+        }
+      ],
+      "why": "the bindings that name her are one whose role nothing defines and one whose expiry has passed, so she holds nothing"
+    },
+    {
+      "name": "alice-shouting",
+      "key": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+      "member": true,
+      "roles": [
+        "Releaser"
+      ],
+      "groups": [],
+      "effective": [],
+      "asked": [
+        {
+          "permission": "bsecret/release/payroll",
+          "allowed": false
+        },
+        {
+          "permission": "bstore/get/photos/a.jpg",
+          "allowed": false
+        },
+        {
+          "permission": "bchat/moderate/general",
+          "allowed": false
+        }
+      ],
+      "why": "a role field that is not a well-formed role name names no role, whatever it looks like"
+    },
+    {
+      "name": "dave",
+      "key": "03887b313b55d7c6706037fe7bd554364faccfe21bc2652a2a6a0b0d7026c585ea",
+      "member": false,
+      "roles": [
+        "releaser"
+      ],
+      "groups": [
+        "406504d3fbe1ae098f09a49dffa12222"
+      ],
+      "effective": [],
+      "asked": [
+        {
+          "permission": "bsecret/release/payroll",
+          "allowed": false
+        },
+        {
+          "permission": "bstore/get/photos/a.jpg",
+          "allowed": false
+        },
+        {
+          "permission": "bchat/moderate/general",
+          "allowed": false
+        }
+      ],
+      "why": "never a member: no grant, no permissions, whatever any binding says"
+    }
+  ]
+}

@@ -104,3 +104,18 @@ func ProveGrant(seq uint64, roll [][32]byte, grant [32]byte) (*InclusionContext,
 func (c *InclusionContext) VerifyGrant(grant, roll [32]byte) bool {
 	return commit.Verify(grant, c.Path, roll)
 }
+
+// ProvePolicy builds the context for the policy record at commitment within
+// a policy set. The context has a grant's shape (spec section 10.2); only
+// the root it proves against differs, because the roll and the policy set
+// are two RFC 6962 roots over commitments on one chain.
+func ProvePolicy(seq uint64, set [][32]byte, policy [32]byte) (*InclusionContext, error) {
+	return ProveGrant(seq, set, policy)
+}
+
+// VerifyPolicy checks a context against the policy root of the organisation
+// token at its seq: the path takes the policy record's commitment to the
+// root.
+func (c *InclusionContext) VerifyPolicy(policy, root [32]byte) bool {
+	return c.VerifyGrant(policy, root)
+}

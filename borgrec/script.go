@@ -13,6 +13,7 @@ type Kind string
 const (
 	KindNone    Kind = ""
 	KindGrant   Kind = "grant"
+	KindPolicy  Kind = "policy"
 	KindWrap    Kind = "wrap"
 	KindOrg     Kind = "org-token"
 	KindGroup   Kind = "group-token"
@@ -30,6 +31,8 @@ func Classify(s []byte) Kind {
 	switch {
 	case record.Claims(p, MagicGrant):
 		return KindGrant
+	case record.Claims(p, MagicPolicy):
+		return KindPolicy
 	case record.Claims(p, MagicWrap):
 		return KindWrap
 	case bytes.Equal(p, TagOrg):

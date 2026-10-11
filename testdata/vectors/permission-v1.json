@@ -1,0 +1,367 @@
+{
+  "asked": [
+    {
+      "value": "s/a/b",
+      "ok": true,
+      "why": "a service asks for one thing"
+    },
+    {
+      "value": "s/a/*",
+      "ok": false,
+      "why": "a service may not ask with a wildcard: that is a programming error, not a question"
+    },
+    {
+      "value": "s/a/b*",
+      "ok": false,
+      "why": "nor with a prefix"
+    }
+  ],
+  "grammar": "service/action/resource, ASCII and lower case, at most 256 bytes; the resource may end in * and nothing else may",
+  "intersect": [
+    {
+      "keep": null,
+      "kept": [],
+      "role": [
+        "a/a/a",
+        "b/b/b",
+        "c/c/c"
+      ],
+      "why": "an empty attenuation keeps the whole role"
+    },
+    {
+      "keep": [
+        "b/b/b"
+      ],
+      "kept": [
+        "b/b/b"
+      ],
+      "role": [
+        "a/a/a",
+        "b/b/b",
+        "c/c/c"
+      ],
+      "why": "one of the role's permissions"
+    },
+    {
+      "keep": [
+        "d/d/d"
+      ],
+      "kept": [],
+      "role": [
+        "a/a/a",
+        "b/b/b",
+        "c/c/c"
+      ],
+      "why": "a permission the role does not carry is not added"
+    },
+    {
+      "keep": [
+        "a/a/a*"
+      ],
+      "kept": [],
+      "role": [
+        "a/a/a",
+        "b/b/b",
+        "c/c/c"
+      ],
+      "why": "a prefix is not the permission it is a prefix of: attenuation is by value"
+    }
+  ],
+  "matches": [
+    {
+      "held": "s/a/b",
+      "asked": "s/a/b",
+      "grants": true,
+      "why": "exact"
+    },
+    {
+      "held": "s/a/b",
+      "asked": "s/a/bc",
+      "grants": false,
+      "why": "an exact permission is not a prefix"
+    },
+    {
+      "held": "s/a/b",
+      "asked": "s/x/b",
+      "grants": false,
+      "why": "the action always matches exactly"
+    },
+    {
+      "held": "s/a/b",
+      "asked": "t/a/b",
+      "grants": false,
+      "why": "the service always matches exactly"
+    },
+    {
+      "held": "s/a/b*",
+      "asked": "s/a/b",
+      "grants": true,
+      "why": "a prefix matches the resource it is a prefix of"
+    },
+    {
+      "held": "s/a/b*",
+      "asked": "s/a/b/c/d",
+      "grants": true,
+      "why": "a prefix matches below the separator"
+    },
+    {
+      "held": "s/a/b*",
+      "asked": "s/a/ab",
+      "grants": false,
+      "why": "a prefix is not a suffix and not a substring"
+    },
+    {
+      "held": "s/a/*",
+      "asked": "s/a/anything/at/all",
+      "grants": true,
+      "why": "every resource of one service and action"
+    },
+    {
+      "held": "s/a/*",
+      "asked": "s/x/anything",
+      "grants": false,
+      "why": "but only that action"
+    },
+    {
+      "held": "bstore/put/photos/*",
+      "asked": "bstore/put/photos/2026/a.jpg",
+      "grants": true,
+      "why": "the resource a service names"
+    },
+    {
+      "held": "bstore/put/photos/*",
+      "asked": "bstore/put/photo",
+      "grants": false,
+      "why": "a shorter resource is not under the prefix"
+    }
+  ],
+  "permissions": [
+    {
+      "value": "bsecret/release/payroll",
+      "parses": true,
+      "service": "bsecret",
+      "action": "release",
+      "resource": "payroll",
+      "prefix": false,
+      "why": "one service, one action, one resource"
+    },
+    {
+      "value": "bchat/moderate/general",
+      "parses": true,
+      "service": "bchat",
+      "action": "moderate",
+      "resource": "general",
+      "prefix": false,
+      "why": "another service's own words"
+    },
+    {
+      "value": "bstore/put/photos/*",
+      "parses": true,
+      "service": "bstore",
+      "action": "put",
+      "resource": "photos/",
+      "prefix": true,
+      "why": "a resource prefix: the separator is the service's, not the grammar's"
+    },
+    {
+      "value": "bstore/get/*",
+      "parses": true,
+      "service": "bstore",
+      "action": "get",
+      "resource": "",
+      "prefix": true,
+      "why": "every resource of one service and action"
+    },
+    {
+      "value": "a/b/c",
+      "parses": true,
+      "service": "a",
+      "action": "b",
+      "resource": "c",
+      "prefix": false,
+      "why": "the shortest permission"
+    },
+    {
+      "value": "s/a/x:y.z-_/w",
+      "parses": true,
+      "service": "s",
+      "action": "a",
+      "resource": "x:y.z-_/w",
+      "prefix": false,
+      "why": "every character a resource allows"
+    },
+    {
+      "value": "sixteencharacter/thirtytwocharactersexactlyhere00/rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr*",
+      "parses": true,
+      "service": "sixteencharacter",
+      "action": "thirtytwocharactersexactlyhere00",
+      "resource": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "prefix": true,
+      "why": "the longest permission the grammar allows"
+    },
+    {
+      "value": "",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "empty"
+    },
+    {
+      "value": "a/b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "no resource"
+    },
+    {
+      "value": "/a/b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "no service"
+    },
+    {
+      "value": "a//b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "no action"
+    },
+    {
+      "value": "a/b/",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "an empty resource"
+    },
+    {
+      "value": "A/b/c",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "upper case in the service"
+    },
+    {
+      "value": "a/b/C",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "upper case in the resource"
+    },
+    {
+      "value": "a_b/c/d",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "an underscore in the service"
+    },
+    {
+      "value": "*/a/b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "a wildcard service: no permission is everything everywhere"
+    },
+    {
+      "value": "a/*/b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "a wildcard action"
+    },
+    {
+      "value": "a/b/c*d",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "a wildcard inside a resource"
+    },
+    {
+      "value": "a/b/**",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "two wildcards"
+    },
+    {
+      "value": "a/b/c d",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "a space"
+    },
+    {
+      "value": "sssssssssssssssss/a/b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "a service of 17 characters"
+    },
+    {
+      "value": "s/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/b",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "an action of 33 characters"
+    },
+    {
+      "value": "s/a/rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "parses": false,
+      "resource": "",
+      "prefix": false,
+      "why": "a resource of 193 characters"
+    }
+  ],
+  "roleNames": [
+    {
+      "value": "releaser",
+      "ok": true,
+      "why": "a role name"
+    },
+    {
+      "value": "on-call",
+      "ok": true,
+      "why": "a hyphen"
+    },
+    {
+      "value": "team_1.a",
+      "ok": true,
+      "why": "an underscore, a digit and a dot"
+    },
+    {
+      "value": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "ok": true,
+      "why": "the longest role name"
+    },
+    {
+      "value": "",
+      "ok": false,
+      "why": "empty"
+    },
+    {
+      "value": "Releaser",
+      "ok": false,
+      "why": "upper case: a role name carries no case, so two roles cannot be shown alike and read apart"
+    },
+    {
+      "value": "on call",
+      "ok": false,
+      "why": "a space"
+    },
+    {
+      "value": "röle",
+      "ok": false,
+      "why": "not ASCII"
+    },
+    {
+      "value": "admin‍",
+      "ok": false,
+      "why": "a zero-width joiner"
+    },
+    {
+      "value": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "ok": false,
+      "why": "65 characters"
+    }
+  ]
+}

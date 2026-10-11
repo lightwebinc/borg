@@ -15,6 +15,7 @@ import {
   KeyGrant,
   KeyGroup,
   KeyOrg,
+  KeyPolicy,
   KeyRecord,
   Protocol,
   Refusal,
@@ -24,10 +25,12 @@ import {
   decodeGrant,
   decodeGroup,
   decodeOrg,
+  decodePolicy,
   strictDER,
   type Grant,
   type Group,
   type Org,
+  type Policy,
   type WrapRecord,
   decodeWrap,
 } from './borgrec.js'
@@ -49,6 +52,7 @@ export interface Host {
 
 export interface Carrier {
   grant?: Grant
+  policy?: Policy
   wrap?: WrapRecord
   /** The record's org. */
   owner: Uint8Array
@@ -70,7 +74,7 @@ export interface ChainToken {
 
 export const seqOf = (t: ChainToken): number => (t.org ?? t.group)!.seq
 
-export type TxKind = 'grant' | 'wrap' | 'org-token' | 'group-token' | 'sweep'
+export type TxKind = 'grant' | 'policy' | 'wrap' | 'org-token' | 'group-token' | 'sweep'
 
 export interface Admission {
   kind: TxKind
@@ -101,7 +105,7 @@ export async function mined(tx: Transaction, headers?: ChainTracker): Promise<bo
   }
 }
 
-const keyIDOf: Record<string, string> = { grant: KeyGrant, wrap: KeyRecord, 'org-token': KeyOrg, 'group-token': KeyGroup }
+const keyIDOf: Record<string, string> = { grant: KeyGrant, policy: KeyPolicy, wrap: KeyRecord, 'org-token': KeyOrg, 'group-token': KeyGroup }
 
 /** The key an owner's output of a kind is locked to. */
 function lockingKey(kind: Kind | 'chain', owner: Uint8Array): Uint8Array {
@@ -158,7 +162,7 @@ export async function admit(raw: Uint8Array | number[], held: number[], h: Host)
     }
   }
   if (claims > 1) throw new Refusal('shape', `${claims} outputs claim a record or a token`)
-  if (claim === 'grant' || claim === 'wrap') {
+  if (claim === 'grant' || claim === 'policy' || claim === 'wrap') {
     a.carrier = await checkCarrier(w, tx, claim, h)
     a.kind = claim
     a.outputs = [0]
@@ -192,7 +196,7 @@ export async function admit(raw: Uint8Array | number[], held: number[], h: Host)
 const srcTxid = (i: Transaction['inputs'][number]): string => i.sourceTXID ?? i.sourceTransaction!.id('hex')
 
 /** The carrier's rules 1 to 10; 5 to 8 in bcommon carrier.Validate's order. */
-async function checkCarrier(w: WireBEEF, tx: Transaction, claim: 'grant' | 'wrap', h: Host): Promise<Carrier> {
+async function checkCarrier(w: WireBEEF, tx: Transaction, claim: 'grant' | 'policy' | 'wrap', h: Host): Promise<Carrier> {
   // 1. shape.
   if (tx.inputs.length !== 1 || tx.outputs.length !== 1) throw new Refusal('shape', `${tx.inputs.length} inputs, ${tx.outputs.length} outputs`)
   const input = tx.inputs[0]!
@@ -215,12 +219,15 @@ async function checkCarrier(w: WireBEEF, tx: Transaction, claim: 'grant' | 'wrap
   if (claim === 'grant') {
     const g = decodeGrant(record)
     c = { ...base, grant: g, owner: g.org }
+  } else if (claim === 'policy') {
+    const p = decodePolicy(record)
+    c = { ...base, policy: p, owner: p.org }
   } else {
     const r = decodeWrap(record)
     c = { ...base, wrap: r, owner: r.org }
   }
   // 4. hall.
-  if ((c.grant ?? c.wrap)!.hall !== h.hall) throw new Refusal('hall', "not this topic's hall")
+  if ((c.grant ?? c.policy ?? c.wrap)!.hall !== h.hall) throw new Refusal('hall', "not this topic's hall")
   // 5. mineable.
   if (tx.lockTime < LockTime || (input.sequence ?? MaxSequence) === MaxSequence) throw new Refusal('mineable')
   // 6. unlock, bcommon's check.

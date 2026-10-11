@@ -1,0 +1,161 @@
+{
+  "chain": [
+    {
+      "define": [
+        "20aec3ee5b2f3ec0f6edbc52a6adbd0c99599ee7fe69f39a37a87781ccb7b002",
+        "35f40d982b9519f9f278fb84d33f1b48fe882a363359ffd5224a270007a1295c",
+        "481ca07e1a891e441d0c0d90040f05d888ee0d6282debad8572832dc45f24ca3",
+        "85aa8d80f96f6a2538a8cbd2a94694196f983532b2e7ddce450de7f18a192cc1",
+        "ac7d9125920163676f73ac6a96e09d1786e56871920083ddea7a1713d301b7bc"
+      ],
+      "hex": "b10044626f6f0101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260300045820000000000000000000000000000000000000000000000000000000000000000005744578616d706c65204f7267616e69736174696f6e0683582012e9f9f969ee835d02b6b4b96213e81043830aa3663fd0bccf83130f160251255820511d5637c8e9ac4c0afcfc2074c4d4f19cfeecd739013f86b5d5f57a42f1cd975820e8ab9e40621e175818f99f572e18e69e765f5fedda19d52819ddea78e1c0f9f00780080309582047cc53ec1df5628563340304fc7b5425142a7574c7550749768bad9ce5b863980af40b1a6b36ec800c85582020aec3ee5b2f3ec0f6edbc52a6adbd0c99599ee7fe69f39a37a87781ccb7b002582035f40d982b9519f9f278fb84d33f1b48fe882a363359ffd5224a270007a1295c5820481ca07e1a891e441d0c0d90040f05d888ee0d6282debad8572832dc45f24ca3582085aa8d80f96f6a2538a8cbd2a94694196f983532b2e7ddce450de7f18a192cc15820ac7d9125920163676f73ac6a96e09d1786e56871920083ddea7a1713d301b7bc0d800e050f5820b21987e4a8c22e189745d63d14dc3c846a999e3d6bf462e11b00ae12c3a5c78d10f6",
+      "policy": "b21987e4a8c22e189745d63d14dc3c846a999e3d6bf462e11b00ae12c3a5c78d",
+      "retire": [],
+      "seq": 0,
+      "set": [
+        "20aec3ee5b2f3ec0f6edbc52a6adbd0c99599ee7fe69f39a37a87781ccb7b002",
+        "35f40d982b9519f9f278fb84d33f1b48fe882a363359ffd5224a270007a1295c",
+        "481ca07e1a891e441d0c0d90040f05d888ee0d6282debad8572832dc45f24ca3",
+        "85aa8d80f96f6a2538a8cbd2a94694196f983532b2e7ddce450de7f18a192cc1",
+        "ac7d9125920163676f73ac6a96e09d1786e56871920083ddea7a1713d301b7bc"
+      ],
+      "why": "the first token defines its whole policy set and retires nothing"
+    },
+    {
+      "define": [
+        "fa04dde7485b6515d51311dfa1df49790bb2966e17436b32334c41870d87b783",
+        "fa2130334d59aa4b09c3454f226d474935a3497043c630f801f3e07dd4c0938e"
+      ],
+      "hex": "b10044626f6f0101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26030104582043c0adea418ec2b6be15101e3fdfe75fbcec2bd9adf327f9bb24f769730cc59e05744578616d706c65204f7267616e69736174696f6e06800780080309582047cc53ec1df5628563340304fc7b5425142a7574c7550749768bad9ce5b863980af40b1a6b3708a00c825820fa04dde7485b6515d51311dfa1df49790bb2966e17436b32334c41870d87b7835820fa2130334d59aa4b09c3454f226d474935a3497043c630f801f3e07dd4c0938e0d81582020aec3ee5b2f3ec0f6edbc52a6adbd0c99599ee7fe69f39a37a87781ccb7b0020e060f582007b7c8938aaec1bd6d286d6d0fa400669be09db63d7014c026fff87b1706175b10f6",
+      "policy": "07b7c8938aaec1bd6d286d6d0fa400669be09db63d7014c026fff87b1706175b",
+      "retire": [
+        "20aec3ee5b2f3ec0f6edbc52a6adbd0c99599ee7fe69f39a37a87781ccb7b002"
+      ],
+      "seq": 1,
+      "set": [
+        "35f40d982b9519f9f278fb84d33f1b48fe882a363359ffd5224a270007a1295c",
+        "481ca07e1a891e441d0c0d90040f05d888ee0d6282debad8572832dc45f24ca3",
+        "85aa8d80f96f6a2538a8cbd2a94694196f983532b2e7ddce450de7f18a192cc1",
+        "ac7d9125920163676f73ac6a96e09d1786e56871920083ddea7a1713d301b7bc",
+        "fa04dde7485b6515d51311dfa1df49790bb2966e17436b32334c41870d87b783",
+        "fa2130334d59aa4b09c3454f226d474935a3497043c630f801f3e07dd4c0938e"
+      ],
+      "why": "a transition that defines two records and retires one"
+    }
+  ],
+  "context": {
+    "hex": "840101068382582025441612f62716a69b277b3aac397875ccf2f19b87d79776cdf69874f52c12b5f58258203fc4494606f588618c04de4888f6edc60d27536e2415e18edb54ab97c6bcfe8af4825820c4ce9821c77424d0de6a484a20241b7a5524685ebeba58ceb7e6e1a6dc655b8df4",
+    "of": "481ca07e1a891e441d0c0d90040f05d888ee0d6282debad8572832dc45f24ca3",
+    "root": "07b7c8938aaec1bd6d286d6d0fa400669be09db63d7014c026fff87b1706175b",
+    "seq": 1,
+    "why": "the context a role or bound answer carries, which verifies against the policy root of its seq and against no other",
+    "wrongRoot": "b21987e4a8c22e189745d63d14dc3c846a999e3d6bf462e11b00ae12c3a5c78d"
+  },
+  "intersection": {
+    "kept": [
+      "bstore/get/*"
+    ],
+    "of": [
+      "def-releaser",
+      "def-releaser-again"
+    ],
+    "role": "releaser",
+    "why": "two definitions of one role are read as the intersection of their permissions, the only reading that cannot grant more than the organisation meant by either"
+  },
+  "records": [
+    {
+      "name": "def-releaser",
+      "kind": 0,
+      "role": "releaser",
+      "permissions": [
+        "bsecret/release/payroll",
+        "bstore/get/*"
+      ],
+      "commitment": "35f40d982b9519f9f278fb84d33f1b48fe882a363359ffd5224a270007a1295c",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260300046872656c6561736572058277627365637265742f72656c656173652f706179726f6c6c6c6273746f72652f6765742f2a06f607f6081a6b36ec80",
+      "why": "a role definition: the permissions the role carries"
+    },
+    {
+      "name": "def-moderator",
+      "kind": 0,
+      "role": "moderator",
+      "permissions": [
+        "bchat/moderate/general"
+      ],
+      "commitment": "85aa8d80f96f6a2538a8cbd2a94694196f983532b2e7ddce450de7f18a192cc1",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26030004696d6f64657261746f7205817662636861742f6d6f6465726174652f67656e6572616c06f607f6081a6b36ec80",
+      "why": "a second role"
+    },
+    {
+      "name": "def-releaser-again",
+      "kind": 0,
+      "role": "releaser",
+      "permissions": [
+        "bstore/get/*",
+        "bstore/put/*"
+      ],
+      "commitment": "fa2130334d59aa4b09c3454f226d474935a3497043c630f801f3e07dd4c0938e",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260300046872656c656173657205826c6273746f72652f6765742f2a6c6273746f72652f7075742f2a06f607f6081a6b36ec80",
+      "why": "a second definition of one role: the organisation has equivocated, and a reader takes the intersection"
+    },
+    {
+      "name": "bind-releaser-group",
+      "kind": 1,
+      "role": "releaser",
+      "permissions": [],
+      "to": "406504d3fbe1ae098f09a49dffa12222",
+      "toKind": "group",
+      "commitment": "481ca07e1a891e441d0c0d90040f05d888ee0d6282debad8572832dc45f24ca3",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260301046872656c656173657205800650406504d3fbe1ae098f09a49dffa1222207f6081a6b36ec80",
+      "why": "a binding to a group: every current member of it holds the role"
+    },
+    {
+      "name": "bind-moderator-alice",
+      "kind": 1,
+      "role": "moderator",
+      "permissions": [],
+      "to": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+      "toKind": "key",
+      "expiry": "2030-01-02T03:04:05Z",
+      "commitment": "20aec3ee5b2f3ec0f6edbc52a6adbd0c99599ee7fe69f39a37a87781ccb7b002",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26030104696d6f64657261746f720580065821029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b500774323033302d30312d30325430333a30343a30355a081a6b36ec80",
+      "why": "a binding to one key, with an expiry"
+    },
+    {
+      "name": "bind-releaser-bob",
+      "kind": 1,
+      "role": "releaser",
+      "permissions": [
+        "bstore/get/*"
+      ],
+      "to": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+      "toKind": "key",
+      "commitment": "ac7d9125920163676f73ac6a96e09d1786e56871920083ddea7a1713d301b7bc",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec260301046872656c656173657205816c6273746f72652f6765742f2a065821031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e90007f6081a6b36ec80",
+      "why": "an attenuated binding: it keeps one of the role's permissions and can never widen it"
+    },
+    {
+      "name": "bind-archivist-carol",
+      "kind": 1,
+      "role": "archivist",
+      "permissions": [],
+      "to": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+      "toKind": "key",
+      "commitment": "fa04dde7485b6515d51311dfa1df49790bb2966e17436b32334c41870d87b783",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26030104696172636869766973740580065821031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc107f6081a6b36ec80",
+      "why": "a binding whose role no definition defines: admitted, and it authorises nothing"
+    },
+    {
+      "name": "bind-moderator-carol",
+      "kind": 1,
+      "role": "moderator",
+      "permissions": [],
+      "to": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+      "toKind": "key",
+      "expiry": "2020-01-01T00:00:00Z",
+      "commitment": "d20649baa6d3e3431b4421f240566ad5e407dad92cedce6bfb2ff9fbc9586971",
+      "hex": "a90044626f700101776578616d706c655f68616c6c5f766b717a6d747277787002582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26030104696d6f64657261746f720580065821031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc10774323032302d30312d30315430303a30303a30305a081a6b36ec80",
+      "why": "a binding whose expiry has passed"
+    }
+  ]
+}
