@@ -42,6 +42,7 @@ const File = "state.json"
 // The kinds of object a home publishes.
 const (
 	KindGrant      = "grant"
+	KindPolicy     = "policy"
 	KindWrap       = "wrap"
 	KindOrgToken   = "org-token"
 	KindGroupToken = "group-token"
@@ -52,12 +53,13 @@ const (
 // section 9.4).
 const (
 	TreeGrant  = "grant"
+	TreePolicy = "policy"
 	TreeRecord = "record"
 	TreeChain  = "chain"
 )
 
 // TreeKinds are the tree kinds in a fixed order.
-var TreeKinds = []string{TreeGrant, TreeRecord, TreeChain}
+var TreeKinds = []string{TreeGrant, TreePolicy, TreeRecord, TreeChain}
 
 // State is one identity's state.
 type State struct {
@@ -259,6 +261,8 @@ type Org struct {
 	Grants []Grant `json:"grants,omitempty"`
 	// Groups are its groups.
 	Groups []Group `json:"groups,omitempty"`
+	// Policies are every policy record it published.
+	Policies []Policy `json:"policies,omitempty"`
 	// Pending is a transition built and persisted, not yet known mined.
 	Pending *Transition `json:"pending,omitempty"`
 }
@@ -305,6 +309,56 @@ type Grant struct {
 	RevSeq   uint64 `json:"revSeq,omitempty"`
 	// Swept is the sweep that spent its revocation outpoint.
 	Swept string `json:"swept,omitempty"`
+}
+
+// Policy is one policy record the organisation published: a role
+// definition or a binding, on a policy-tree output that retires it.
+type Policy struct {
+	// Txid is the carrier's txid, display order; its commitment C.
+	Txid string `json:"txid"`
+	// Commitment is C in hash byte order, hex: what the policy set holds.
+	Commitment string `json:"commitment"`
+	// Tree and Vout are the policy-tree output the carrier spends: the
+	// outpoint a sweep spends to retract it.
+	Tree string `json:"tree"`
+	Vout uint32 `json:"vout"`
+	// Kind is 0 a role definition, 1 a binding.
+	Kind        uint64   `json:"kind"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions,omitempty"`
+	// To is a binding's subject, hex: a group identifier or an identity key.
+	To     string `json:"to,omitempty"`
+	Expiry string `json:"expiry,omitempty"`
+	// Record is the policy record, hex; Beef its carrier as published.
+	Record string `json:"record"`
+	Beef   string `json:"beef"`
+	// Defined is set once an organisation token defines it; Retired once
+	// one retires it, with that token's seq.
+	Defined bool   `json:"defined,omitempty"`
+	Retired bool   `json:"retired,omitempty"`
+	RetSeq  uint64 `json:"retSeq,omitempty"`
+	// Swept is the sweep that spent its funding outpoint.
+	Swept string `json:"swept,omitempty"`
+}
+
+// PolicyByCommitment returns the policy record with this commitment.
+func (o *Org) PolicyByCommitment(c string) *Policy {
+	for i := range o.Policies {
+		if o.Policies[i].Commitment == c {
+			return &o.Policies[i]
+		}
+	}
+	return nil
+}
+
+// PolicyByTxid returns the policy record with this carrier txid.
+func (o *Org) PolicyByTxid(txid string) *Policy {
+	for i := range o.Policies {
+		if o.Policies[i].Txid == txid {
+			return &o.Policies[i]
+		}
+	}
+	return nil
 }
 
 // Group is one of the organisation's groups.
@@ -363,6 +417,10 @@ type Transition struct {
 	// marked admitted once it mines; Revokes those it revokes.
 	Grants  []string `json:"grants,omitempty"`
 	Revokes []string `json:"revokes,omitempty"`
+	// Defines are the policy commitments it defines, Retires those it
+	// retires, marked the same way once it mines.
+	Defines []string `json:"defines,omitempty"`
+	Retires []string `json:"retires,omitempty"`
 	// What describes it in notes.
 	What string `json:"what,omitempty"`
 }

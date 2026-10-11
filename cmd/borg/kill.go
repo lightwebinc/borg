@@ -44,7 +44,7 @@ records the tree of every grant and wrap the hosts answer).`
 func killTrees(st *state.State, swept func(txid string, vout uint32) bool) []killTree {
 	var out []killTree
 	seen := map[string]bool{}
-	for _, kind := range []string{state.TreeGrant, state.TreeRecord} {
+	for _, kind := range []string{state.TreeGrant, state.TreePolicy, state.TreeRecord} {
 		ts := st.Trees[kind]
 		if ts == nil {
 			continue

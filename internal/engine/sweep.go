@@ -191,10 +191,11 @@ func (e *Engine) adoptSpends(ctx context.Context, hall, txid string, vouts []uin
 	return left, nil
 }
 
-// Retire stops the home spending every grant and record tree it holds:
+// Retire stops the home spending every grant, policy and record tree it
+// holds:
 // after the kill switch no output of them funds anything again.
 func (e *Engine) Retire() error {
-	for _, kind := range []string{state.TreeGrant, state.TreeRecord} {
+	for _, kind := range []string{state.TreeGrant, state.TreePolicy, state.TreeRecord} {
 		ts := e.St.Trees[kind]
 		if ts == nil {
 			continue
@@ -348,6 +349,12 @@ func (e *Engine) FinishSweep(ctx context.Context) error {
 			g := &o.Grants[i]
 			if g.Tree == sw.Tree && slices.Contains(sw.Vouts, g.Vout) {
 				g.Swept = sw.Txid
+			}
+		}
+		for i := range o.Policies {
+			p := &o.Policies[i]
+			if p.Tree == sw.Tree && slices.Contains(sw.Vouts, p.Vout) {
+				p.Swept = sw.Txid
 			}
 		}
 	}

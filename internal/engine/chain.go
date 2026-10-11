@@ -384,6 +384,13 @@ func sortKeys(a [][]byte) {
 // transition the index would report: its fold over the organisation's own
 // chain must stay consistent.
 func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant, what string) error {
+	return e.OrgTransitionWith(ctx, admit, revoke, nil, nil, what)
+}
+
+// OrgTransitionWith is OrgTransition with a change of the policy set beside
+// the change of the roll (spec section 3.3). One chain carries both, so a
+// service never holds a new role against an old roll.
+func (e *Engine) OrgTransitionWith(ctx context.Context, admit, revoke []*state.Grant, define, retire []*state.Policy, what string) error {
 	o, err := e.org()
 	if err != nil {
 		return err
@@ -394,6 +401,9 @@ func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant
 	}
 	if len(admit) > borgrec.MaxDelta || len(revoke) > borgrec.MaxDelta {
 		return fmt.Errorf("one token admits and revokes at most %d grants each; a larger change is several transitions", borgrec.MaxDelta)
+	}
+	if len(define) > borgrec.MaxDelta || len(retire) > borgrec.MaxDelta {
+		return fmt.Errorf("one token defines and retires at most %d policy records each; a larger change is several transitions", borgrec.MaxDelta)
 	}
 	recs, err := orgRecords(o)
 	if err != nil {
@@ -409,6 +419,10 @@ func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant
 	roll := map[[32]byte]bool{}
 	for _, c := range f.Roll() {
 		roll[c] = true
+	}
+	set := map[[32]byte]bool{}
+	for _, c := range f.Policy() {
+		set[c] = true
 	}
 	rec := &borgrec.Org{Hall: o.Hall, Org: e.OrgKey(), Seq: pred.Seq + 1, Prev: hashOf(last.Txid), Name: o.Name, Opaque: o.Opaque, Created: e.created(),
 		PolicyCount: pred.PolicyCount, Policy: pred.Policy}
@@ -428,8 +442,34 @@ func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant
 		roll[c] = true
 		rec.Admit = append(rec.Admit, c)
 	}
+	for _, p := range retire {
+		c := hashOfHex(p.Commitment)
+		if !set[c] {
+			return fmt.Errorf("policy record %s is not in the set", p.Txid)
+		}
+		delete(set, c)
+		rec.Retire = append(rec.Retire, c)
+	}
+	for _, p := range define {
+		c := hashOfHex(p.Commitment)
+		if set[c] {
+			return fmt.Errorf("policy record %s is in the set already", p.Txid)
+		}
+		set[c] = true
+		rec.Define = append(rec.Define, c)
+	}
 	sortHashes(rec.Admit)
 	sortHashes(rec.Revoke)
+	sortHashes(rec.Define)
+	sortHashes(rec.Retire)
+	all2 := make([][32]byte, 0, len(set))
+	for c := range set {
+		all2 = append(all2, c)
+	}
+	rec.PolicyCount, rec.Policy = uint64(len(all2)), borgrec.PolicyRoot(all2)
+	if rec.PolicyCount > borgrec.MaxPolicySet {
+		return fmt.Errorf("a policy set holds at most %d records", borgrec.MaxPolicySet)
+	}
 	all := make([][32]byte, 0, len(roll))
 	for c := range roll {
 		all = append(all, c)
@@ -465,6 +505,12 @@ func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant
 	}
 	for _, g := range revoke {
 		tr.Revokes = append(tr.Revokes, g.Commitment)
+	}
+	for _, p := range define {
+		tr.Defines = append(tr.Defines, p.Commitment)
+	}
+	for _, p := range retire {
+		tr.Retires = append(tr.Retires, p.Commitment)
 	}
 	return e.run(ctx, tr, tx)
 }
@@ -988,6 +1034,16 @@ func (e *Engine) adopt(ctx context.Context, tr *state.Transition, tx *transactio
 		for _, c := range tr.Revokes {
 			if g := o.GrantByCommitment(c); g != nil {
 				g.Revoked, g.RevSeq = true, tr.Seq
+			}
+		}
+		for _, c := range tr.Defines {
+			if p := o.PolicyByCommitment(c); p != nil {
+				p.Defined = true
+			}
+		}
+		for _, c := range tr.Retires {
+			if p := o.PolicyByCommitment(c); p != nil {
+				p.Retired, p.RetSeq = true, tr.Seq
 			}
 		}
 	default:

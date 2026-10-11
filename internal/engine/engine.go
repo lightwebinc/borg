@@ -71,6 +71,8 @@ func derivationOf(kind string) pushdrop.Derivation {
 	switch kind {
 	case state.TreeGrant:
 		return borgrec.GrantDerivation
+	case state.TreePolicy:
+		return borgrec.PolicyDerivation
 	case state.TreeRecord:
 		return borgrec.RecordDerivation
 	}

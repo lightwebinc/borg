@@ -72,6 +72,12 @@ the organization (this home's identity key is the organization):
                                 current, and those expiring soon; -apply removes
   grant issue <key>             issue a membership grant and admit it to the roll
   grant revoke <key|txid>...    revoke by the roll and by sweep (-by)
+  role define <name>            a role and the permissions it carries (-permission)
+  role retire <name> | role list
+  bind <role> -to <group|key>   give the role to a group or to one key (-only, -expiry)
+  unbind <txid>                 retire one binding
+  policy [show]                 the policy set this organization published
+  policy check <key> <perm>     what the organization's own state says a key may do
   group create <name>           a group with a fresh epoch key, wrapped to each member
   group list                    the organization's groups
   epoch rotate <group>          begin a new epoch with the same members
@@ -206,6 +212,10 @@ func init() {
 		"open":      cmdOpen,
 		"org":       cmdOrg,
 		"payee":     cmdPayee,
+		"policy":    cmdPolicy,
+		"bind":      cmdBind,
+		"unbind":    cmdUnbind,
+		"role":      cmdRole,
 		"roll":      cmdRoll,
 		"terms":     cmdTerms,
 	}

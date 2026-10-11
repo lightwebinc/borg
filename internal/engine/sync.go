@@ -511,7 +511,7 @@ func (e *Engine) syncTrees(ctx context.Context, grants map[[32]byte]*reader.Car,
 	for _, car := range grants {
 		see(car, foreign[car.Txid])
 	}
-	for _, kind := range []string{state.TreeGrant, state.TreeRecord} {
+	for _, kind := range []string{state.TreeGrant, state.TreePolicy, state.TreeRecord} {
 		ts := e.St.Trees[kind]
 		if ts == nil {
 			continue

@@ -1160,3 +1160,85 @@ func TestATokenFeeWaitsForATreeMintedAhead(t *testing.T) {
 		})
 	}
 }
+
+// Roles decide: a role is defined, given to a group and to one key, and
+// what each subject may do follows from the chain alone. Retiring a record
+// takes it away, and a binding can never widen the role it names.
+func TestRolesDecide(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+
+	r := h.must("org", "role", "define", "releaser",
+		"-permission", "bsecret/release/payroll", "-permission", "bstore/get/*")
+	if !strings.Contains(r.stdout, "defines it") {
+		t.Fatalf("role define:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// The group holds the role, so every current member of it does.
+	h.must("org", "bind", "releaser", "-to", o.group)
+	// Alice also holds a narrower binding of her own, which cannot widen it.
+	h.must("org", "bind", "releaser", "-to", o.alice, "-only", "bstore/get/*")
+
+	for _, c := range []struct {
+		key, permission, want string
+	}{
+		{o.alice, "bsecret/release/payroll", "ALLOW"},
+		{o.alice, "bstore/get/photos/a.jpg", "ALLOW"},
+		{o.alice, "bstore/put/photos/a.jpg", "DENY"},
+		{o.bob, "bsecret/release/payroll", "ALLOW"},
+	} {
+		r := h.must("org", "policy", "check", c.key, c.permission)
+		if !strings.HasPrefix(r.stdout, c.want) {
+			t.Fatalf("check %s %s:\n%s", c.key[:8], c.permission, r.stdout)
+		}
+	}
+
+	// A subject of no organisation holds nothing, whatever the set says.
+	dave := h.identity("dave", false)
+	r = h.must("org", "policy", "check", dave, "bsecret/release/payroll")
+	if !strings.HasPrefix(r.stdout, "DENY") {
+		t.Fatalf("a stranger was allowed:\n%s", r.stdout)
+	}
+
+	// Retiring the definition takes the permissions away from everyone,
+	// without touching a grant or a group.
+	h.must("org", "role", "retire", "releaser")
+	r = h.must("org", "policy", "check", o.alice, "bsecret/release/payroll")
+	if !strings.HasPrefix(r.stdout, "DENY") {
+		t.Fatalf("a retired role still authorised:\n%s", r.stdout)
+	}
+	r = h.must("org", "policy", "show")
+	if strings.Contains(r.stdout, "role    ") {
+		t.Fatalf("the retired definition is still in the set:\n%s", r.stdout)
+	}
+	// The bindings that named it stay in the set and authorise nothing.
+	if strings.Count(r.stdout, "bind    ") != 2 {
+		t.Fatalf("the bindings left the set:\n%s", r.stdout)
+	}
+	r = h.must("org", "role", "list")
+	if strings.Contains(r.stdout, "releaser") {
+		t.Fatalf("role list still names it:\n%s", r.stdout)
+	}
+}
+
+// A permission a service asks must carry no wildcard, and a binding needs a
+// subject the grammar accepts.
+func TestPolicyRefusals(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "reader", "-permission", "s/get/a")
+	for _, c := range []struct{ args []string }{
+		{[]string{"policy", "check", o.alice, "s/get/*"}},
+		{[]string{"policy", "check", o.alice, "nonsense"}},
+		{[]string{"bind", "reader", "-to", "00"}},
+		{[]string{"bind", "reader", "-to", o.alice, "-expiry", "2030-01-02 03:04:05"}},
+		{[]string{"role", "define", "Reader", "-permission", "s/get/a"}},
+		{[]string{"role", "define", "reader2", "-permission", "*/get/a"}},
+	} {
+		r := h.run("org", "", c.args...)
+		if r.code == 0 {
+			t.Fatalf("%v was accepted:\n%s", c.args, r.stdout)
+		}
+	}
+}
