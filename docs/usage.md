@@ -74,6 +74,13 @@ variables.
 | `org due [-within DUR] [-apply]` | yes, the organization's | nothing; with `-apply` a publisher's | lists the removals due (group members whose grant is no longer current; exit 3 when there is one) and the grants of group members expiring within `-within` (default 720h); `-apply` makes the removals due now |
 | `grant issue <key>` | yes, the organization's | a publisher's | issues a grant (`-role`, `-scope`, `-admin`, `-expiry`) and admits it to the roll |
 | `grant revoke <key\|txid>...` | yes, the organization's | a publisher's | revokes by the roll and by sweep, or one of them (`-by roll`, `-by sweep`) |
+| `role define <name>` | yes, the organization's | a publisher's | publishes a role and the permissions it carries (`-permission`, given once per permission), and the organization's next token defines it |
+| `role retire <name>` | yes, the organization's | a publisher's | drops the role's definition from the policy set and sweeps its funding output; the bindings that name it stay and authorize nothing |
+| `role list` | optional | nothing | the roles the policy set defines, with their permissions |
+| `bind <role> -to <group\|key>` | yes, the organization's | a publisher's | gives the role to a group identifier or to one identity key; `-only` keeps part of it and can never widen it, `-expiry` ends it |
+| `unbind <txid>` | yes, the organization's | a publisher's | retires one binding by its carrier's txid, the same two halves as a retire |
+| `policy [show]` | optional | nothing | the policy set this home published: its definitions and its bindings |
+| `policy check <key> <permission>` | optional | nothing | folds the set against what this home knows of the subject and says ALLOW or DENY, with the permissions it holds. It is this home's own state, not a host's answer |
 | `group create <name>` | yes, the organization's | a publisher's | a group of `-member` keys (each with a current grant), epoch 0 wrapped to each; `-rotate-on-join`, `-rotate-every` |
 | `group list` | optional | nothing, or a reader's settings with `-org` | the organization's groups: the home's own record, or another organization's from the hosts |
 | `group show <group>` | optional | a reader's settings | the group's chain folded from seq 0, and its members enumerated from the current epoch's wraps; stray and incomplete wraps reported |
@@ -294,6 +301,40 @@ them and begins a new epoch. Nothing is removed before its grant stops
 being current, so run it from a timer; a grant renewed in time (`grant
 issue` to the same key) is never due. `doctor` shows the same debt and
 counts the grants expiring within 30 days.
+
+## Roles and policy
+
+A grant says who a member is. A role says what its holders may do, and the
+organization's own chain commits to both, so a service never holds a new
+rule against an old membership.
+
+```text
+$ borg role define releaser -permission bsecret/release/payroll -permission 'bstore/get/*'
+role    <txid> releaser bsecret/release/payroll bstore/get/*
+org     seq 4 <txid> defines it
+$ borg bind releaser -to <group id>
+binding <txid> releaser
+org     seq 5 <txid> defines it
+$ borg policy check <member key> bsecret/release/payroll
+ALLOW   <member key> bsecret/release/payroll
+holds   bsecret/release/payroll bstore/get/*
+```
+
+A permission is `service/action/resource`: the service names itself, and
+its own specification fixes what its actions and resources mean. A resource
+may end in `*`, which makes it a prefix; nothing else is a wildcard, and a
+service never asks with one.
+
+A subject holds the union of the role its grant names and every binding
+that reaches it, through a group or its own key. Nothing subtracts: a
+permission is taken away by retiring the record that carries it, by
+revoking the subject's grant, by removing the subject from the group, or by
+letting the binding expire. Each of those is a mined change.
+
+`policy check` answers from this home's own record of the organization. A
+service decides for itself, from a host's answers checked against its own
+block headers; what it decided and the state it decided against is what a
+decision receipt records.
 
 ## Several homes of one organization
 

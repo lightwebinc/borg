@@ -51,6 +51,10 @@ changes nothing.
 | hall | the topic `tm_borg_<name>_<suffix>` an organization lives in, shared by any number of organizations |
 | grant | a member's BRC-52 certificate; its revocation outpoint is the output that funds it |
 | roll | the grants the organization's latest token commits to, by a Merkle root |
+| role | a name for a set of permissions, published by the organization |
+| permission | one thing a service lets a role do, written `service/action/resource` |
+| binding | a record giving a role to a group or to one key, with an optional expiry |
+| policy set | the role definitions and bindings the latest token commits to, by a second Merkle root beside the roll |
 | group | a chain of tokens naming its members; each has epochs |
 | epoch | one generation of a group's key; every removal begins one |
 | wrap | an epoch key encrypted to one member, in a record of up to 16 |
@@ -164,6 +168,36 @@ members that expire within 30 days; renew one with `borg grant issue <key>`
 before it lapses. `borg org due -apply` makes the removals that are due
 now, each with a new epoch; run it from a timer and each removal follows
 its expiry by at most the timer's interval. Nothing is removed early.
+
+## 6a. Roles: what a member may do
+
+A grant says who a member is. A role says what its holders may do. Both
+ride the organization's own chain, so a service never reads a new rule
+against an old membership.
+
+```text
+$ borg role define releaser -permission bsecret/release/payroll
+$ borg bind releaser -to <group id>          # every current member holds it
+$ borg bind releaser -to <key> -only 'bstore/get/*'   # one key, narrowed
+$ borg policy show
+$ borg policy check <key> bsecret/release/payroll
+```
+
+A permission is three parts: the service, the action, and what it acts on.
+The service names itself and its own documentation says what its actions
+and resources mean, so `bsecret/release/payroll` means what bsecret says it
+means. A resource may end in `*`, which matches by prefix; nothing else is
+a wildcard.
+
+A subject holds the union of the role its grant names and every binding
+that reaches it. `-only` keeps part of a role and can never widen it. There
+are no deny rules: a permission is taken away by retiring the record that
+carries it (`borg role retire`, `borg unbind`), by revoking the grant, by
+removing the subject from the group, or by letting the binding expire. Each
+is a mined change, and until it is mined and seen the permission stands.
+
+Roles and bindings are in the clear. The opaque setting hides what a
+certificate says, never what a role may do or who holds it.
 
 ## 7. Groups and epochs
 

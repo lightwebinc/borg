@@ -45,9 +45,10 @@ flowchart LR
 
 | Object | Mined? | What it is |
 | --- | --- | --- |
-| organization token | yes | one per change of the roll: grants admitted and revoked, a Merkle root over the roll |
+| organization token | yes | one per change of the roll or of the policy set: grants admitted and revoked, policy records defined and retired, a Merkle root over each |
+| policy record | no | a role definition or a binding, on a funding output that retires it |
 | group token | yes | one per change of a group: members added and removed, the epoch, the key commitment, a root over the members |
-| funding tree | yes | outputs that pay for chains (chain tree) or carry grants and wraps (grant and record trees, 1 sat an output) |
+| funding tree | yes | outputs that pay for chains (chain tree) or carry grants, policy records and wraps (grant, policy and record trees, 1 sat an output) |
 | sweep | yes | spends funding outputs: revokes the grants and retracts the wraps they carried |
 | grant carrier | no | a BRC-52 certificate on a funding output; its revocation outpoint is that output |
 | wrap carrier | no | an epoch key encrypted to up to 16 members, on a funding output |
@@ -63,7 +64,7 @@ output.
 
 | Layer | Package | Role |
 | --- | --- | --- |
-| records | `borgrec` (public) | encode, decode and fold every record; the transition rules every host enforces |
+| records | `borgrec` (public) | encode, decode and fold every record; the transition rules every host enforces; the permission grammar and the effective-permission fold |
 | reader | `reader` (public) | ask hosts the `ls_borg` questions, verify every answer against the caller's headers, compare hosts |
 | engine | `internal/engine` | build, persist, settle, wait for and publish transitions; wraps; sweeps; catch-up (`org sync`); recovery of interrupted work |
 | state | `internal/state` | the home's `state.json`, written atomically, locked one command at a time |

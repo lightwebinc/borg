@@ -220,7 +220,7 @@ headers     woc:main tip 970055
 | `org add`, `org remove` | `-group G` | none | the group |
 | `org due` | `-within DUR` | `720h` | also list members whose grant expires within this long |
 | `org due` | `-apply` | off | make the removals due now |
-| `org sync` | `-retire-trees` | off | stop spending this home's current grant and record trees (a copied home) |
+| `org sync` | `-retire-trees` | off | stop spending this home's current grant, policy and record trees (a copied home) |
 | `grant revoke` | `-by` | `both` | `both`, `roll` or `sweep` |
 | `group create` | `-member KEY` | none | a member; repeatable |
 | `group create` | `-rotate-on-join` | off | every addition begins a new epoch |

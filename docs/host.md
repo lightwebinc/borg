@@ -122,13 +122,16 @@ it names is decided the module reads it back and it takes its place.
 ### Statuses
 
 A carrier is `retracted`, `superseded` or `held`, and a token `pending`,
-`consistent`, `roll-mismatch`, `members-mismatch`, `commitment-reuse` or
-`rejoin-unrotated` (spec section 11.2). A status never refuses anything; it
+`consistent`, `roll-mismatch`, `policy-mismatch`, `members-mismatch`,
+`commitment-reuse` or `rejoin-unrotated` (spec section 11.2). A status never refuses anything; it
 decides what is answered:
 
 - a retracted or superseded carrier is not answered, except that `roll` and
-  `member` answer every grant the roll holds, whatever its status;
-- `roll`, `member` and `member-of` use the fold of a chain's highest token
+  `member` answer every grant the roll holds, and `policy`, `role` and
+  `bound` every policy record the policy set holds, whatever its status, so
+  that a reader computing a root sees each and checks it;
+- `roll`, `member`, `member-of`, `policy`, `role` and `bound` use the fold
+  of a chain's highest token
   that is not `pending`, the first mined among several, so a token that
   arrived before its predecessor never hides the last complete state;
 - `org`, `group` and their `-seq` classes answer every token held at the
@@ -137,7 +140,8 @@ decides what is answered:
 No answer carries a token's status: a reader folds the chain itself
 (spec section 13). The host reports what it found in its metrics and its
 log: `borg_token_status_total{status}` counts each token's status once it is
-decided, `borg_tokens_pending` is the tokens still waiting for a
+decided, `borg_grants` and `borg_policies` are the carriers of each kind the
+host holds, `borg_tokens_pending` is the tokens still waiting for a
 predecessor, and every status other than `consistent` is logged with its
 hall, organization, chain, `seq` and txid.
 

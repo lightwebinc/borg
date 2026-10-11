@@ -33,6 +33,11 @@ flowchart LR
   issued by the organization's key, with a role, a scope and an expiry. Its
   revocation outpoint is the output that funds it, so one mined spend
   revokes it for every verifier and retracts it from every host.
+- **Roles decide.** A role names the permissions it carries, and a binding
+  gives it to a group or to one key. Both ride the organization's own chain
+  beside the roll, so a service reads what a subject may do out of the same
+  committed order that says who the subject is, and can prove what it
+  decided and the state it decided against.
 - **Changes are ordered by the chain.** The roll and each group are chains of
   mined tokens, one per change. Two changes made at once spend the same
   output and only one is ever mined: no coordinator, no merge.

@@ -222,6 +222,25 @@ $ borg org due                            # removals owed, and grants expiring w
 $ borg org due -apply                     # make the removals due now; run from a timer
 ```
 
+## 9a. Roles: define, bind, check
+
+```console
+$ borg role define releaser -permission bsecret/release/payroll -permission 'bstore/get/*'
+$ borg bind releaser -to $GROUP            # every current member of the group holds it
+$ borg bind releaser -to $ERIN -only 'bstore/get/*'   # one key, narrowed
+$ borg bind oncall -to $ERIN -expiry 2026-12-31T23:59:59Z
+$ borg role list                           # the roles the set defines
+$ borg policy show                         # definitions and bindings
+$ borg policy check $ERIN bsecret/release/payroll
+ALLOW   <key> bsecret/release/payroll
+holds   bsecret/release/payroll bstore/get/*
+$ borg role retire releaser                # drops it from the set and sweeps its output
+$ borg unbind <txid>                       # retire one binding
+```
+
+`policy check` reads this home's own record. A service decides for itself,
+from a host's answers checked against its own block headers.
+
 ## 10. Hosts that disagree: fill
 
 Anyone who reads the hall can repair a host that missed something. No coin,
