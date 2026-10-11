@@ -83,6 +83,12 @@ interface ChainIdx {
   org: string
   group: string
   bySeq: Map<number, TokenEntry[]>
+  /**
+   * The status each token was last counted with. Forgetting one token
+   * clears every status in the chain, and the refold then decides them all
+   * again; without this they would be counted again too.
+   */
+  counts: Map<string, TokenStatus>
   byTxid: Map<string, TokenEntry>
   /** prev txid -> the txids of tokens naming it. */
   children: Map<string, Set<string>>
@@ -428,9 +434,8 @@ export class BorgLookupService implements LookupService {
       cur = p
     }
     for (const x of path.reverse()) {
-      const known = ch.status.get(x.txid)
       const s = base.apply(x.rec as Org & Group)
-      if (known === undefined || known === 'pending') this.counted(ch, x, s)
+      this.counted(ch, x, s)
       ch.status.set(x.txid, s)
     }
     ch.states.set(t.txid, base)
@@ -448,6 +453,8 @@ export class BorgLookupService implements LookupService {
   }
 
   private counted(ch: ChainIdx, t: TokenEntry, s: TokenStatus): void {
+    if (ch.counts.get(t.txid) === s) return
+    ch.counts.set(t.txid, s)
     this.host.metrics.inc('borg_token_status_total', { status: s })
     if (s !== 'consistent') {
       this.host.log('ls_borg token status', { hall: ch.hall, org: ch.org, chain: ch.group === '' ? 'org' : ch.group, seq: t.seq, txid: t.txid, status: s })
@@ -696,7 +703,7 @@ export class BorgLookupService implements LookupService {
     const key = this.chainKey(hall, org, group)
     let ch = this.chains.get(key)
     if (ch === undefined) {
-      ch = { kind: t.org !== undefined ? 'org' : 'group', hall, org, group, bySeq: new Map(), byTxid: new Map(), children: new Map(), status: new Map(), states: new Map(), turned: new Map() }
+      ch = { kind: t.org !== undefined ? 'org' : 'group', hall, org, group, bySeq: new Map(), byTxid: new Map(), children: new Map(), status: new Map(), states: new Map(), turned: new Map(), counts: new Map() }
       this.chains.set(key, ch)
       if (group !== '') addTo(this.groupsByOrg, `${hall}|${org}`, group)
     }

@@ -414,3 +414,32 @@ test('retention: a policy record stays while the set holds it, and goes the floo
   assert.equal(s.ls.policyCount, 1)
   assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([kept.tx]))
 })
+
+test('a token is counted once however often the chain is folded again', async () => {
+  const chain = new Chain(80000)
+  const s = await setup({ chain })
+  const org = new OrgSim(hall, 'counting org', chain, { trees: 40 })
+  const people = Array.from({ length: 3 }, (_, i) => new Party(`counting member ${i}`))
+  const grants = []
+  for (const p of people) grants.push(await org.grant(p))
+  for (const g of grants) assert.deepEqual(await submit(s.engine, g.tx.toAtomicBEEF()), [0])
+  assert.deepEqual(await submit(s.engine, (await org.orgToken(grants.map((g) => g.c))).beef), [0])
+  const o1 = await org.orgToken([], [grants[0]!.c])
+  assert.deepEqual(await submit(s.engine, o1.beef), [0])
+  const counted = (): number => s.host.count('borg_token_status_total', { status: 'consistent' })
+  assert.equal(counted(), 2, 'two tokens, counted once each')
+
+  // Nine tokens at one seq: the bound keeps eight and forgets one, which
+  // clears every status in the chain and decides them all again. A token
+  // already counted is not counted a second time for the same status, so
+  // the total is the tokens the host holds and no more.
+  for (let i = 0; i < 9; i++) {
+    const fork = await org.orgToken([], [], { mutate: (r) => (r.created += i + 1) })
+    org.tip = o1
+    await submit(s.engine, fork.beef)
+  }
+  // Eleven: the two, and each of the nine forks counted when it was
+  // decided, the one the bound later turned away included. Before the fix
+  // the refold after that bound counted every token of the chain again.
+  assert.equal(counted(), 11, `counted ${counted()} consistent tokens`)
+})
