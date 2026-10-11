@@ -6,16 +6,18 @@
  */
 import { bytesEqual, compareBytes } from '@lightwebinc/bcommon'
 import { beginsEpoch, type Group, type Org } from './borgrec.js'
-import { membersRoot, rollRoot } from './merkle.js'
+import { membersRoot, policyRoot, rollRoot } from './merkle.js'
 import { toHex } from './util.js'
 
-export type TokenStatus = 'consistent' | 'pending' | 'roll-mismatch' | 'members-mismatch' | 'commitment-reuse' | 'rejoin-unrotated'
+export type TokenStatus = 'consistent' | 'pending' | 'roll-mismatch' | 'policy-mismatch' | 'members-mismatch' | 'commitment-reuse' | 'rejoin-unrotated'
 export type CarrierStatus = 'retracted' | 'superseded' | 'held'
 
 /** An organisation's roll, folded from seq 0; a broken fold stays broken. */
 export class OrgFold {
   private readonly roll = new Map<string, Uint8Array>()
+  private readonly policy = new Map<string, Uint8Array>()
   private broken = false
+  private policyBroken = false
 
   apply(o: Org): TokenStatus {
     if (this.broken) return 'roll-mismatch'
@@ -27,6 +29,17 @@ export class OrgFold {
       this.roll.set(toHex(c), c)
     }
     if (this.roll.size !== o.count || !bytesEqual(rollRoot([...this.roll.values()]), o.roll)) return this.break()
+    if (this.policyBroken) return 'policy-mismatch'
+    for (const c of o.retire) {
+      if (!this.policy.delete(toHex(c))) return this.breakPolicy()
+    }
+    for (const c of o.define) {
+      if (this.policy.has(toHex(c))) return this.breakPolicy()
+      this.policy.set(toHex(c), c)
+    }
+    if (this.policy.size !== o.policyCount || !bytesEqual(policyRoot([...this.policy.values()]), o.policy)) {
+      return this.breakPolicy()
+    }
     return 'consistent'
   }
 
@@ -35,8 +48,18 @@ export class OrgFold {
     return 'roll-mismatch'
   }
 
+  private breakPolicy(): TokenStatus {
+    this.policyBroken = true
+    return 'policy-mismatch'
+  }
+
   rollNow(): Uint8Array[] {
     return [...this.roll.values()].sort(compareBytes)
+  }
+
+  /** The policy set after the last token folded, ascending. */
+  policyNow(): Uint8Array[] {
+    return [...this.policy.values()].sort(compareBytes)
   }
 
   /** Whether the roll holds commitment c (hash byte order hex). */
@@ -48,7 +71,9 @@ export class OrgFold {
   clone(): OrgFold {
     const f = new OrgFold()
     for (const [k, v] of this.roll) f.roll.set(k, v)
+    for (const [k, v] of this.policy) f.policy.set(k, v)
     f.broken = this.broken
+    f.policyBroken = this.policyBroken
     return f
   }
 }

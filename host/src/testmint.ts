@@ -32,6 +32,9 @@ import {
   KeyGrant,
   KeyGroup,
   KeyOrg,
+  KeyPolicy,
+  PolicyBinding,
+  PolicyRole,
   KeyRecord,
   Protocol,
   ReleaseProtocol,
@@ -41,12 +44,14 @@ import {
   encodeGrant,
   encodeGroup,
   encodeOrg,
+  encodePolicy,
   encodeWrap,
   grantTypeBase64,
   releaseKeyID,
   type Grant,
   type Group,
   type Org,
+  type Policy,
 } from './borgrec.js'
 import { tokenBEEF } from './beef.js'
 import { commitmentOf, epochID, releaseKeyIDString } from './epoch.js'
@@ -296,15 +301,19 @@ export interface Minted<R> {
 export class OrgSim {
   readonly party: Party
   readonly grantTree: Transaction
+  readonly policyTree: Transaction
   readonly recordTree: Transaction
   readonly chainTree: Transaction
   private grantAt = 0
+  private policyAt = 0
   private recordAt = 0
   private chainAt = 0
   tip: Minted<Org> | undefined
   /** Every organisation token minted, seq order. */
   readonly history: Array<Minted<Org>> = []
   roll: Uint8Array[] = []
+  /** The policy set this organisation's tokens commit to. */
+  policy: Uint8Array[] = []
   readonly groups = new Map<string, GroupSim>()
 
   constructor(
@@ -316,6 +325,7 @@ export class OrgSim {
     this.party = new Party(label, opts.key)
     const n = opts.trees ?? 32
     this.grantTree = fundingTree(this.party, KeyGrant, n, chain)
+    this.policyTree = fundingTree(this.party, KeyPolicy, n, chain)
     this.recordTree = fundingTree(this.party, KeyRecord, n, chain)
     this.chainTree = fundingTree(this.party, KeyChain, 8, chain)
   }
@@ -331,6 +341,9 @@ export class OrgSim {
   nextRecordVout(): number {
     return this.recordAt++
   }
+  nextPolicyVout(): number {
+    return this.policyAt++
+  }
   nextChainVout(): number {
     return this.chainAt++
   }
@@ -344,13 +357,44 @@ export class OrgSim {
   }
 
   /**
+   * A policy carrier on the next policy-tree output: a role definition by
+   * default, or a binding where `to` is given.
+   */
+  async policyRecord(
+    role: string,
+    o: { to?: Uint8Array; permissions?: string[]; expiry?: string | null; vout?: number } = {},
+  ): Promise<{ tx: Transaction; c: Uint8Array; rec: Policy }> {
+    const vout = o.vout ?? this.nextPolicyVout()
+    const rec: Policy = {
+      hall: this.hall,
+      org: this.party.id,
+      kind: o.to === undefined ? PolicyRole : PolicyBinding,
+      role,
+      permissions: o.permissions ?? [],
+      to: o.to ?? null,
+      expiry: o.expiry ?? null,
+      created: t0,
+      extra: [],
+    }
+    const tx = await carrier(this.policyTree, vout, this.party, KeyPolicy, encodePolicy(rec), LockTime)
+    return { tx, c: commitment(tx), rec }
+  }
+
+  /**
    * The next organisation token, admitting and revoking commitments, mined.
    * mutate may change the record before it is encoded (to build what a host
    * must refuse or the index must flag); the roll kept here follows the
    * change lists as given.
    */
-  async orgToken(admit: Uint8Array[], revoke: Uint8Array[] = [], o: { mutate?: (r: Org) => void; mine?: boolean } = {}): Promise<Minted<Org>> {
+  async orgToken(
+    admit: Uint8Array[],
+    revoke: Uint8Array[] = [],
+    o: { mutate?: (r: Org) => void; mine?: boolean; define?: Uint8Array[]; retire?: Uint8Array[] } = {},
+  ): Promise<Minted<Org>> {
     const roll = sortKeys([...this.roll.filter((c) => !hasKey(revoke, c)), ...admit])
+    const define = o.define ?? []
+    const retire = o.retire ?? []
+    const policy = sortKeys([...this.policy.filter((c) => !hasKey(retire, c)), ...define])
     const seq = this.tip === undefined ? 0 : this.tip.rec.seq + 1
     const rec: Org = {
       hall: this.hall,
@@ -364,10 +408,10 @@ export class OrgSim {
       roll: rollRoot(roll),
       opaque: this.opts.opaque === true,
       created: t0 + seq * 600,
-      define: [],
-      retire: [],
-      policyCount: 0,
-      policy: policyRoot([]),
+      define: sortKeys(define),
+      retire: sortKeys(retire),
+      policyCount: policy.length,
+      policy: policyRoot(policy),
       successor: null,
       extra: [],
     }
@@ -380,6 +424,7 @@ export class OrgSim {
     this.tip = m
     this.history.push(m)
     this.roll = roll
+    this.policy = policy
     return m
   }
 

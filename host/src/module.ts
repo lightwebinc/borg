@@ -249,6 +249,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   host.metrics.gauge('borg_tokens', () => ls.tokenCount)
   host.metrics.gauge('borg_tokens_pending', () => ls.pendingTokens)
   host.metrics.gauge('borg_grants', () => ls.grantCount)
+  host.metrics.gauge('borg_policies', () => ls.policyCount)
   host.metrics.gauge('borg_wraps', () => ls.wrapCount)
   host.metrics.gauge('borg_sweeps', () => ls.sweepCount)
   host.metrics.gauge('borg_outpoint_rows', () => ls.rowCount)

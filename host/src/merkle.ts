@@ -121,3 +121,9 @@ export const verifyGrant = (c: InclusionContext, grant: Uint8Array, rollRootValu
  * differs.
  */
 export const verifyPolicy = (c: InclusionContext, policy: Uint8Array, policyRootValue: Uint8Array): boolean => verifyGrant(c, policy, policyRootValue)
+
+/**
+ * The context for a policy record within a policy set: a grant context's
+ * shape, over the other root.
+ */
+export const provePolicy = (seq: number, set: Uint8Array[], policy: Uint8Array): InclusionContext => proveGrant(seq, set, policy)

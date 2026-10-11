@@ -25,6 +25,12 @@ var Classes = []Class{
 	{"roll", []string{"hall", "roll"}, true, 64},
 	{"roll-after", []string{"after", "hall", "roll"}, true, 64},
 	{"member", []string{"hall", "member", "org"}, true, 8},
+	{"policy", []string{"hall", "policy"}, true, 64},
+	{"policy-after", []string{"after", "hall", "policy"}, true, 64},
+	{"role", []string{"hall", "org", "role"}, true, 64},
+	{"role-after", []string{"after", "hall", "org", "role"}, true, 64},
+	{"bound", []string{"boundTo", "hall", "org"}, true, 64},
+	{"bound-after", []string{"after", "boundTo", "hall", "org"}, true, 64},
 	{"groups", []string{"groupsOf", "hall"}, true, 64},
 	{"groups-after", []string{"after", "groupsOf", "hall"}, true, 64},
 	{"member-of", []string{"hall", "memberOf", "org"}, true, 64},
@@ -105,7 +111,19 @@ func checkMember(class, name, v string) error {
 			return ErrQuery
 		}
 		return nil
-	case "org", "roll", "member", "groupsOf", "memberOf", "history":
+	case "org", "roll", "member", "groupsOf", "memberOf", "history", "policy":
+		return checkKeyHex(v)
+	case "role":
+		if CheckRoleName(v) != nil {
+			return ErrQuery
+		}
+		return nil
+	case "boundTo":
+		// A binding names a group identifier or an identity key, and the
+		// two are told apart by their length, as the record's `to` is.
+		if isLowerHex(v, 2*GroupIDLen) {
+			return nil
+		}
 		return checkKeyHex(v)
 	case "group":
 		if !isLowerHex(v, 2*GroupIDLen) {
@@ -131,7 +149,7 @@ func checkMember(class, name, v string) error {
 		return checkOutpoint(v)
 	case "after":
 		switch class {
-		case "roll-after", "wraps-after":
+		case "roll-after", "wraps-after", "policy-after", "role-after", "bound-after":
 			if isLowerHex(v, 64) {
 				return nil
 			}

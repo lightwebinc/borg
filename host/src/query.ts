@@ -4,6 +4,7 @@
  */
 import { strictPublicKey } from '@lightwebinc/bcommon'
 import { GroupIDLen, MaxEpoch, MaxSafe, Refusal, checkHall } from './borgrec.js'
+import { checkRoleName } from './permission.js'
 import { fromHex, isLowerHex } from './util.js'
 
 export interface Class {
@@ -21,6 +22,12 @@ export const Classes: Class[] = [
   { name: 'roll', members: ['hall', 'roll'], free: true, limit: 64 },
   { name: 'roll-after', members: ['after', 'hall', 'roll'], free: true, limit: 64 },
   { name: 'member', members: ['hall', 'member', 'org'], free: true, limit: 8 },
+  { name: 'policy', members: ['hall', 'policy'], free: true, limit: 64 },
+  { name: 'policy-after', members: ['after', 'hall', 'policy'], free: true, limit: 64 },
+  { name: 'role', members: ['hall', 'org', 'role'], free: true, limit: 64 },
+  { name: 'role-after', members: ['after', 'hall', 'org', 'role'], free: true, limit: 64 },
+  { name: 'bound', members: ['boundTo', 'hall', 'org'], free: true, limit: 64 },
+  { name: 'bound-after', members: ['after', 'boundTo', 'hall', 'org'], free: true, limit: 64 },
   { name: 'groups', members: ['groupsOf', 'hall'], free: true, limit: 64 },
   { name: 'groups-after', members: ['after', 'groupsOf', 'hall'], free: true, limit: 64 },
   { name: 'member-of', members: ['hall', 'memberOf', 'org'], free: true, limit: 64 },
@@ -64,7 +71,19 @@ function member(cls: string, name: string, v: string): boolean {
     case 'groupsOf':
     case 'memberOf':
     case 'history':
+    case 'policy':
       return keyHex(v)
+    case 'role':
+      try {
+        checkRoleName(v)
+        return true
+      } catch {
+        return false
+      }
+    case 'boundTo':
+      // A binding names a group identifier or an identity key, and the two
+      // are told apart by their length, as the record's `to` is.
+      return isLowerHex(v, 2 * GroupIDLen) || keyHex(v)
     case 'group':
       return isLowerHex(v, 2 * GroupIDLen)
     case 'chain':
@@ -78,7 +97,9 @@ function member(cls: string, name: string, v: string): boolean {
       return at >= 0 && isLowerHex(v.slice(0, at), 64) && decimal(v.slice(at + 1), 0, MaxEpoch)
     }
     case 'after':
-      if (cls === 'roll-after' || cls === 'wraps-after') return isLowerHex(v, 64)
+      if (cls === 'roll-after' || cls === 'wraps-after' || cls === 'policy-after' || cls === 'role-after' || cls === 'bound-after') {
+        return isLowerHex(v, 64)
+      }
       if (cls === 'groups-after' || cls === 'member-of-after') return isLowerHex(v, 2 * GroupIDLen)
       if (cls === 'history-after') return v === '0' || decimal(v, 1, MaxSafe)
       return false

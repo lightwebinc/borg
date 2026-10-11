@@ -13,7 +13,8 @@
  *   {"k":"t","txid":"<txid>","vout":<n>,"hall":"...","at":<s>}
  *   {"k":"w","txid":"<sweep txid>","hall":"..."}
  *
- * `c` lines are every carrier any hall admitted (`kind` `g` a grant, `w` a
+ * `c` lines are every carrier any hall admitted (`kind` `g` a grant, `p` a
+ * policy record, `w` a
  * wrap) with the funding outpoint it spent; `d` lines are drops, `w` when
  * the dropped carrier was its outpoint's winner; `s` lines are admitted
  * sweeps' spends of outpoints a carrier spent (spends of any other outpoint
@@ -32,7 +33,7 @@ export interface CarrierLine {
   op: string
   c: string
   txid: string
-  kind: 'g' | 'w'
+  kind: 'g' | 'p' | 'w'
   hall: string
   at: number
 }
@@ -93,7 +94,7 @@ function isLine(v: unknown): v is Line {
   const n = (k: string): boolean => typeof o[k] === 'number' && Number.isSafeInteger(o[k]) && (o[k] as number) >= 0
   switch (o['k']) {
     case 'c':
-      return s('op') && s('c') && s('txid') && (o['kind'] === 'g' || o['kind'] === 'w') && s('hall') && n('at')
+      return s('op') && s('c') && s('txid') && (o['kind'] === 'g' || o['kind'] === 'p' || o['kind'] === 'w') && s('hall') && n('at')
     case 'd':
       return s('op') && s('c') && typeof o['w'] === 'boolean'
     case 's':

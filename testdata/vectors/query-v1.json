@@ -49,6 +49,67 @@
       "limit": 8
     },
     {
+      "class": "policy",
+      "members": [
+        "hall",
+        "policy"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "policy-after",
+      "members": [
+        "after",
+        "hall",
+        "policy"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "role",
+      "members": [
+        "hall",
+        "org",
+        "role"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "role-after",
+      "members": [
+        "after",
+        "hall",
+        "org",
+        "role"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "bound",
+      "members": [
+        "boundTo",
+        "hall",
+        "org"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "bound-after",
+      "members": [
+        "after",
+        "boundTo",
+        "hall",
+        "org"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
       "class": "groups",
       "members": [
         "groupsOf",
@@ -247,6 +308,42 @@
       "refused": false
     },
     {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"policy\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "class": "policy",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"policy\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51\"}",
+      "class": "policy-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"role\":\"releaser\"}",
+      "class": "role",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"role\":\"releaser\",\"after\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51\"}",
+      "class": "role-after",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"boundTo\":\"029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50\"}",
+      "class": "bound",
+      "refused": false
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"boundTo\":\"406504d3fbe1ae098f09a49dffa12222\"}",
+      "class": "bound",
+      "refused": false,
+      "why": "a binding names a group identifier or a key, told apart by length"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"boundTo\":\"406504d3fbe1ae098f09a49dffa12222\",\"after\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51\"}",
+      "class": "bound-after",
+      "refused": false
+    },
+    {
       "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"spent\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51.0\"}",
       "class": "sweep",
       "refused": false
@@ -331,6 +428,26 @@
       "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":1}",
       "refused": true,
       "why": "a member that is not a string"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"role\":\"Releaser\"}",
+      "refused": true,
+      "why": "a role name in upper case"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"role\":\"\"}",
+      "refused": true,
+      "why": "an empty role name"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"boundTo\":\"97cdf1427af5d5b5863f0139d7ecfe9cf1d4c47420fcfc0a4cace9c837561d51\"}",
+      "refused": true,
+      "why": "a subject of 32 bytes is neither a group identifier nor a key"
+    },
+    {
+      "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"policy\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"12\"}",
+      "refused": true,
+      "why": "a policy cursor is a txid"
     },
     {
       "question": "[\"hall\"]",

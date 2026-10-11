@@ -8,8 +8,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Transaction } from '@bsv/sdk'
-import { KeyGrant, KeyRecord, LookupService, encodeGrant } from './borgrec.js'
-import { decodeContext, rollRoot, verifyGrant } from './merkle.js'
+import { KeyGrant, KeyPolicy, KeyRecord, LookupService, encodeGrant } from './borgrec.js'
+import { decodeContext, rollRoot, verifyGrant, verifyPolicy } from './merkle.js'
 import { MemoryJournal } from './journal.js'
 import { borgModule } from './module.js'
 import { answer, config, hall, setup, submit, topic } from './testhost.js'
@@ -294,4 +294,84 @@ test('retention: a revoked or retracted grant and an ended epoch\'s wraps go aft
   // Tokens are kept for the host's life.
   assert.equal(s.ls.tokenCount, 4)
   assert.deepEqual(await answer(s.engine, { hall, org: org.hex, seq: '0' }), [id(o0.tx)])
+})
+
+test('policy, role and bound answer the set the latest token commits to, each with a path into the policy root', async () => {
+  const chain = new Chain(80000)
+  const s = await setup({ chain })
+  const org = new OrgSim(hall, 'policy org', chain)
+  const alice = new Party('policy alice')
+  const gid = new Uint8Array(16).fill(7)
+
+  const def = await org.policyRecord('releaser', { permissions: ['bsecret/release/payroll', 'bstore/get/*'] })
+  const other = await org.policyRecord('moderator', { permissions: ['bchat/moderate/general'] })
+  const toGroup = await org.policyRecord('releaser', { to: gid })
+  const toKey = await org.policyRecord('releaser', { to: alice.id, permissions: ['bstore/get/*'] })
+  const retired = await org.policyRecord('moderator', { to: alice.id })
+  for (const p of [def, other, toGroup, toKey, retired]) {
+    assert.deepEqual(await submit(s.engine, p.tx.toAtomicBEEF()), [0])
+  }
+
+  // seq 0 defines all five, seq 1 retires one: the answers follow the set
+  // the latest token commits to, never what the host happens to hold.
+  const o0 = await org.orgToken([], [], { define: [def.c, other.c, toGroup.c, toKey.c, retired.c] })
+  assert.deepEqual(await submit(s.engine, o0.beef), [0])
+  assert.deepEqual(byTxid([def.tx, other.tx, toGroup.tx, toKey.tx, retired.tx]), (await answer(s.engine, { hall, policy: org.hex })).slice())
+  const o1 = await org.orgToken([], [], { retire: [retired.c] })
+  assert.deepEqual(await submit(s.engine, o1.beef), [0])
+  assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([def.tx, other.tx, toGroup.tx, toKey.tx]))
+
+  // role: the definition and every binding that names it.
+  assert.deepEqual(await answer(s.engine, { hall, org: org.hex, role: 'releaser' }), byTxid([def.tx, toGroup.tx, toKey.tx]))
+  // A retired record leaves every answer, whatever still names it.
+  assert.deepEqual(await answer(s.engine, { hall, org: org.hex, role: 'moderator' }), byTxid([other.tx]))
+  // bound: by group identifier and by key, told apart by length.
+  assert.deepEqual(await answer(s.engine, { hall, org: org.hex, boundTo: toHex(gid) }), byTxid([toGroup.tx]))
+  assert.deepEqual(await answer(s.engine, { hall, org: org.hex, boundTo: alice.hex }), byTxid([toKey.tx]))
+  // A cursor moves past what it names.
+  const page = await answer(s.engine, { hall, org: org.hex, role: 'releaser' })
+  assert.deepEqual(await answer(s.engine, { hall, org: org.hex, role: 'releaser', after: page[0]! }), page.slice(1))
+
+  // Every role and bound answer carries a path from the record's commitment
+  // to the policy root of the token its seq names, and to no other root.
+  const a = await s.engine.lookup({ service: LookupService, query: { hall, org: org.hex, role: 'releaser' } })
+  const outs = (a as { outputs: Array<{ beef: number[]; context?: number[] }> }).outputs
+  assert.equal(outs.length, 3)
+  for (const o of outs) {
+    const ctx = decodeContext(Uint8Array.from(o.context!))
+    assert.deepEqual([ctx.seq, ctx.size], [1, 4])
+    const c = commitment(Transaction.fromBEEF(o.beef))
+    assert.ok(verifyPolicy(ctx, c, o1.rec.policy), 'verifies against the policy root of its seq')
+    assert.ok(!verifyPolicy(ctx, c, o0.rec.policy), 'and against no earlier root')
+    assert.ok(!verifyGrant(ctx, c, o1.rec.roll), 'and never against the roll')
+  }
+})
+
+test('a sweep retracts a policy carrier and the next token drops it from the root: a reader sees both halves', async () => {
+  const chain = new Chain(80000)
+  const s = await setup({ chain })
+  const org = new OrgSim(hall, 'policy sweep org', chain)
+  const def = await org.policyRecord('releaser', { permissions: ['s/a/b'] })
+  const keep = await org.policyRecord('auditor', { permissions: ['s/read/b'] })
+  for (const p of [def, keep]) assert.deepEqual(await submit(s.engine, p.tx.toAtomicBEEF()), [0])
+  const o0 = await org.orgToken([], [], { define: [def.c, keep.c] })
+  assert.deepEqual(await submit(s.engine, o0.beef), [0])
+  assert.deepEqual([s.ls.policyCount, s.ls.wrapCount], [2, 0])
+  assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([def.tx, keep.tx]))
+
+  // The sweep is the fast half: the carrier is retracted at once, and a
+  // reader learns it from the sweep class, not from the answer going quiet.
+  // The policy classes answer every record the root holds, whatever its
+  // status, so that a reader computing the root sees each and checks it.
+  const sw = await sweep(org.policyTree, [0], org.party, KeyPolicy, chain)
+  assert.deepEqual(await submit(s.engine, sw.toAtomicBEEF()), [0])
+  assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([def.tx, keep.tx]))
+  assert.deepEqual(await answer(s.engine, { hall, spent: `${org.policyTree.id('hex')}.0` }), [sw.id('hex')])
+
+  // The committed half: the organisation's next token drops the commitment,
+  // and only then does the record leave every answer.
+  const o1 = await org.orgToken([], [], { retire: [def.c] })
+  assert.deepEqual(await submit(s.engine, o1.beef), [0])
+  assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([keep.tx]))
+  assert.deepEqual(await answer(s.engine, { hall, org: org.hex, role: 'releaser' }), [])
 })

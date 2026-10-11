@@ -38,10 +38,10 @@ import type {
   RestoreStorage,
 } from '@lightwebinc/bcommon'
 import { readTokenOutput } from './admit.js'
-import { LookupService as ServiceName, Refusal, TopicPrefix, decodeGrant, decodeWrap, recipients, topic, type Group, type Org } from './borgrec.js'
+import { LookupService as ServiceName, Refusal, TopicPrefix, decodeGrant, decodePolicy, decodeWrap, recipients, topic, type Group, type Org } from './borgrec.js'
 import { GroupFold, OrgFold, type TokenStatus } from './chain.js'
 import type { CarrierLine, Journal, Line } from './journal.js'
-import { encodeContext, proveGrant } from './merkle.js'
+import { encodeContext, proveGrant, provePolicy } from './merkle.js'
 import { parseQuery, type Question } from './query.js'
 import { classify, firstPush, isFundingShape } from './script.js'
 import { displayTxid, fromHex, toHex } from './util.js'
@@ -97,9 +97,9 @@ interface ChainIdx {
   turned: Map<string, Map<string, { vout: number; seq: number }>>
 }
 
-/** A grant or wrap carrier the host holds. */
+/** A grant, policy or wrap carrier the host holds. */
 interface CarrierEntry {
-  kind: 'g' | 'w'
+  kind: 'g' | 'p' | 'w'
   c: string
   txid: string
   hall: string
@@ -109,6 +109,9 @@ interface CarrierEntry {
   group?: string
   epoch?: number
   recipients?: string[]
+  /** A policy record's role, and what it binds to (a group id or a key). */
+  role?: string
+  to?: string
 }
 
 /** A sweep tombstone the host holds. */
@@ -216,6 +219,9 @@ export class BorgLookupService implements LookupService {
   private readonly carriers = new Map<string, CarrierEntry>()
   private readonly grantsBySubject = new Map<string, Set<string>>()
   private readonly grantsByOrg = new Map<string, Set<string>>()
+  private readonly policiesByOrg = new Map<string, Set<string>>()
+  private readonly policiesByRole = new Map<string, Set<string>>()
+  private readonly policiesByTo = new Map<string, Set<string>>()
   private readonly wrapsByEpoch = new Map<string, Set<string>>()
   private readonly wrapsByMember = new Map<string, Set<string>>()
   private readonly groupsByOrg = new Map<string, Set<string>>()
@@ -265,12 +271,18 @@ export class BorgLookupService implements LookupService {
     return n
   }
   get grantCount(): number {
-    let n = 0
-    for (const c of this.carriers.values()) if (c.kind === 'g') n++
-    return n
+    return this.countOf('g')
+  }
+  get policyCount(): number {
+    return this.countOf('p')
   }
   get wrapCount(): number {
-    return this.carriers.size - this.grantCount
+    return this.carriers.size - this.grantCount - this.policyCount
+  }
+  private countOf(kind: 'g' | 'p' | 'w'): number {
+    let n = 0
+    for (const c of this.carriers.values()) if (c.kind === kind) n++
+    return n
   }
   get sweepCount(): number {
     return this.sweeps.size
@@ -522,6 +534,20 @@ export class BorgLookupService implements LookupService {
     return { seq: t.seq, roll, set: new Set(roll.map(toHex)), path: this.pathOf(ch, t) }
   }
 
+  /**
+   * The policy set of the organisation's answerable token, the set a role,
+   * bound or policy answer is taken from and the root its context proves
+   * against.
+   */
+  private answerPolicy(hall: string, org: string): { seq: number; set: Uint8Array[]; has: Set<string> } | undefined {
+    const ch = this.chains.get(this.chainKey(hall, org, ''))
+    if (ch === undefined) return undefined
+    const t = this.answerToken(ch)
+    if (t === undefined) return undefined
+    const set = (this.foldAt(ch, t) as OrgFold).policyNow()
+    return { seq: t.seq, set, has: new Set(set.map(toHex)) }
+  }
+
   // ---- admission
 
   /**
@@ -598,14 +624,14 @@ export class BorgLookupService implements LookupService {
     const script = Uint8Array.from(out.lockingScript.toBinary())
     const txid = tx.id('hex')
     const kind = classify(script)
-    if (kind === 'grant' || kind === 'wrap') return this.indexCarrier(hall, tx, kind, script)
+    if (kind === 'grant' || kind === 'policy' || kind === 'wrap') return this.indexCarrier(hall, tx, kind, script)
     if (kind === 'org-token' || kind === 'group-token') return this.indexToken(hall, tx, vout)
     if (vout === 0 && isFundingShape(script)) return this.indexSweep(hall, tx, score)
     this.host.log('ls_borg indexed an output of no known kind', { hall, txid, vout })
     return false
   }
 
-  private indexCarrier(hall: string, tx: Transaction, kind: 'grant' | 'wrap', script: Uint8Array): boolean {
+  private indexCarrier(hall: string, tx: Transaction, kind: 'grant' | 'policy' | 'wrap', script: Uint8Array): boolean {
     const input = tx.inputs[0]
     const src = input === undefined ? undefined : srcTxid(input)
     if (input === undefined || src === undefined) return false
@@ -617,6 +643,9 @@ export class BorgLookupService implements LookupService {
     if (kind === 'grant') {
       const g = decodeGrant(record)
       e = { kind: 'g', c, txid, hall, org: toHex(g.org), op, subject: toHex(g.subject) }
+    } else if (kind === 'policy') {
+      const p = decodePolicy(record)
+      e = { kind: 'p', c, txid, hall, org: toHex(p.org), op, role: p.role, to: p.to === null ? undefined : toHex(p.to) }
     } else {
       const w = decodeWrap(record)
       e = { kind: 'w', c, txid, hall, org: toHex(w.org), op, group: toHex(w.group), epoch: w.epoch, recipients: recipients(w).map(toHex) }
@@ -642,6 +671,10 @@ export class BorgLookupService implements LookupService {
     if (e.kind === 'g') {
       addTo(this.grantsBySubject, `${hall}|${e.org}|${e.subject}`, c)
       addTo(this.grantsByOrg, `${hall}|${e.org}`, c)
+    } else if (e.kind === 'p') {
+      addTo(this.policiesByOrg, `${hall}|${e.org}`, c)
+      addTo(this.policiesByRole, `${hall}|${e.org}|${e.role}`, c)
+      if (e.to !== undefined) addTo(this.policiesByTo, `${hall}|${e.org}|${e.to}`, c)
     } else {
       addTo(this.wrapsByEpoch, `${hall}|${e.org}|${e.group}|${e.epoch}`, c)
       for (const m of e.recipients!) addTo(this.wrapsByMember, `${hall}|${e.org}|${e.group}|${e.epoch}|${m}`, c)
@@ -772,6 +805,10 @@ export class BorgLookupService implements LookupService {
       if (e.kind === 'g') {
         removeFrom(this.grantsBySubject, `${e.hall}|${e.org}|${e.subject}`, e.c)
         removeFrom(this.grantsByOrg, `${e.hall}|${e.org}`, e.c)
+      } else if (e.kind === 'p') {
+        removeFrom(this.policiesByOrg, `${e.hall}|${e.org}`, e.c)
+        removeFrom(this.policiesByRole, `${e.hall}|${e.org}|${e.role}`, e.c)
+        if (e.to !== undefined) removeFrom(this.policiesByTo, `${e.hall}|${e.org}|${e.to}`, e.c)
       } else {
         removeFrom(this.wrapsByEpoch, `${e.hall}|${e.org}|${e.group}|${e.epoch}`, e.c)
         for (const m of e.recipients!) removeFrom(this.wrapsByMember, `${e.hall}|${e.org}|${e.group}|${e.epoch}|${m}`, e.c)
@@ -984,6 +1021,36 @@ export class BorgLookupService implements LookupService {
           .sort((x, y) => cmp(x.txid, y.txid))
           .slice(0, limit)
           .map((e) => ({ ...car(e), context: Array.from(encodeContext(proveGrant(a.seq, a.roll, fromHex(e.c)))) }))
+      }
+      case 'policy':
+      case 'policy-after': {
+        const a = this.answerPolicy(hall, m['policy']!)
+        if (a === undefined) return []
+        const after = m['after']
+        return [...(this.policiesByOrg.get(`${hall}|${m['policy']}`) ?? [])]
+          .map((c) => this.carriers.get(c)!)
+          .filter((e) => a.has.has(e.c) && (after === undefined || e.txid > after))
+          .sort((x, y) => cmp(x.txid, y.txid))
+          .slice(0, limit)
+          .map(car)
+      }
+      case 'role':
+      case 'role-after':
+      case 'bound':
+      case 'bound-after': {
+        const a = this.answerPolicy(hall, m['org']!)
+        if (a === undefined) return []
+        const after = m['after']
+        const from =
+          q.class.name.startsWith('role')
+            ? this.policiesByRole.get(`${hall}|${m['org']}|${m['role']}`)
+            : this.policiesByTo.get(`${hall}|${m['org']}|${m['boundTo']}`)
+        return [...(from ?? [])]
+          .map((c) => this.carriers.get(c)!)
+          .filter((e) => a.has.has(e.c) && (after === undefined || e.txid > after))
+          .sort((x, y) => cmp(x.txid, y.txid))
+          .slice(0, limit)
+          .map((e) => ({ ...car(e), context: Array.from(encodeContext(provePolicy(a.seq, a.set, fromHex(e.c)))) }))
       }
       case 'groups':
       case 'groups-after': {
