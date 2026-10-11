@@ -26,6 +26,7 @@ vectors in `testdata/vectors` are part of the contract (section 17).
 | **Organization record** `O` | inside a mined token | the token's transaction | canonical CBOR: one transition of the roll (section 3) |
 | **Group record** `G` | inside a mined token | the token's transaction | canonical CBOR: one transition of a group's membership; a token that begins an epoch is that epoch's descriptor (section 4) |
 | **Grant record** `M` | never | inside a carrier | canonical CBOR: one membership grant, a BRC-52 certificate (section 5) |
+| **Policy record** `P` | never | inside a carrier | canonical CBOR: one role definition or one binding of a role to a group or a key (section 5A) |
 | **Wrap record** `W` | never | inside a carrier | canonical CBOR: one epoch's key wrapped to up to 16 members (section 6) |
 | **Chain token** | mined | a BEEF object | a PushDrop of a tag and an `O` or a `G`; each spends the one before it (section 9.3) |
 | **Carrier** `K` | never mined | a BEEF object | one unmined transaction whose one output holds an `M` or a `W` (section 9.2) |
@@ -33,15 +34,17 @@ vectors in `testdata/vectors` are part of the contract (section 17).
 | **Funding tree** `F` | mined | inside each carrier's BEEF, and inside the BEEF of a chain's first token | one transaction of tagged outputs; each carrier spends one |
 | **Sweep** | mined | a BEEF object | a mined spend of funding outputs; it retracts the carriers they funded and revokes the grants among them (section 9.5) |
 
-State that needs an order is mined: the roll and each group's membership are
-chains of mined tokens, one transaction per transition. Everything else rides
-an unmined carrier: grants and wraps are facts about one transition, ordered
-by the token they belong to.
+State that needs an order is mined: the roll, the policy set and each group's
+membership are chains of mined tokens, one transaction per transition.
+Everything else rides an unmined carrier: grants, policy records and wraps
+are facts about one transition, ordered by the token they belong to.
 
 ```text
  org key ── grant carriers M (one per member) ──▶ plane ──▶ hosts
+    │       ── policy carriers P (roles, bindings) ──▶ plane ──▶ hosts
     │
-    ├── org chain:   O_0 ──spend──▶ O_1 ──spend──▶ O_2      roll root over the grants' C
+    ├── org chain:   O_0 ──spend──▶ O_1 ──spend──▶ O_2      roll root over the grants' C,
+    │                                                       policy root over the policy records' C
     │               (admit a,b,c)  (revoke b)
     │
     └── group chain: G_0 ──spend──▶ G_1 ──spend──▶ G_2 ──spend──▶ G_3
@@ -108,13 +111,19 @@ Magic `"boo"` `0x01`. The second field of an organization token.
 | 10 | `opaque` | bool | `true` when the organization's grants carry no public reveal (section 5.4) |
 | 11 | `created` | uint, 1 to 253402300799 | a claim |
 
-Keys 0 to 11 are always present; keys 12 and above are unknown to this
+| 12 | `define` | array of 0 to 64 bytes(32), ascending | policy commitments entering the policy set |
+| 13 | `retire` | array of 0 to 64 bytes(32), ascending, disjoint from `define` | policy commitments leaving it |
+| 14 | `policyCount` | uint, 0 to 65536 | the number of policy records in the set after this transition |
+| 15 | `policy` | bytes(32) | the policy root after this transition (section 3.3) |
+| 16 | `successor` | bytes; the key rule, or `null` | the key that may carry the chain on from the next token (section 3.4). `null` when the organization announces no handover |
+
+Keys 0 to 16 are always present; keys 17 and above are unknown to this
 version. The encoded record is at most 8192 bytes.
 
 ### 3.1 The refusal order
 
 A record that breaks several rules is refused for the first, so that every
-implementation reports the same reason. For each of the four records:
+implementation reports the same reason. For each of the five records:
 
 1. `too-large`: the encoded length is over the record's bound;
 2. `cbor`: the bytes are not exactly one canonical item of the subset, or the
@@ -129,16 +138,19 @@ implementation reports the same reason. For each of the four records:
    change list that is too long, not ascending, holds a duplicate or an
    element of the wrong shape, `identity` for a key inside a key list,
    `fields` for the grant's field, keyring and reveal maps,
-   `signature-form` for the grant's signature, `entry` for a wrap, and
+   `signature-form` for the grant's signature, `entry` for a wrap, `role` for
+   a role name, `permission` for a permission string, and
    `range` for every other bound in the record's table;
 7. across fields, in this order: `list` when a value is both added and
    removed (or admitted and revoked); `members` when a group adds the
    organization or the anyone key, or a grant's subject is either; `chain`
    when `prev` is zero at a `seq` other than 0 or not zero at `seq` 0, when
    a group's `epochSeq` is after its `seq`, or when a group's first token is
-   not epoch 0 at `epochSeq` 0; `count` when a first token's `count` is not
-   the length of its `admit` or `add` list or the first token removes
-   anything.
+   not epoch 0 at `epochSeq` 0; `binding` when a policy record's `kind` does
+   not match its `to`, `expiry` or `permissions` (section 5A.1); `count` when
+   a first token's `count` is not the length of its `admit` or `add` list, or
+   the first token removes anything, or a first token's `policyCount` is not
+   the length of its `define` or it retires anything.
 
 `refusal-v1.json` pins every step case by case.
 
@@ -159,9 +171,80 @@ reproduce `roll`, or that revokes a commitment not in the roll or admits one
 already in it, as `roll-mismatch` (section 11.2). A reader that fetches the
 roll checks its root itself (section 13).
 
+### 3.3 The policy set
+
+An organization carries a second set beside its roll: its **policy set**, the
+policy records (section 5A) it has published and not retired. The set after a
+token is the set before it (empty before `seq` 0), less `retire`, plus
+`define`. Its root is bcommon
+`commit`'s RFC 6962 Merkle Tree Hash over the policy commitments in ascending
+byte order, exactly as the roll's root is computed over grant commitments
+(section 3.2), and the empty set's root is `SHA-256()` of nothing.
+
+The roll and the policy set are two roots on one chain, so a change of
+membership and a change of policy are ordered against each other by the
+chain that carries both: there is no moment at which a host or a reader holds
+a new role and an old roll, or the other way round. One transition may do
+both.
+
+As with the roll, a host cannot check `policy` or `policyCount` against the
+set while it admits a token (section 11.1): it reads only the predecessor.
+Admission checks the arithmetic of `policyCount`; the index folds the change
+lists along the chain and reports a token whose fold does not reproduce
+`policy`, or that retires a commitment the set does not hold or defines one
+it already holds, as `policy-mismatch` (section 11.2). A reader that fetches
+the set checks its root itself (section 13).
+
+### 3.4 Succession
+
+The `successor` key announces a handover of the chain. When a
+token names a successor, the next token of the chain MAY carry that key as
+its `org`; it is then locked to `derive(successor, "org")` and its field
+signature verifies under that key, while its input spends the announcing
+token's output, which only the predecessor's key can unlock. Both keys
+therefore sign the handover: the predecessor's to spend, the successor's to
+claim. A token whose `org` differs from its predecessor's is refused
+(`transition`) unless the predecessor's `successor` equals it, so a host
+checks a handover from the bytes of the token and its parent alone. A chain's
+first token may name a successor like any other, and no token can hand over
+to a key its predecessor did not name, so every handover is one transition
+announced and one transition taken.
+
+A chain's `hall` and its position in the hall do not change, so the
+organization's history is one chain across its keys. The organization's **key
+history** is the sequence of `org` values along its canonical chain; a reader
+treats a grant, a policy record or a wrap whose `org` is any key of that
+history as the organization's, and the organization's **current key** is its
+latest token's `org`.
+
+Three things do not follow the key, and the organization's tooling carries
+them over after a handover:
+
+- **Groups.** Each group chain hands over the same way, with the group
+  record's own `successor` (section 4). Group identifiers,
+  epochs and history survive a handover, so what other applications have
+  bound to a group stays bound.
+- **The signer key.** The signer key is derived from the organization's
+  identity key (section 7.4), so a handover gives the tooling a new signer
+  key. Every group whose members include the predecessor's signer key
+  removes it and adds the successor's, which begins a new epoch in each
+  (section 4.2). That is the intended effect: the predecessor's key loses
+  what it could read.
+- **Grants, policy records and their trees.** The carriers the predecessor
+  issued stay owned by the predecessor's key, and so do the funding trees
+  whose outputs revoke and retire them. Until the successor re-issues them
+  on its own trees, a revocation or a retirement needs the predecessor's key
+  (section 16.15).
+
+Succession is for a handover both keys take part in: a new device, a new
+custodian, a planned retirement of a key. A key lost or compromised before
+it announces a successor cannot hand over, and that organization is still a
+new organization (section 16.6).
+
 ## 4. The group record
 
-Magic `"bog"` `0x01`. The second field of a group token.
+Magic `"bog"` `0x01`. The second field of a group token. Succession
+(section 3.4) applies to a group chain as it does to the organization's.
 
 | Key | Field | Type and bounds | Rule |
 | --- | --- | --- | --- |
@@ -183,7 +266,9 @@ Magic `"bog"` `0x01`. The second field of a group token.
 | 15 | `rotateEvery` | uint, 0 to 2^32 - 1 | seconds between scheduled rotations the organization intends; 0 means none. Informative: no host enforces it |
 | 16 | `created` | uint, 1 to 253402300799 | a claim |
 
-Keys 0 to 16 are always present; keys 17 and above are unknown to this
+| 17 | `successor` | bytes; the key rule, or `null` | the key that may carry this group's chain on from the next token (section 3.4). `null` when no handover is announced |
+
+Keys 0 to 17 are always present; keys 18 and above are unknown to this
 version. The encoded record is at most 8192 bytes. Neither the organization
 nor the anyone key is ever a member.
 
@@ -205,9 +290,10 @@ and a host checks the new record against the one it spends (the
 **predecessor**, read from the predecessor's transaction, which the token's
 BEEF carries):
 
-1. `transition`: `hall`, `org` and `group` equal the predecessor's, `seq` is
-   the predecessor's plus 1, and `prev` is the txid of the transaction the
-   predecessor's output is in;
+1. `transition`: `hall` and `group` equal the predecessor's, `seq` is
+   the predecessor's plus 1, `prev` is the txid of the transaction the
+   predecessor's output is in, and `org` equals the predecessor's `org` or,
+   where the predecessor names a `successor`, that successor (section 3.4);
 2. `rotation`: the transition **must rotate** when `remove` is not empty, or
    when the predecessor's `rotateOnJoin` is `true` and `add` is not empty. A
    transition that must rotate has `epoch` one more than the predecessor's;
@@ -315,7 +401,7 @@ delegation certificate, `scope` and `expiry`, mean what they mean there.
 | Field | Value in the clear | Rule |
 | --- | --- | --- |
 | `expiry` | text | exactly `YYYY-MM-DDTHH:MM:SSZ`, a real UTC time from 1970 (BRC-169 section 9.1's `expiry`, its spelling pinned). A grant is not current at or after it, allowing a reader's clock skew of at most 300 seconds (BRC-169 section 9.6). An organization renews by issuing a new grant |
-| `role` | text, 1 to 64 bytes of UTF-8 | a label a client shows. It authorizes nothing |
+| `role` | text, 1 to 64 bytes of UTF-8 | the role the organization gives the subject: it names a role whose permissions the organization's policy set defines, and a service that can read the field reads them (sections 5A.1 and 5A.4). A value that is not a well-formed role name names no role, and so authorizes nothing |
 | `scope` | text, 1 to 512 bytes | section 5.3 |
 
 Each field's ciphertext is BRC-52's: AES-256-GCM under the field's revelation
@@ -433,10 +519,198 @@ carrier per output: two carriers on one outpoint are equivocation, and a
 host answers only one of them (section 11.2). It holds at most 8 grants for
 one subject in its roll at a time.
 
-A role change is a revocation and a fresh grant (BRC-169 section 9.8): one
-organization token admits the new commitment and revokes the old one. The
-member's groups do not change, because a group names identity keys, not
-grants.
+Changing the role **named in a grant** is a revocation and a fresh grant
+(BRC-169 section 9.8): one organization token admits the new commitment and
+revokes the old one. The member's groups do not change, because a group names
+identity keys, not grants. There is a second way, which touches no grant:
+bind a role to the member's key or to one of its groups, and retire that
+binding to take it away (section 5A). What a role may do
+changes without either, because that is in the policy set and not in anyone's
+certificate.
+
+## 5A. The policy record
+
+Magic `"bop"` `0x01`. The payload of a policy carrier's one output. A policy
+record is one of two things: a **role definition**, which names a role and
+the permissions it carries, or a **binding**, which gives a role to a group
+or to one key. The organization's token commits to the set of them by the
+policy root (section 3.3).
+
+This section carries a letter rather than a number because the sections after
+it are cited by other specifications and by documents that are signed; the
+policy record was added after they were, and renumbering them would make
+every one of those citations point somewhere else.
+
+Policy says what a member may do; the roll and the group chains say who a
+member is. Keeping both on one chain is what makes a decision answerable:
+every permission a service grants is a permission some mined token committed
+to, at a `seq` a reader can name, over a roll the same token committed to.
+
+| Key | Field | Type and bounds | Rule |
+| --- | --- | --- | --- |
+| 0 | `magic` | bytes(4) | `62 6f 70 01` (`"bo"`, `'p'` for policy, version 1). Always the first key |
+| 1 | `hall` | text; the hall identifier grammar (section 10.1) | MUST equal the topic's hall |
+| 2 | `org` | bytes; the key rule | the organization's identity key, and the carrier's owner. The carrier's lock is derived from it (section 9.2), so it is bound, not claimed |
+| 3 | `kind` | uint, 0 or 1 | `0` a role definition, `1` a binding |
+| 4 | `role` | text; the role-name grammar (section 5A.1) | the role this record defines or binds |
+| 5 | `permissions` | array of 0 to 24 text, ascending, unique, each a permission (section 5A.2) | a definition's permissions, or a binding's attenuation (section 5A.1) |
+| 6 | `to` | bytes(16), bytes(33) or `null` | a binding's subject: a group identifier or an identity key. `null` in a definition |
+| 7 | `expiry` | text, exactly `YYYY-MM-DDTHH:MM:SSZ`, or `null` | a binding's expiry, a claim read against the reader's clock as a grant's is (section 5.2). `null` in a definition, and in a binding that does not expire |
+| 8 | `created` | uint, 1 to 253402300799 | a claim |
+
+Keys 0 to 8 are always present; keys 9 and above are unknown to this version.
+The encoded record is at most 8192 bytes: 24 permissions of the grammar's
+full length take about 6.1 KB (section 14). A policy record is in the clear:
+unlike a grant's fields, nothing in it is encrypted, so every host and every
+follower of the hall reads an organization's roles and bindings (section
+16.16).
+
+### 5A.1 The two kinds
+
+| | `kind` 0, a role definition | `kind` 1, a binding |
+| --- | --- | --- |
+| `role` | the role being defined | the role being given |
+| `permissions` | the permissions the role carries. An empty list defines a role that authorizes nothing, which a client may still show | the **attenuation**: the permissions this binding keeps of the role's. An empty list keeps the whole role |
+| `to` | `null` | the group identifier (16 bytes) or identity key (33 bytes) the role is given to |
+| `expiry` | `null` | the time after which the binding authorizes nothing, or `null` |
+
+A record whose `kind` and fields disagree is refused `binding` (section 3.1
+step 7): `kind` 0 with a `to` or an `expiry` that is not `null`, or `kind` 1
+with a `to` that is `null`. A binding's `to` of 33 bytes meets the key rule
+and is neither the organization nor the anyone key (`identity`); a `to` of 16
+bytes is read as a group identifier, and no rule here ties it to a group that
+exists (section 5A.5).
+
+More than one definition of one role may be in the set at once: the
+organization has equivocated, and a reader takes the **intersection** of
+their permissions, which is the only reading that cannot grant more than the
+organization meant by either. The tooling never publishes a second definition
+of a role it already defines; it retires the first in the same transition
+that defines the second.
+
+A **role name** is an identifier, not a label:
+
+```abnf
+role-name = 1*64( lower / DIGIT / "-" / "_" / "." )
+lower     = %x61-7A
+```
+
+the same characters BRC-169 section 9.2 allows a scope qualifier. Names are
+compared byte for byte. Lower case and ASCII mean that two roles cannot be
+shown alike and read apart, which no normalization rule achieves by itself;
+the organization's display names (`name`) carry its human wording. A grant's
+`role` field that is not a well-formed role name names no role, so a role
+written as a display label carries no authority by accident.
+
+### 5A.2 The permission grammar
+
+A permission is ASCII text of at most 256 bytes:
+
+```abnf
+permission = service "/" action "/" resource
+service    = 1*16( lower / DIGIT / "-" )
+action     = 1*32( lower / DIGIT / "-" )
+resource   = "*" / ( 1*192( lower / DIGIT / "-" / "_" / "." / "/" / ":" ) [ "*" ] )
+lower      = %x61-7A
+```
+
+Anything else is refused `permission`. The grammar is ASCII and lower case,
+so no two permissions can look alike, and every implementation compares them
+as bytes.
+
+`service` names the service the permission is about: one label a service
+claims for itself, registered with its application's other names in bcommon's
+registry, so that two applications cannot mean different things by one
+permission. `action` names something that service does. `resource` names what
+it does it to, in whatever shape that service's own specification fixes: a
+bucket, a channel, a namespace, a path. borg fixes the syntax and nothing
+else, and a service that does not recognize an action or a resource grants
+nothing for it.
+
+`service` and `action` are never `*`, so no permission is everything
+everywhere. A `resource` of `*`, or one ending in `*`, is a prefix
+(section 5A.3).
+
+Examples, each a permission some other specification defines:
+`bsecret/release/payroll`, `bchat/moderate/general`, `bstore/put/photos/*`,
+`bstore/get/*`.
+
+### 5A.3 Matching
+
+A service asks whether a subject holds one permission, written out in full
+with no `*` in it. A permission `h` the subject holds grants an asked
+permission `a` when:
+
+- `h` equals `a`, byte for byte; or
+- `h` is `s/v/*` and `a` is `s/v/` followed by anything; or
+- `h` is `s/v/p*` and `a` is `s/v/` followed by text that begins with `p`.
+
+`service` and `action` always match exactly. Nothing else matches: there is
+no suffix wildcard, no wildcard inside a resource, and no hierarchy a
+separator implies. A permission asked with a `*` in it is a programming
+error, and an evaluator MUST refuse to answer rather than treat the `*` as a
+character or as a wildcard.
+
+### 5A.4 Effective permissions
+
+A subject's effective permissions in an organization are the union of what
+its grant's role carries and what every binding that reaches it carries. For
+a subject `K` in an organization `O`, at the reader's clock:
+
+1. `K` holds the empty set unless it is a **current member** of `O`
+   (section 13): no grant, no permissions.
+2. **The grant's role.** The role named by each of `K`'s current grants
+   (there may be up to 8 in one roll, section 14), where a current definition
+   defines it, contributes that definition's permissions, unattenuated.
+3. **Group bindings.** For each group of `O` whose canonical latest token's
+   members include `K`, every current binding whose `to` is that group's
+   identifier contributes its role's permissions, attenuated.
+4. **Subject bindings.** Every current binding whose `to` is `K` contributes
+   its role's permissions, attenuated.
+
+A policy record is **current** when its commitment is in the policy set of
+`O`'s latest token, its carrier is held (neither retracted nor superseded,
+section 11.2), and, for a binding, its `expiry` is `null` or not passed,
+within the 300 seconds of clock skew section 5.2 allows a grant's expiry. To
+**attenuate** is to keep the intersection of the binding's `permissions`
+with the definition's; an empty `permissions` keeps the definition's whole
+set. A binding whose role no current definition defines contributes nothing.
+
+A subject is granted an asked permission when one permission of its effective
+set matches it (section 5A.3). **Nothing subtracts.** There is no deny rule,
+no precedence and no order of evaluation to get wrong: a permission is held
+or it is not, and the only ways to take one away are to retire the record
+that carries it, to revoke the subject's grant, to remove the subject from
+the group, or to let the binding expire (section 16.17).
+
+Step 2 needs the grant's `role` field in the clear. In an organization that
+is not opaque the field is revealed in the grant itself (section 5.4); in an
+opaque one it is readable only to the subject, which discloses it where it
+wants to use it, as BRC-52 and BRC-53 selective disclosure and the BRC-103
+handshake already carry a certificate's fields. Bindings need no disclosure:
+they are in the clear, so an opaque organization that wants a service to
+decide without the subject's help binds roles to groups and keys rather than
+naming them in grants.
+
+### 5A.5 What no host decides
+
+A host admits a policy record by its bytes: the grammar of its role name and
+its permissions, its bounds, and the carrier rules every carrier meets
+(section 11.1). It does not check that the role a binding names is defined,
+that the group a binding names exists, that the subject of a binding is a
+member, or that anything in the set is consistent with anything else: those
+are cross-record questions, and section 11.1 says why a topic manager cannot
+answer them while it admits. A binding naming a role nothing defines, or a
+group that never existed, is admitted and authorizes nothing.
+
+**No host enforces policy.** Policy is data on the plane, and the party that
+enforces it is the service the permission names, which evaluates section
+5A.4 for itself against its own headers and its own freshness sources. A
+host answers the questions that make the evaluation cheap (section 10.2) and
+nothing more. The evaluator and the signed decision receipt that records what
+it decided are bcommon's (`authz`), not this contract's: this contract says
+what the records mean, so that two implementations of it reach the same
+verdict.
 
 ## 6. The epoch key
 
@@ -472,7 +746,7 @@ id's place:
 | --- | --- |
 | security level | 2 |
 | protocol | `keyed content release` |
-| key id | standard padded base64 of `SHA-256(epoch id || epoch)`, the epoch as four bytes big-endian |
+| key id | standard padded base64 of `SHA-256(epoch id \|\| epoch)`, the epoch as four bytes big-endian |
 | counterparty | the member, when wrapping; the organization, when unwrapping |
 
 The derived key id binds a wrap to one group's one epoch: a wrap cannot be
@@ -781,6 +1055,7 @@ Everything here is bcommon's, parameterized by the values in section 9.1.
 | Group token lock and field signature | key id `group`, invoice `1-borg organisation-group` |
 | Wrap carrier record output and field signature; the outputs of the trees that fund wraps | key id `record`, invoice `1-borg organisation-record` |
 | Grant carrier record output and field signature; the outputs of the trees that fund grants | key id `grant`, invoice `1-borg organisation-grant` |
+| Policy carrier record output and field signature; the outputs of the trees that fund policy records | key id `policy`, invoice `1-borg organisation-policy` |
 | The outputs of the trees that pay for a chain's first token | key id `chain`, invoice `1-borg organisation-chain` |
 | Embedded wallet funding key | key id `fund`, counterparty `self` |
 | Organization token tag | `62 6f 01` (`"bo"` `0x01`) |
@@ -789,7 +1064,7 @@ Everything here is bcommon's, parameterized by the values in section 9.1.
 | Epoch-key release | `[2, "keyed content release"]`, BRC-369's (section 6.2) |
 
 Every derivation a host or a reader checks (`org`, `group`, `record`,
-`grant`, `chain`) is
+`grant`, `policy`, `chain`) is
 BRC-42 derivation with BRC-43's `anyone` counterparty: the owner's wallet
 derives with `forSelf = true`, and a reader derives the same public key from
 the identity key alone (`derivation-v1.json` checks both sides). The funding
@@ -801,7 +1076,8 @@ SDK's refusal).
 
 ### 9.2 Carriers
 
-A grant or a wrap rides a carrier built by bcommon `carrier.Mint`:
+A grant, a policy record or a wrap rides a carrier built by bcommon
+`carrier.Mint`:
 
 - **exactly one input**, spending one output of the owner's mined funding
   tree, `nSequence = 0`, unlocked by exactly one minimal push of the owner's
@@ -809,16 +1085,16 @@ A grant or a wrap rides a carrier built by bcommon `carrier.Mint`:
 - **exactly one output**, a lock-before PushDrop of one field, the record,
   with the field signature over `SHA-256(record)`, locked to
   `derive(owner, k)`, carrying the whole value of the output it spends, where
-  `k` is `grant` for a grant and `record` for a wrap
-  (fee zero);
+  `k` is `grant` for a grant, `policy` for a policy record and `record`
+  for a wrap (fee zero);
 - **`nLockTime = 4102444800`** (2100-01-01T00:00:00Z) with a non-final input,
   so it cannot be mined. BRC-60 keeps a transaction non-final so that it can
   be updated before it is mined; here the same device is turned the other way
   round, to keep a record off the chain while SPV still verifies it through
   its funding parent.
 
-The owner is the record's `org`: only the organization issues grants and
-releases keys. The carrier's input script is executed against the funding
+The owner is the record's `org`: only the organization issues grants,
+publishes policy and releases keys. The carrier's input script is executed against the funding
 output it spends (SPV of an unproven transaction does this; a host whose
 engine does not MUST do it itself), so only the owner's key could have made
 it. The unlocking-script rule keeps `C` the owner's: script verification does
@@ -828,7 +1104,9 @@ The owner itself can make many carriers from one funding output, since
 carriers never conflict on chain; a host answers one of them per outpoint
 (section 11.2), and the organization MUST NOT make more than one. A grant's
 revocation outpoint is its carrier's funding outpoint (section 5), so one
-grant fits one outpoint and a sweep of that outpoint revokes it.
+grant fits one outpoint and a sweep of that outpoint revokes it. A policy
+record names no outpoint of its own, and a sweep of its carrier's funding
+outpoint retires it (section 9.5).
 
 ### 9.3 Chain tokens
 
@@ -876,7 +1154,7 @@ the record is small (section 14).
 A funding tree is a mined transaction of equal outputs, each a PushDrop of
 the one field `62 6f 02` with no signature, locked to `derive(owner, k)`:
 `<key> OP_CHECKSIG <62 6f 02> OP_DROP`, where `k` is the key id of what the
-tree pays for: `grant`, `record` (wraps) or `chain`. A carrier
+tree pays for: `grant`, `policy`, `record` (wraps) or `chain`. A carrier
 spends only a **mined** tree's output, and its BEEF carries that tree with
 its proof, so a carrier's ancestry is one mined parent. A publisher never
 publishes a tree to the hall on its own: it travels inside the BEEF of every
@@ -884,10 +1162,12 @@ carrier it funds, and of a chain's first token. A host given a mined tree on
 its own admits it as a sweep (section 11.1), which retracts nothing. bcommon `producer` runs a tree's
 lifecycle.
 
-The three kinds of tree are kept apart by their keys, so hosts enforce the
+The four kinds of tree are kept apart by their keys, so hosts enforce the
 separation (section 11.1), and each sits in its own wallet basket: **grant
 trees** (key `grant`, basket `borg grant funding`), whose every output funds
-at most one grant and is spent again only to revoke it; **record trees**
+at most one grant and is spent again only to revoke it; **policy trees** (key
+`policy`, basket `borg policy funding`), whose every output funds at most one
+policy record and is spent again only to retire it; **record trees**
 (key `record`, basket `borg record funding`), which fund wraps; and **chain
 trees** (key `chain`, basket `borg chain funding`), whose outputs fund no
 carrier and pay for chains' first tokens. A chain tree is small (8 outputs
@@ -903,7 +1183,12 @@ A **sweep** is a mined transaction spending funding outputs, used and unused
 (bcommon `carrier.Sweep`, whose output 0 is a funding-shaped tombstone, which
 is what makes a host admit it). Once it is mined, every carrier that spent
 one of those outputs is a double spend and can never be valid again: hosts
-retract it, and a grant among them is revoked for every BRC-52 verifier. A
+retract it, a grant among them is revoked for every BRC-52 verifier, and a
+policy record among them is retired, so the role it defined or the
+permissions it bound are gone from the moment the sweep is mined and seen.
+Retracting the carrier is the fast half of a withdrawal; the organization's
+next token, which drops the commitment from the policy root, is the
+committed half, and a reader that checks the root sees both. A
 sweep is published once, after it mines (section 7.2), to the plane and
 directly to every host the publisher names. Hosts learn of spends only from
 sweeps; only a mined spend retracts. Retraction reaches honest hosts only: it
@@ -947,6 +1232,12 @@ answers BRC-24 questions of exactly these classes:
 | `roll` | `{"hall": h, "roll": o}` | the grant carriers whose commitments the roll of `o`'s latest token holds, first page | free |
 | `roll-after` | `{"hall": h, "roll": o, "after": c}` | the same, after the commitment `c` | free |
 | `member` | `{"hall": h, "org": o, "member": k}` | the grant carriers in that roll whose subject is `k`, at most 8, each with its inclusion path in the roll as context | free |
+| `policy` | `{"hall": h, "policy": o}` | the policy carriers in the policy set of `o`'s latest token, first page | free |
+| `policy-after` | `{"hall": h, "policy": o, "after": c}` | the same, after the commitment `c` | free |
+| `role` | `{"hall": h, "org": o, "role": r}` | the policy carriers in that set whose `role` is `r`, definitions and bindings alike, first page, each with its inclusion path in the policy root as context | free |
+| `role-after` | `{"hall": h, "org": o, "role": r, "after": c}` | the same, after the commitment `c` | free |
+| `bound` | `{"hall": h, "org": o, "boundTo": x}` | the bindings in that set whose `to` is the group identifier or identity key `x`, first page, each with its inclusion path as context | free |
+| `bound-after` | `{"hall": h, "org": o, "boundTo": x, "after": c}` | the same, after the commitment `c` | free |
 | `groups` | `{"hall": h, "groupsOf": o}` | the latest token of each of `o`'s groups, first page | free |
 | `groups-after` | `{"hall": h, "groupsOf": o, "after": g}` | the same, after the group id `g` | free |
 | `member-of` | `{"hall": h, "org": o, "memberOf": k}` | the latest token of each group of `o` whose members include `k`, first page | free |
@@ -963,14 +1254,17 @@ answers BRC-24 questions of exactly these classes:
 The query is validated as parsed, so hosts in any language reach the same
 verdict. A member given twice takes its last value, as JSON parsers do. Every
 member is a string: `hall` meets the hall grammar; `org`, `roll`, `member`,
-`groupsOf` and `memberOf` are 66 lowercase hex digits whose bytes meet the key
-rule, as is `history`; `group` is 32 lowercase hex digits; `seq` is a
+`groupsOf`, `memberOf` and `policy` are 66 lowercase hex digits whose bytes
+meet the key rule, as is `history`; `group` is 32 lowercase hex digits;
+`role` is a well-formed role name (section 5A.1); `boundTo` is 32 lowercase
+hex digits (a group identifier) or 66 whose bytes meet the key rule (an
+identity key); `seq` is a
 decimal from 0 to 2^53 - 1 and `epoch` from 0 to 2^32 - 1, with no leading
 zero; `chain` is `"org"` or a group id; `spent` is BRC-100's `OutpointString`
 (`<txid>.<index>`, txid in display order, index in decimal with no leading
-zero); `after` is a txid in display order for `roll-after` and
-`wraps-after`, a group id for `groups-after` and `member-of-after`, and a
-`seq` for `history-after`. A question MUST carry exactly the members of one class. A
+zero); `after` is a txid in display order for `roll-after`,
+`wraps-after`, `policy-after`, `role-after` and `bound-after`, a group id for
+`groups-after` and `member-of-after`, and a `seq` for `history-after`. A question MUST carry exactly the members of one class. A
 missing member, a member no class defines, or a value that breaks these rules
 is refused with an error, never answered empty and never ignored. A question
 that names a hall the host does not carry is refused with an error too.
@@ -1002,6 +1296,12 @@ prefixes of RFC 6962 keep a path from passing a subtree off as a leaf, so
 A context is a hint: a path that does not verify is ignored, and the reader
 falls back to the roll. `org-v1.json` carries one.
 
+The `role` and `bound` answers carry a context of the same shape, whose
+`seq` is the organization token whose **policy** root the answer used and
+whose path runs from the policy record's commitment to that token's `policy`
+(section 3.3). A reader that holds the latest token checks one role or one
+binding without fetching the set; `policy-v1.json` carries one of each.
+
 An empty answer means only that this host holds nothing that answers: a
 reader MUST NOT read it as proof that something does not exist. The engine
 hydrates each answered output as BEEF, so a reader verifies a token or a
@@ -1010,13 +1310,14 @@ carrier with nothing but its own block headers.
 ### 10.3 Free and priceable
 
 A price attaches to a question class, never to part of an answer. The
-fifteen free classes are answered at no price, without authentication, on
+twenty-one free classes are answered at no price, without authentication, on
 every conforming host. No priced class is a superset of a free class: the
 priceable classes carry `history` and `chain`, which no free class carries,
 and lack `org`, so no spelling turns a free question into a priced one; and
 an unknown member is refused, never ignored. Everything a reader needs to check
-a membership, a group's state, an epoch key or a revocation is free; the
-priceable classes sell the bulk walk of a chain, which the free `org-seq` and
+a membership, a group's state, an epoch key, a role, a binding or a
+revocation is free, because a service that cannot decide for free cannot be
+asked to decide at all; the priceable classes sell the bulk walk of a chain, which the free `org-seq` and
 `group-seq` give one token at a time.
 
 A priced question is asked on the same BRC-24 `/lookup` route over BRC-104
@@ -1119,15 +1420,15 @@ starts with `0x21`, 33 bytes and `0xac`, then one push (an opcode `0x01` to
 `0x4b`, or `OP_PUSHDATA1`, `2` or `4` with its little-endian length, every
 declared byte present). The output **claims a grant** when that push's data
 starts with a CBOR definite-length map head, `00 44` and `62 6f 6d 01`, **a
-wrap** with `62 6f 77 01`, **an organization token** when the data is exactly
+policy record** with `62 6f 70 01`, **a wrap** with `62 6f 77 01`, **an organization token** when the data is exactly
 `62 6f 01`, **a group token** when it is exactly `62 6f 03`, and it is
 **funding-shaped** when the whole script is `0x21 <33 bytes> 0xac 03 62 6f 02
 75` (`script-v1.json`). A transaction with more than one claiming output, or
 with a claiming output of a carrier kind and one of a token kind, is refused
 (`shape`).
 
-**Grant or wrap carrier.** A transaction whose one claiming output claims a
-grant or a wrap. The owner is the record's `org`:
+**Grant, policy or wrap carrier.** A transaction whose one claiming output
+claims a grant, a policy record or a wrap. The owner is the record's `org`:
 
 1. `shape`: it does not have exactly one input and exactly one output, or the
    output's value differs from the value of the output the input spends (read
@@ -1142,8 +1443,8 @@ grant or a wrap. The owner is the record's `org`:
    strict low-S DER signature followed by the sighash byte `0x41` (bcommon
    `carrier.CheckUnlocking`);
 7. `lock`: the output script is not the well-formed one-field signed PushDrop
-   locked to `derive(owner, k)`, `k` being `grant` for a grant and `record`
-   for a wrap;
+   locked to `derive(owner, k)`, `k` being `grant` for a grant, `policy` for a
+   policy record and `record` for a wrap;
 8. `signature`: the field signature is not strict low-S DER, or does not
    verify over `SHA-256(record)` under that key;
 9. `funding`: the output the input spends, read from the funding tree in the
@@ -1153,7 +1454,10 @@ grant or a wrap. The owner is the record's `org`:
     input's outpoint; `grant-signature` when the certificate's signature does
     not verify (section 5.1); `grant-reveal` when the record carries `reveal`
     and a key does not open its field or a value breaks its rule. A wrap's
-    entries were checked with its record (step 6 of section 3.1).
+    entries, and a policy record's role name, permissions and binding shape,
+    were checked with the record (steps 6 and 7 of section 3.1); a policy
+    record has no rule of its own here, and nothing about what it means is
+    checked (section 5A.5).
 
 Rules 5 to 8 follow bcommon `carrier.Validate`'s order, stricter in rule 8.
 Rules 6 and 9, with the engine's execution of the input's script, make the
@@ -1177,16 +1481,20 @@ claims a token. Its **parent** is the other transaction in its BEEF:
    host's headers;
 8. `token-input`: for `seq > 0`, the parent's txid is not `prev`, or no input
    of the token spends an output of the parent that is a well-formed token of
-   the same kind, hall and organization (and group) at `seq - 1`, or more than
+   the same kind and hall, of the same organization (its `org` equal to this
+   record's, or naming it as its `successor`, section 3.4) and of the same
+   group, at `seq - 1`, or more than
    one input spends a token output of the parent (an output that classifies
    as a token, well formed or not); for `seq` 0, no input spends
    an output of the parent that is a well-formed funding output locked to
    `derive(org, "chain")`, or an input spends a token output of the parent;
 9. the transition rules against the predecessor (the parent's token output):
    section 4.2 for a group token (`transition`, `rotation`, `count`), and for
-   an organization token `transition` (same hall and organization, the next
-   `seq`, `prev` naming the predecessor's transaction, the same `opaque`) and
-   `count` (the predecessor's `count` plus `admit` less `revoke`).
+   an organization token `transition` (same hall, the next `seq`, `prev`
+   naming the predecessor's transaction, the same `opaque`, an `org` equal to
+   the predecessor's or named by its `successor`, section 3.4) and `count`
+   (the predecessor's `count` plus `admit` less `revoke`, and the
+   predecessor's `policyCount` plus `define` less `retire`).
 
 A **well-formed** token output, here and wherever a predecessor is read, is
 one that classifies as a token of its kind (its tag), is a PushDrop of
@@ -1248,7 +1556,8 @@ once.
 
 The lookup service keeps, per hall and organization: the tokens of each
 chain by `seq` (up to 8 per `seq`); the grants by commitment and by subject;
-the wraps by group, epoch and recipient; and one **outpoint row** per funding
+the policy records by commitment, by role and by what they are bound to; the
+wraps by group, epoch and recipient; and one **outpoint row** per funding
 outpoint any admitted carrier spends, holding the commitments of the carriers
 on it, which of them is the outpoint's **winner** (the lowest `C`, compared
 as 32 bytes in hash byte order), whether the winner was dropped, and the
@@ -1263,30 +1572,32 @@ order (the first that applies):
 | `held` | otherwise |
 
 The `roll` and `member` classes answer every grant carrier whose commitment
-the roll holds, whatever its status, so that a reader verifying the roll root
-sees each and checks its status itself. Otherwise a held carrier is answered
+the roll holds, and the `policy`, `role` and `bound` classes every policy
+carrier whose commitment the policy set holds, whatever its status, so that a
+reader verifying the root sees each and checks its status itself. Otherwise a held carrier is answered
 and a retracted or superseded one is not. Up to 8 superseded wrap carriers
 per outpoint are kept as evidence that the owner equivocated; the rest are
-counted and MUST be dropped. Superseded grant carriers are kept, up to 64 per
+counted and MUST be dropped. Superseded grant and policy carriers are kept, up to 64 per
 outpoint, until the outpoint is swept, because a later organization token may
-name any of them in its roll; beyond 64 the organization has equivocated at a
+name any of them in its roll or its policy set; beyond 64 the organization has equivocated at a
 scale no host follows.
 
 The index folds each chain from `seq` 0 along the spends it holds and records
 per token: `pending` while its predecessor is not held (a token admitted out
-of order, or met first on restore); `roll-mismatch` or `members-mismatch`
-when the fold breaks (sections 3.2 and 4.3); `commitment-reuse` when a group
+of order, or met first on restore); `roll-mismatch`, `policy-mismatch` or
+`members-mismatch` when the fold breaks (sections 3.2, 3.3 and 4.3);
+`commitment-reuse` when a group
 token's new epoch repeats an earlier epoch's commitment; and
 `rejoin-unrotated` when a group token adds a key an earlier token of the
 group removed without beginning an epoch (section 4.2). A token gets the
 first that applies, in this order: `members-mismatch` (and
-`roll-mismatch` for an organization) is sticky, so every later token of the
-chain has it too; then `commitment-reuse`; then `rejoin-unrotated`; else the
+`roll-mismatch`, then `policy-mismatch`, for an organization) is sticky, so
+every later token of the chain has it too; then `commitment-reuse`; then `rejoin-unrotated`; else the
 token is consistent. `pending` is not a fold result but the host's state
 while it lacks a predecessor, and a reader that holds the whole chain never
 sees it. The answers of
-`roll`, `member` and `member-of` use the fold of the highest token whose fold
-is complete (no `pending` token below it), so a reader that compares the
+`roll`, `member`, `member-of`, `policy`, `role` and `bound` use the fold of
+the highest token whose fold is complete (no `pending` token below it), so a reader that compares the
 answer with the latest token sees the gap; with several such candidates the host uses the one that verifies in its
 headers, or, if it cannot tell, the first-mined candidate (lower height, then
 lower position in its block), and a reader decides.
@@ -1302,6 +1613,9 @@ How long a host keeps what it no longer answers is its policy, with floors:
   bounded table of section 11.1 only;
 - a grant while the roll holds it, and at least 31 days after it leaves the
   roll or is retracted;
+- a policy record while the policy set holds it, and at least 31 days after
+  it leaves the set or is retracted: a service that has to answer for a
+  decision it made needs the record the decision rested on;
 - the wraps of each group's current epoch, and those of an earlier epoch at
   least 31 days after the host first saw the token that ended it. A member
   keeps the keys it opened (section 6.4); a longer retention is what a host
@@ -1436,7 +1750,10 @@ the one that runs by spends from the first-mined `seq` 0 token (lower height,
 then lower position in its block). Its highest token is the organization's
 latest. A reader that holds an earlier latest token checks that the new one
 descends from it (`org-seq` back to it), so that a host cannot answer an old
-state as the latest. Whether a token is the latest is settled the way a
+state as the latest. Where the chain changes its `org` the reader checks that
+the predecessor named that key as its `successor` (section 3.4); the
+organization's current key is the latest token's `org`, and its key history
+is the sequence of `org` values along the chain. Whether a token is the latest is settled the way a
 writer settles it (section 6.5): its 1-satoshi output is unspent according
 to a source that indexes spends. A reader without such a source trusts the
 highest `seq` any asked host answers, asks more than one, and says that its
@@ -1488,6 +1805,23 @@ of an epoch after `e` names `K`. The last is the absence of an answer, so it
 is evidence and not proof; what makes the removal cryptographic is that the
 key of epoch `e + 1` is fresh and wrapped only to the members the root names.
 
+**What may `K` do?** Ask for the policy records that could carry the
+permission in question: `role` for the role `K`'s grant names, `bound` for
+`K`, and `bound` for each group the `member-of` answer gives. Verify each
+answered carrier and its inclusion path against the latest token's `policy`
+root; without a path that verifies, ask `policy` (all pages), verify every
+record and compute the root, and a mismatch means the host withheld or added
+one, so ask another host. Then compute the effective set (section 5A.4) and
+match the asked permission (section 5A.3).
+
+Every input of that answer is checked against the reader's own headers, so a
+service decides from the chain and not from a host's word. It **fails
+closed**: a service that cannot settle which token is the latest, or cannot
+say that the subject's grant is current, denies. Nothing is cached as an
+allow beyond the freshness the service itself states (section 16.18), and the
+asked permission carries no `*`. bcommon `authz` is this procedure, and
+writes the signed receipt that says what it decided and over which `seq`.
+
 **Rotation debt.** A group of the organization whose latest members include a
 key that is not a current member of the organization now (the two checks
 above). Anyone can compute it;
@@ -1505,8 +1839,13 @@ newer token detectable.
 | Organization record, encoded | 8192 bytes | 64 admitted and 64 revoked commitments take about 4.2 KB |
 | Group record, encoded | 8192 bytes | 64 added and 64 removed keys take about 4.3 KB |
 | Grant record, encoded | 4096 bytes | a revealed grant is about 850 bytes |
+| Policy record, encoded | 8192 bytes | 24 permissions of full length take about 6.1 KB |
+| Permissions per policy record | 24 | bounds one record and one role's reach; a role that needs more is several roles, or one prefix |
+| Permission, encoded | 256 bytes | the grammar's longest permission is 243 bytes (section 5A.2) |
+| Policy records in a set | 65536 | bounds the set's fold, as the roll's bound does |
+| Role name | 64 bytes | the size of the grant's `role` field, which names it |
 | Wrap record, encoded | 4096 bytes | 16 entries take about 3.1 KB |
-| Changes per transition (`admit`, `revoke`, `add`, `remove`), each | 64 | bounds one token and the index work it causes; a larger change is several transitions |
+| Changes per transition (`admit`, `revoke`, `define`, `retire`, `add`, `remove`), each | 64 | bounds one token and the index work it causes; a larger change is several transitions |
 | Grants in a roll | 65536 | bounds a roll's fold |
 | Members of a group | 1024 | BRC-369 section 8.3: the linear release serves groups of a few hundred |
 | Entries per wrap record | 16 | a carrier of 16 entries is about 6 packets |
@@ -1540,7 +1879,7 @@ a client MUST respect it.
 | Certificate custody | BRC-169 section 4.6; BRC-100 `acquireCertificate` | none |
 | Epoch key sampling, symmetric key, commitment | BRC-369 sections 2.1 and 2.2 (digest form) | adopted verbatim; the point form and split keys (section 6.4) are not used |
 | Epochs, rotation on removal, `previous` link, linear release | BRC-369 section 8 ("A room MUST begin a new epoch whenever a participant ceases to satisfy its gate"; "linear in the number of participants") | the epoch descriptor is the group record of the token that begins the epoch, in CBOR, signed by the token's field signature under the organization's derived key rather than JSON signed by the identity key (a BRC-100 wallet cannot sign with its identity key); its id is SHA-256 of the record; `previous` is the chain's `prev` and `epochSeq`; rotation on removal is enforced by every host, not only by the releaser |
-| The release and its derivation | BRC-369 section 5.2 (`[2, "keyed content release"]`, key id `SHA-256(content id || epoch)`); BRC-78 serialization; BRC-2 symmetric form; BRC-42 and BRC-43 | the wraps ride the plane in a record of up to 16, not one message per recipient to a messagebox; version bytes as both SDKs write them, not as BRC-369's vector writes them |
+| The release and its derivation | BRC-369 section 5.2 (`[2, "keyed content release"]`, key id `SHA-256(content id \|\| epoch)`); BRC-78 serialization; BRC-2 symmetric form; BRC-42 and BRC-43 | the wraps ride the plane in a record of up to 16, not one message per recipient to a messagebox; version bytes as both SDKs write them, not as BRC-369's vector writes them |
 | Checking a released key | BRC-369 section 5.3 (check 2, the commitment) | check 1 (ciphertext hash) and 3 (the tag) belong to each application's content |
 | Releaser | BRC-369 section 6.2 (the publisher as its own releaser) | delegated releasers (section 6.1) are not in this version |
 | Group key agreement | BRC-369 section 11 ("Tree-based rekeying ... needs a group key agreement specification"); RFC 9420 | linear, as BRC-369 section 8.3; the group chain settles which change applies at each step, the ordering RFC 9420 leaves to its delivery service, without a server |
@@ -1553,6 +1892,11 @@ a client MUST respect it.
 | Host discovery | BRC-88 SHIP | a chain is joined by replay, each token's BEEF assembled by the replayer, not by an unordered synchronization (section 11.6) |
 | Priced questions | BRC-105 over BRC-103 and BRC-104; BRC-29; BRC-180 rule 2 | only the bulk history classes are priceable; the payment's output index and script are fixed here, where BRC-105 leaves them to the implementation |
 | Carrier ancestry and proofs | BRC-62, BRC-96 and BRC-95 BEEF; BRC-74 BUMP | exactly what the object needs, so nobody can attach anything to it; a chain token carries its proven parent in a BEEF V1 or V2, which Atomic BEEF cannot |
+| Authority named in a record the organization's chain commits to, evaluated by the service that enforces it | BRC-52 and BRC-169 section 9 (authority in a certificate, scoped, expiring and revocable); BRC-100's permission tokens, a wallet's record of what an application may ask of it | the corpus binds authority to a certificate the subject holds, so changing it reissues certificates; here the certificate names a role and the chain carries what the role may do, so authority changes in one transition and every decision can name the `seq` it rested on |
+| Permission as `service` / `action` / `resource` with a prefix wildcard | the shape policy languages settle on | borg fixes the syntax and leaves each service its own actions and resources; there are no deny rules, no precedence and no inheritance, so an evaluator has nothing to get wrong (section 5A.4) |
+| Roles bound to groups, not only to subjects | relationship-based authorization (Zanzibar and its successors) rather than classic role-based access control | the relationship is a group chain whose membership is already ordered, certified and revocable, so a binding needs no store of its own and a removal already rotates the key |
+| A binding attenuates its role | BRC-169 section 9.2's scope, read fail-closed | the attenuation is the intersection with the definition, so a binding can never widen a role |
+| Key succession announced one token ahead | no BRC fixes a mechanism; the common shape is a successor announced under the old key and claimed under the new | both keys sign one transaction, because only the predecessor can spend the announcing token's output and only the successor can sign the claiming record, and a host checks the handover from two transactions' bytes |
 | Objects on the plane | BRC-148 and BRC-149 | none |
 
 The BRC-52 certificate verifier and the BRC-369 release code (wrapping an
@@ -1613,6 +1957,34 @@ key (`keyed`). borg pins bcommon v0.23.0 in both languages.
     unlocking scripts are not held to one form, so a miner can mine a copy
     with another txid. The transition is the same, but the organization must
     rebuild its next transition on the copy's txid.
+15. **Succession does not carry custody.** A handover moves the chain, the
+    roll, the policy set and the groups to the successor's key, and it
+    rotates every group's epoch (section 3.4). It does not move the carriers
+    the predecessor issued or the funding trees whose outputs revoke and
+    retire them: until the successor reissues them on its own trees, every
+    revocation and every retirement still needs the predecessor's key. A key
+    that is lost or compromised before it announces a successor cannot hand
+    over at all.
+16. **Policy is public.** Roles, their permissions and every binding are in
+    the clear on the hall, so anyone following the topic learns an
+    organization's structure: which roles exist, what they may do, and which
+    groups and keys hold them. The opaque setting hides a grant's fields, not
+    the policy set.
+17. **No deny rules.** A permission is held or it is not; nothing subtracts,
+    and there is no precedence to reason about. So a binding published by
+    mistake stays effective until it is retired, its subject's grant is
+    revoked, its subject leaves the group, or it expires, and each of those
+    takes a mined transaction that hosts and services have seen.
+18. **A decision is as fresh as what the service asked.** Permissions rest on
+    an unspent revocation outpoint and on which token is the latest, and
+    neither is provable by SPV (point 7). A service that caches a decision
+    owns that staleness; the receipt it writes names the `seq` it used, which
+    is what makes the staleness auditable rather than invisible.
+19. **Policy is not a capability.** A role is not a bearer token: nothing in
+    a grant or a binding lets a party prove offline what it may do, because
+    what a role may do is in the organization's chain and can change without
+    touching the grant. A service with no path to a host and to its headers
+    cannot decide, and denies.
 
 ## 17. Vectors
 
@@ -1633,18 +2005,21 @@ both directions).
 
 | File | What it holds |
 | --- | --- |
-| `derivation-v1.json` | the registry values; the test identities; the keys each derives for `org`, `group`, `record`, `grant` and `chain` under counterparty anyone, checked against the owner's own wallet; the SDK's refusal of `[1, "borg"]`; the grant type; halls with one readable part and two suffixes, and one suffix drawn from fixed bytes |
+| `derivation-v1.json` | the registry values; the test identities; the keys each derives for `org`, `group`, `record`, `grant`, `policy` and `chain` under counterparty anyone, checked against the owner's own wallet; the SDK's refusal of `[1, "borg"]`; the grant type; halls with one readable part and two suffixes, and one suffix drawn from fixed bytes |
 | `epoch-v1.json` | BRC-369's vector reproduced (symmetric key, commitment, release key id and invoice, the release payload opened with its listed shared secret, and its version bytes, which borg refuses); the scenario's three epoch keys with their symmetric keys, commitments, epoch ids and release key ids |
-| `org-v1.json`, `org-*.hex` | the organization's genesis (three grants), the offboarding (one revoked) and an opaque organization's genesis, with their roll roots; the transition admitted, refusals of each transition rule, and a `member` answer's inclusion context that verifies for one grant and not for another |
-| `group-v1.json`, `group-*.hex` | a group's create, add, remove and scheduled rotation, with members after each, epoch ids and commitments; every transition admitted, refusals of each transition rule against its predecessor, a join with `rotateOnJoin` admitted with its new epoch and refused without it, tokens whose fold breaks (`members-mismatch`), and a removed key re-added with and without a new epoch (`rejoin-unrotated`) |
+| `org-v1.json`, `org-*.hex` | the organization's genesis (three grants), the offboarding (one revoked) and an opaque organization's genesis, with their roll roots; the transition admitted, refusals of each transition rule, and a `member` answer's inclusion context that verifies for one grant and not for another; a genesis whose policy set is empty and one that defines its whole set, a transition that defines and retires, and a handover: a token announcing a `successor` and the next token carrying that key, with the refusal of a token whose `org` changed unannounced |
+| `group-v1.json`, `group-*.hex` | a group record naming a `successor`, the handover admitted and the unannounced change of `org` refused; a group's create, add, remove and scheduled rotation, with members after each, epoch ids and commitments; every transition admitted, refusals of each transition rule against its predecessor, a join with `rotateOnJoin` admitted with its new epoch and refused without it, tokens whose fold breaks (`members-mismatch`), and a removed key re-added with and without a new epoch (`rejoin-unrotated`) |
 | `grant-v1.json`, `grant-*.hex` | four grants (three revealed, one opaque) with their values in the clear, the stand-in revelation keys and IVs, the ciphertexts, the keyring, the BRC-52 binary form signed and the signature; each member opens its own and another member cannot |
 | `wrap-v1.json`, `wrap-*.hex` | the four wrap records of the scenario with each entry's IV, and what each member's wallet opens from each, with the check label of each failure: the removed member opens epoch 0 and neither epoch 1 nor epoch 2; a wrap held against another epoch's token fails check 1 |
 | `scope-v1.json` | the scope grammar and its fail-closed meaning case by case; expiry and role cases |
+| `policy-v1.json`, `policy-*.hex` | role definitions and bindings to a group and to a key, with their commitments, the policy set and its root after each transition, and a `role` and a `bound` answer's inclusion context that verifies against the policy root and one that does not; the refusals of each key's rule and of the `binding` cross-field rule; two definitions of one role read as their intersection; a binding whose role nothing defines, and one whose attenuation names a permission its definition does not carry, each contributing nothing |
+| `permission-v1.json` | the permission grammar accepted and refused case by case, the longest permission the grammar allows, and the matching rule of section 5A.3 over exact, `*` and prefix cases, including a prefix that must not match and an asked permission carrying `*`, which is refused |
+| `authz-v1.json` | the effective-permission procedure of section 5A.4 over one organization: a subject with a grant whose role is defined, one whose role is not, one bound through a group, one bound directly, one whose binding has expired, one removed from the group, one whose grant is revoked, and one who was never a member; each with the set it holds and three asked permissions, granted or denied |
 | `refusal-v1.json` | byte strings each record's rules refuse, each with its reason (section 3.1), and the grant's content rules; a record with an unknown key, preserved |
 | `query-v1.json` | every class with its members, price and limit; questions, each with its class or refused |
 | `script-v1.json` | the classifier of section 11.1 over real locking scripts from bcommon's PushDrop, and scripts that claim nothing |
-| `transaction-v1.json` | transactions as BEEF, each with the previous coins it is admitted with, admitted or refused by the rules of section 11.1 in their order: grant and wrap carriers, organization and group tokens (one mined in its parent's block, so its BEEF holds one merged path, and one as BEEF V2), a sweep, and a mined funding tree published alone; refusals of every carrier rule (shape, BEEF, record, hall, mineable, unlock, lock, signature, funding, grant content), every token rule (shape, BEEF, record, hall, lock, signature, unmined, token input, transitions), sweeps and transactions that are not borg's. Every input of every case passes the script interpreter, so each refusal is made by its rule alone; a few cases break two rules and are refused for the earlier. `stored` holds each admitted token as the engine stores it, read back without its parent, and the BEEF a replayer assembles from it (section 11.6), byte for byte the one first admitted |
-| `index-v1.json` | the index's rules of section 11.2: the chains of `transaction-v1.json` folded, chains whose fold breaks (`roll-mismatch`, `members-mismatch`, `commitment-reuse`, `rejoin-unrotated`), and funding-outpoint rows with each carrier's status |
+| `transaction-v1.json` | transactions as BEEF, each with the previous coins it is admitted with, admitted or refused by the rules of section 11.1 in their order: grant and wrap carriers, organization and group tokens (one mined in its parent's block, so its BEEF holds one merged path, and one as BEEF V2), a sweep, and a mined funding tree published alone; refusals of every carrier rule (shape, BEEF, record, hall, mineable, unlock, lock, signature, funding, grant content), every token rule (shape, BEEF, record, hall, lock, signature, unmined, token input, transitions), a policy carrier admitted and one refused for its funding key, a handover token admitted, sweeps and transactions that are not borg's. Every input of every case passes the script interpreter, so each refusal is made by its rule alone; a few cases break two rules and are refused for the earlier. `stored` holds each admitted token as the engine stores it, read back without its parent, and the BEEF a replayer assembles from it (section 11.6), byte for byte the one first admitted |
+| `index-v1.json` | the index's rules of section 11.2: the chains of `transaction-v1.json` folded, chains whose fold breaks (`roll-mismatch`, `policy-mismatch`, `members-mismatch`, `commitment-reuse`, `rejoin-unrotated`), and funding-outpoint rows with each carrier's status |
 
 The vectors' hall is `example_hall_vkqzmtrwxp`; its suffix is a fixed example
 so that the vectors are reproducible. The test identities' private keys are 32
@@ -1652,7 +2027,8 @@ bytes of one value (`0x51` the organization, `0x52` to `0x54` the members,
 `0x55` a second, opaque organization, `0x56` a key that is never a member);
 they are public and never for real use. Every value a client draws at random
 (epoch keys, field revelation keys, IVs, serial numbers, the group id) is a
-fixed stand-in, `SHA-256("borg/vector/<label>")`. The record vectors use
+fixed stand-in, `SHA-256("borg/vector/<label>")`. The successor identity's
+private key is 32 bytes of `0x57`. The record vectors use
 stand-ins of the same form for the commitments and txids of grant carriers
 and mined tokens; `transaction-v1.json` builds real ones on a test chain whose
 headers it lists. Signatures are deterministic (RFC 6979).

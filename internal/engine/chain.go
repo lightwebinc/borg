@@ -335,7 +335,8 @@ func (e *Engine) CreateOrg(ctx context.Context, orgKey *ec.PrivateKey, hall, nam
 		}
 		admit = append(admit, g)
 	}
-	rec := &borgrec.Org{Hall: hall, Org: e.OrgKey(), Seq: 0, Name: name, Opaque: opaque, Created: e.created()}
+	rec := &borgrec.Org{Hall: hall, Org: e.OrgKey(), Seq: 0, Name: name, Opaque: opaque, Created: e.created(),
+		Policy: borgrec.PolicyRoot(nil)}
 	for _, g := range admit {
 		c, _ := hex.DecodeString(g.Commitment)
 		rec.Admit = append(rec.Admit, [32]byte(c))
@@ -409,7 +410,8 @@ func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant
 	for _, c := range f.Roll() {
 		roll[c] = true
 	}
-	rec := &borgrec.Org{Hall: o.Hall, Org: e.OrgKey(), Seq: pred.Seq + 1, Prev: hashOf(last.Txid), Name: o.Name, Opaque: o.Opaque, Created: e.created()}
+	rec := &borgrec.Org{Hall: o.Hall, Org: e.OrgKey(), Seq: pred.Seq + 1, Prev: hashOf(last.Txid), Name: o.Name, Opaque: o.Opaque, Created: e.created(),
+		PolicyCount: pred.PolicyCount, Policy: pred.Policy}
 	for _, g := range revoke {
 		c := hashOfHex(g.Commitment)
 		if !roll[c] {

@@ -43,6 +43,10 @@ var OrgOpaque = party("org-opaque", 0x55)
 
 var members = []Party{Alice, Bob, Carol}
 
+// emptyPolicy is the policy root of an organisation that has published no
+// policy record: the RFC 6962 root of nothing, never the zero value.
+var emptyPolicy = borgrec.PolicyRoot(nil)
+
 func byName(name string) Party {
 	for _, p := range append(members, Org, OrgOpaque) {
 		if p.Name == name {
@@ -120,9 +124,10 @@ func Build() (*Scenario, error) {
 	kept := sorted32(s.Commit["alice"], s.Commit["carol"])
 	s.Orgs = []*borgrec.Org{
 		{Hall: Hall, Org: Org.Pub(), Seq: 0, Name: "Example Organisation", Admit: all,
-			Count: 3, Roll: borgrec.RollRoot(all), Created: Created},
+			Count: 3, Roll: borgrec.RollRoot(all), Created: Created, Policy: emptyPolicy},
 		{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: label("txid/org/0"), Name: "Example Organisation",
-			Revoke: [][32]byte{s.Commit["bob"]}, Count: 2, Roll: borgrec.RollRoot(kept), Created: Created + 7200},
+			Revoke: [][32]byte{s.Commit["bob"]}, Count: 2, Roll: borgrec.RollRoot(kept), Created: Created + 7200,
+			Policy: emptyPolicy},
 	}
 	for i, o := range s.Orgs {
 		rec, err := o.Encode()
@@ -137,7 +142,8 @@ func Build() (*Scenario, error) {
 	}
 	ocommit := label("commitment/grant/org-opaque/alice")
 	s.OpaqueOrg = &borgrec.Org{Hall: Hall, Org: OrgOpaque.Pub(), Name: "Opaque Organisation",
-		Admit: [][32]byte{ocommit}, Count: 1, Roll: borgrec.RollRoot([][32]byte{ocommit}), Opaque: true, Created: Created}
+		Admit: [][32]byte{ocommit}, Count: 1, Roll: borgrec.RollRoot([][32]byte{ocommit}), Opaque: true,
+		Created: Created, Policy: emptyPolicy}
 	if s.OpaqueRaw, err = s.OpaqueOrg.Encode(); err != nil {
 		return nil, err
 	}

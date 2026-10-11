@@ -13,6 +13,7 @@ const (
 	StatusConsistent      = "consistent"
 	StatusPending         = "pending"
 	StatusRollMismatch    = "roll-mismatch"
+	StatusPolicyMismatch  = "policy-mismatch"
 	StatusMembersMismatch = "members-mismatch"
 	StatusCommitmentReuse = "commitment-reuse"
 	StatusRejoinUnrotated = "rejoin-unrotated"
@@ -29,17 +30,23 @@ const (
 // token. Once a token breaks the fold the chain is unusable from it on, and
 // every later token reports the same status.
 type OrgFold struct {
-	roll   map[[32]byte]bool
-	broken bool
+	roll         map[[32]byte]bool
+	policy       map[[32]byte]bool
+	broken       bool
+	policyBroken bool
 }
 
 // NewOrgFold starts a fold before seq 0.
-func NewOrgFold() *OrgFold { return &OrgFold{roll: map[[32]byte]bool{}} }
+func NewOrgFold() *OrgFold {
+	return &OrgFold{roll: map[[32]byte]bool{}, policy: map[[32]byte]bool{}}
+}
 
 // Apply folds the next token (the caller supplies them in seq order along
 // spends) and returns its status: roll-mismatch when it revokes a commitment
 // the roll does not hold, admits one it already holds, or does not reproduce
-// count and roll; consistent otherwise.
+// count and roll; policy-mismatch when the same happens to the policy set;
+// consistent otherwise. Both are sticky, and the roll is reported first, so
+// a chain that breaks once reports the same status from there on.
 func (f *OrgFold) Apply(o *Org) string {
 	if f.broken {
 		return StatusRollMismatch
@@ -62,7 +69,38 @@ func (f *OrgFold) Apply(o *Org) string {
 		f.broken = true
 		return StatusRollMismatch
 	}
+	if f.policyBroken {
+		return StatusPolicyMismatch
+	}
+	for _, c := range o.Retire {
+		if !f.policy[c] {
+			f.policyBroken = true
+			return StatusPolicyMismatch
+		}
+		delete(f.policy, c)
+	}
+	for _, c := range o.Define {
+		if f.policy[c] {
+			f.policyBroken = true
+			return StatusPolicyMismatch
+		}
+		f.policy[c] = true
+	}
+	if uint64(len(f.policy)) != o.PolicyCount || PolicyRoot(f.Policy()) != o.Policy {
+		f.policyBroken = true
+		return StatusPolicyMismatch
+	}
 	return StatusConsistent
+}
+
+// Policy is the policy set after the last token folded, ascending.
+func (f *OrgFold) Policy() [][32]byte {
+	out := make([][32]byte, 0, len(f.policy))
+	for c := range f.policy {
+		out = append(out, c)
+	}
+	sortCommitments(out)
+	return out
 }
 
 // Roll is the roll after the last token folded, ascending.

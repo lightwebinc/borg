@@ -48,7 +48,7 @@ import {
 } from './borgrec.js'
 import { tokenBEEF } from './beef.js'
 import { commitmentOf, epochID, releaseKeyIDString } from './epoch.js'
-import { membersRoot, rollRoot } from './merkle.js'
+import { membersRoot, policyRoot, rollRoot } from './merkle.js'
 import { fundingScript, pushDropScript } from './script.js'
 import { concat, displayTxid, fromHex, toBase64, toHex } from './util.js'
 
@@ -225,6 +225,11 @@ export async function generate(): Promise<string> {
     roll: rollRoot(commits),
     opaque: false,
     created: t0,
+    define: [],
+    retire: [],
+    policyCount: 0,
+    policy: policyRoot([]),
+    successor: null,
     extra: [{ key: 40n, val: new CborMap([{ key: 'later', val: true }]) }],
   })
   const token = async (tag: Uint8Array, rec: Uint8Array, id: string, inputs: Array<{ src: Transaction; vout: number; id: string }>, extraSats: number): Promise<Transaction> => {
@@ -259,6 +264,11 @@ export async function generate(): Promise<string> {
     roll: rollRoot([cA]),
     opaque: false,
     created: t0 + 3600,
+    define: [],
+    retire: [],
+    policyCount: 0,
+    policy: policyRoot([]),
+    successor: null,
     extra: [],
   })
   const org1 = await token(TagOrg, o1, KeyOrg, [{ src: org0, vout: 0, id: KeyOrg }, { src: coin, vout: 0, id: 'fee' }], 20000 + 1 - 1 - 400)
@@ -284,6 +294,7 @@ export async function generate(): Promise<string> {
     rotateOnJoin: true,
     rotateEvery: 604800,
     created: t0 + 60,
+    successor: null,
     extra: [],
   })
   const group0 = await token(TagGroup, g0, KeyGroup, [{ src: chainTree, vout: 1, id: KeyChain }], 1000 - 1 - 300)

@@ -44,6 +44,10 @@ const (
 	// KeyGrant does the same for grant carriers and the trees that fund
 	// them, so that a host can tell a grant's funding from any other.
 	KeyGrant = "grant"
+	// KeyPolicy locks a policy carrier's record output, signs its field, and
+	// locks the outputs of the trees that fund policy records, so that a host
+	// can tell a policy record's funding from a grant's.
+	KeyPolicy = "policy"
 	// KeyChain locks the outputs of the trees that pay for a chain's first
 	// token; no carrier is ever funded under it.
 	KeyChain = "chain"
@@ -83,6 +87,8 @@ var (
 	MagicGroup = []byte{'b', 'o', 'g', 0x01}
 	// MagicGrant is key 0 of a membership grant record: "bo", 'm', version 1.
 	MagicGrant = []byte{'b', 'o', 'm', 0x01}
+	// MagicPolicy is key 0 of a policy record: "bo", 'p', version 1.
+	MagicPolicy = []byte{'b', 'o', 'p', 0x01}
 	// MagicWrap is key 0 of an epoch-key wrap record: "bo", 'w', version 1.
 	MagicWrap = []byte{'b', 'o', 'w', 0x01}
 )
@@ -95,6 +101,7 @@ var (
 	GroupDerivation  = pushdrop.Derivation{Protocol: Protocol, KeyID: KeyGroup}
 	RecordDerivation = pushdrop.Derivation{Protocol: Protocol, KeyID: KeyRecord}
 	GrantDerivation  = pushdrop.Derivation{Protocol: Protocol, KeyID: KeyGrant}
+	PolicyDerivation = pushdrop.Derivation{Protocol: Protocol, KeyID: KeyPolicy}
 	ChainDerivation  = pushdrop.Derivation{Protocol: Protocol, KeyID: KeyChain}
 	FundDerivation   = pushdrop.Derivation{Protocol: Protocol, KeyID: KeyFund}
 
@@ -151,6 +158,11 @@ const (
 	// MaxGrantRecord and MaxWrapRecord bound an encoded carrier record.
 	MaxGrantRecord = 4096
 	MaxWrapRecord  = 4096
+	// MaxPolicyRecord bounds an encoded policy record: 24 permissions of the
+	// grammar's full length take about 6.1 KB.
+	MaxPolicyRecord = 8192
+	// MaxPolicySet bounds the policy records an organisation's set holds.
+	MaxPolicySet = 65536
 	// MaxKeys bounds the entries of a record map, unknown keys included.
 	MaxKeys = 64
 	// MaxRole and MaxScope bound a grant's role and scope, in bytes.
@@ -197,6 +209,9 @@ var (
 	ErrScope      = errors.New("borgrec: scope breaks the grammar")
 	ErrExpiry     = errors.New("borgrec: expiry is not YYYY-MM-DDTHH:MM:SSZ")
 	ErrRole       = errors.New("borgrec: role is not 1 to 64 bytes of text")
+	ErrRoleName   = errors.New("borgrec: role name breaks the grammar")
+	ErrPermission = errors.New("borgrec: permission breaks the grammar")
+	ErrBinding    = errors.New("borgrec: policy record's kind and fields disagree")
 	ErrQuery      = errors.New("borgrec: question is not one of the defined classes")
 )
 
@@ -214,6 +229,7 @@ func Reason(err error) string {
 		{ErrEntry, "entry"}, {ErrRevocation, "grant-revocation"}, {ErrCert, "grant-signature"},
 		{ErrReveal, "grant-reveal"}, {ErrTransition, "transition"}, {ErrRotation, "rotation"},
 		{ErrCount, "count"}, {ErrScope, "scope"}, {ErrExpiry, "expiry"}, {ErrRole, "role"},
+		{ErrRoleName, "role"}, {ErrPermission, "permission"}, {ErrBinding, "binding"},
 		{ErrQuery, "query"}, {ErrToken, "token"}, {ErrUnwrap, "undecryptable"},
 		{ErrScalar, "undecryptable"}, {ErrCommitment, "commitment"},
 		{ErrShape, "shape"}, {ErrBEEF, "beef"}, {ErrMineable, "mineable"}, {ErrUnlock, "unlock"},

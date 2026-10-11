@@ -32,7 +32,11 @@ or a member's client ([usage.md](usage.md)).
 | Groups of an organization | as needed | none in the records; a client lists 4096 a host (64 pages) | Each group is its own chain and costs one chain-tree output and one mined token to begin; the groups do not slow each other | Same |
 | Grants in the roll | as needed | 65536 (the record bound) | The roll is one Merkle root; a member is checked by an inclusion path, the whole roll by reading it | A client reads at most 4096 grants a host (64 pages); a larger roll is checked one member at a time |
 | Grants one key holds in the roll | 1 | 8 | A renewal overlaps the grant it replaces; more is a mistake | Same |
-| Changes per transition (`admit`, `revoke`, `add`, `remove`) | as needed | 64 each (the record bound) | A larger change is several tokens, one block apart | Plane warns above 16 in all (a token and its parent then pass 4 packets); unicast: 64 |
+| Policy records in the set | as needed | 65536 (the record bound) | The set is one Merkle root beside the roll; a role or a binding is checked by an inclusion path | Same |
+| Definitions of one role in the set | 1 | 8, read as their intersection | A second definition of a live role is equivocation; the tooling retires the first in the transition that defines the second | Same |
+| Permissions a role carries | as needed | 24 (the record bound) | A role that needs more is several roles, or one resource prefix | Same |
+| Bindings of one role | as needed | 4096 a client lists (64 pages) | Each binding is its own carrier, so bindings do not slow each other | Same |
+| Changes per transition (`admit`, `revoke`, `define`, `retire`, `add`, `remove`) | as needed | 64 each (the record bound) | A larger change is several tokens, one block apart | Plane warns above 16 in all (a token and its parent then pass 4 packets); unicast: 64 |
 | Transitions per chain | one at a time | one a block | Each token spends the one before it, mined; the next is built only once the previous is proven in the tooling's own headers. Different chains (the organization's, each group's) move in the same block | Same |
 | Propagation delay before publishing a mined token or sweep (`delay`) | 60 s after its block is in the publisher's headers | 0 s to 10 min | A host whose headers lack the block refuses it, and the plane does not deliver it again. So a change is at the hosts about one block and 60 s after it is decided | Plane and unicast; the publisher then confirms by lookup and resubmits |
 | Blocks before publishing wraps | the token's own block | one further block when `signers` is above one | A transition displaced by a reorganization in favor of another instance's must not have released its key | Same |
@@ -41,7 +45,7 @@ or a member's client ([usage.md](usage.md)).
 | Window `org due` and `doctor` look ahead (`-within`) | 30 days | the flag | Long enough to renew a grant before its holder is removed | Same |
 | Funding tree outputs (`tree_count`) | 32 | 1000 | Every carrier's BEEF carries its whole tree, about 49 bytes an output | Plane warns above 100 |
 | Chain tree outputs (`chain_tree_count`) | 8 | 32 | A chain's first token carries its chain tree whole | Same |
-| Trees kept apart | grant, record and chain trees, each under its own key and basket | fixed | A mined spend of a grant's funding output revokes it, so a tree that funds grants funds nothing else | Same |
+| Trees kept apart | grant, policy, record and chain trees, each under its own key and basket | fixed | A mined spend of a grant's funding output revokes it, so a tree that funds grants funds nothing else | Same |
 | Tree minted ahead | one, when 4 outputs are left (half the tree when it has 4 or fewer) | one at a time per kind | The next tree is settled while the last outputs are spent, so a change seldom waits a block for a tree | Same |
 | `object_bound` | 1048576 | 8388608 | BRC-149: 1 MiB on the open path, 8 MiB on an authenticated one; no plane admits more | Plane only |
 
@@ -151,7 +155,7 @@ ride a 1-satoshi funding output and are never mined.
 | group token, 2 added | 744 bytes | 100 sat (75 at the rate) |
 | group token, 16 added | 1,235 bytes | 124 sat |
 | chain funding tree, 8 outputs | 583 bytes | 100 sat (59 at the rate), and 8 sat in its outputs |
-| grant or record funding tree, 32 outputs | 1,759 bytes | 176 sat, and 32 sat in its outputs |
+| grant, policy or record funding tree, 32 outputs | 1,759 bytes | 176 sat, and 32 sat in its outputs |
 
 Sizes are of real transactions built with bcommon (a token with a fee
 input, a predecessor input and change; see below). In practice:

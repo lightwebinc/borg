@@ -56,6 +56,14 @@ export const membersRoot = (keys: Uint8Array[]): Uint8Array => root(sorted(keys)
 /** The roll root: leaves the grant commitments, ascending. */
 export const rollRoot = (commitments: Uint8Array[]): Uint8Array => root(sorted(commitments))
 
+/**
+ * The root an organisation record commits its policy set to, computed
+ * exactly as rollRoot is over the grant commitments. The two roots are
+ * separate so that a change of membership and a change of policy are told
+ * apart, and one chain orders both.
+ */
+export const policyRoot = (commitments: Uint8Array[]): Uint8Array => rollRoot(commitments)
+
 export const MaxPathSteps = 32
 export const MaxContext = 2048
 

@@ -27,7 +27,8 @@ const (
 	GKRotateOnJoin = 14
 	GKRotateEvery  = 15
 	GKCreated      = 16
-	gkLast         = GKCreated
+	GKSuccessor    = 17
+	gkLast         = GKSuccessor
 )
 
 // Group is one group record: the second field of a group chain token. Each
@@ -50,7 +51,8 @@ type Group struct {
 	RotateOnJoin bool             // key 14, adding a member also begins an epoch
 	RotateEvery  uint64           // key 15, seconds; 0 means no schedule
 	Created      uint64           // key 16, Unix seconds, a claim
-	Extra        cbor.Map         // integer keys above 16, preserved and ignored
+	Successor    []byte           // key 17, the key that may carry this chain on; nil is CBOR null
+	Extra        cbor.Map         // integer keys above 17, preserved and ignored
 }
 
 // BeginsEpoch reports whether this token began its epoch.
@@ -99,6 +101,9 @@ func (g *Group) Validate() error {
 		return err
 	}
 	if err := record.InRange(g.Created, 1, MaxTime, "created"); err != nil {
+		return err
+	}
+	if err := checkSuccessor(g.Successor, g.Org); err != nil {
 		return err
 	}
 	return g.cross()
@@ -156,6 +161,7 @@ func (g *Group) Encode() ([]byte, error) {
 		{Key: uint64(GKRotateOnJoin), Val: g.RotateOnJoin},
 		{Key: uint64(GKRotateEvery), Val: g.RotateEvery},
 		{Key: uint64(GKCreated), Val: g.Created},
+		{Key: uint64(GKSuccessor), Val: nullableBytes(g.Successor)},
 	}
 	return record.Encode(m, g.Extra, MaxGroupRecord)
 }
@@ -229,6 +235,12 @@ func DecodeGroup(p []byte) (*Group, error) {
 	if g.Created, err = f.Uint(GKCreated, 1, MaxTime); err != nil {
 		return nil, err
 	}
+	if g.Successor, err = f.nullableBytes(GKSuccessor); err != nil {
+		return nil, err
+	}
+	if err := checkSuccessor(g.Successor, g.Org); err != nil {
+		return nil, err
+	}
 	if err := g.cross(); err != nil {
 		return nil, err
 	}
@@ -245,9 +257,12 @@ func CheckGroupTransition(prev *Group, prevTxid [32]byte, next *Group) error {
 	if next.Seq == 0 {
 		return fmt.Errorf("%w: seq 0 spends no token", ErrTransition)
 	}
-	if next.Hall != prev.Hall || !bytes.Equal(next.Org, prev.Org) || next.Group != prev.Group ||
+	if next.Hall != prev.Hall || next.Group != prev.Group ||
 		next.Seq != prev.Seq+1 || next.Prev != prevTxid {
 		return fmt.Errorf("%w: not the successor of the token spent", ErrTransition)
+	}
+	if err := checkHandover(prev.Org, prev.Successor, next.Org); err != nil {
+		return err
 	}
 	mustRotate := len(next.Remove) > 0 || (prev.RotateOnJoin && len(next.Add) > 0)
 	switch next.Epoch {

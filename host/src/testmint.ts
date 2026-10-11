@@ -50,7 +50,7 @@ import {
 } from './borgrec.js'
 import { tokenBEEF } from './beef.js'
 import { commitmentOf, epochID, releaseKeyIDString } from './epoch.js'
-import { membersRoot, rollRoot } from './merkle.js'
+import { membersRoot, policyRoot, rollRoot } from './merkle.js'
 import { fundingScript, pushDropScript } from './script.js'
 import { concat, displayTxid, fromHex, toBase64, toHex } from './util.js'
 
@@ -364,6 +364,11 @@ export class OrgSim {
       roll: rollRoot(roll),
       opaque: this.opts.opaque === true,
       created: t0 + seq * 600,
+      define: [],
+      retire: [],
+      policyCount: 0,
+      policy: policyRoot([]),
+      successor: null,
       extra: [],
     }
     o.mutate?.(rec)
@@ -455,6 +460,7 @@ export class GroupSim {
       rotateOnJoin: this.rotateOnJoin,
       rotateEvery: 0,
       created: t0 + 60 + seq * 600,
+      successor: null,
       extra: [],
     }
     mutate?.(rec)

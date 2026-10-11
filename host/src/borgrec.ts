@@ -58,6 +58,7 @@ export const GroupIDLen = 16
 export const MaxName = 64
 export const MaxDelta = 64
 export const MaxRoll = 65536
+export const MaxPolicySet = 65536
 export const MaxMembers = 1024
 export const MaxEntries = 16
 export const MaxOrgRecord = 8192
@@ -256,6 +257,41 @@ function listKeys(f: Fields, k: number, max: number): Uint8Array[] {
   return out
 }
 
+/**
+ * Key k as a byte string or as CBOR null, which this codec reads as absent.
+ * The key itself is required: a record that leaves it out is 'missing', so
+ * every record writes every key this version defines.
+ */
+function nullableBytes(f: Fields, k: number): Uint8Array | null {
+  const v = need(f, k)
+  if (v === null) return null
+  if (!(v instanceof Uint8Array)) throw new Refusal('type', `key ${k}`)
+  return v
+}
+
+/**
+ * The successor rule of both chain records (spec section 3.4): null, or an
+ * identity key that is neither the anyone key nor the key it would succeed.
+ */
+function checkSuccessor(successor: Uint8Array | null, own: Uint8Array): void {
+  if (successor === null) return
+  checkIdentity(successor)
+  if (isAnyone(successor) || bytesEqual(successor, own)) {
+    throw new Refusal('identity', 'a successor that is the anyone key or the key it succeeds')
+  }
+}
+
+/**
+ * The succession rule both chains follow: a token carries its predecessor's
+ * organisation key, or the key that predecessor named as its successor and
+ * no other.
+ */
+function checkHandover(prevOrg: Uint8Array, prevSuccessor: Uint8Array | null, nextOrg: Uint8Array): void {
+  if (bytesEqual(nextOrg, prevOrg)) return
+  if (prevSuccessor !== null && bytesEqual(nextOrg, prevSuccessor)) return
+  throw new Refusal('transition', 'the organisation key changed without the predecessor naming it')
+}
+
 const zero32 = (b: Uint8Array): boolean => b.every((x) => x === 0)
 const has = (list: Uint8Array[], x: Uint8Array): boolean => list.some((y) => bytesEqual(x, y))
 
@@ -281,17 +317,26 @@ export interface Org {
   roll: Uint8Array
   opaque: boolean
   created: number
+  /** The policy set, beside the roll and on the same chain. */
+  define: Uint8Array[]
+  retire: Uint8Array[]
+  policyCount: number
+  policy: Uint8Array
+  /** The key that may carry the chain on; null is CBOR null. */
+  successor: Uint8Array | null
   extra: Pair[]
 }
 
 function orgCross(o: Org): void {
   for (const a of o.admit) if (has(o.revoke, a)) throw new Refusal('list', 'a grant both admitted and revoked')
   if ((o.seq === 0) !== zero32(o.prev)) throw new Refusal('chain', 'prev is zero exactly at seq 0')
+  for (const d of o.define) if (has(o.retire, d)) throw new Refusal('list', 'a policy record both defined and retired')
   if (o.seq === 0 && (o.revoke.length !== 0 || o.count !== o.admit.length)) throw new Refusal('count', 'the first token admits its whole roll')
+  if (o.seq === 0 && (o.retire.length !== 0 || o.policyCount !== o.define.length)) throw new Refusal('count', 'the first token defines its whole policy set')
 }
 
 export function decodeOrg(b: Uint8Array): Org {
-  const f = decodeRecord(b, MaxOrgRecord, 11, MagicOrg)
+  const f = decodeRecord(b, MaxOrgRecord, 16, MagicOrg)
   const hall = text(f, 1)
   checkHall(hall)
   const org = bytesN(f, 2, -1)
@@ -306,7 +351,13 @@ export function decodeOrg(b: Uint8Array): Org {
   const roll = bytesN(f, 9, 32)
   const opaque = bool(f, 10)
   const created = uint(f, 11, 1, MaxTime)
-  const o: Org = { hall, org, seq, prev, name, admit, revoke, count, roll, opaque, created, extra: f.extra }
+  const define = list32(f, 12, MaxDelta)
+  const retire = list32(f, 13, MaxDelta)
+  const policyCount = uint(f, 14, 0, MaxPolicySet)
+  const policy = bytesN(f, 15, 32)
+  const successor = nullableBytes(f, 16)
+  checkSuccessor(successor, org)
+  const o: Org = { hall, org, seq, prev, name, admit, revoke, count, roll, opaque, created, define, retire, policyCount, policy, successor, extra: f.extra }
   orgCross(o)
   return o
 }
@@ -326,10 +377,15 @@ export function encodeOrg(o: Org): Uint8Array {
       { key: 9n, val: o.roll },
       { key: 10n, val: o.opaque },
       { key: 11n, val: k(o.created) },
+      { key: 12n, val: o.define },
+      { key: 13n, val: o.retire },
+      { key: 14n, val: k(o.policyCount) },
+      { key: 15n, val: o.policy },
+      { key: 16n, val: o.successor },
     ],
     o.extra,
     MaxOrgRecord,
-    11,
+    16,
   )
   decodeOrg(b)
   return b
@@ -342,11 +398,13 @@ export function encodeOrg(o: Org): Uint8Array {
  */
 export function checkOrgTransition(prev: Org, prevTxid: Uint8Array, next: Org): void {
   if (next.seq === 0) throw new Refusal('transition', 'seq 0 spends no token')
-  if (next.hall !== prev.hall || !bytesEqual(next.org, prev.org) || next.seq !== prev.seq + 1 || !bytesEqual(next.prev, prevTxid)) {
+  if (next.hall !== prev.hall || next.seq !== prev.seq + 1 || !bytesEqual(next.prev, prevTxid)) {
     throw new Refusal('transition', 'not the successor of the token spent')
   }
+  checkHandover(prev.org, prev.successor, next.org)
   if (next.opaque !== prev.opaque) throw new Refusal('transition', 'opaque is fixed at the first token')
   if (prev.count + next.admit.length - next.revoke.length !== next.count) throw new Refusal('count')
+  if (prev.policyCount + next.define.length - next.retire.length !== next.policyCount) throw new Refusal('count')
 }
 
 // ---- the group record ----
@@ -368,6 +426,8 @@ export interface Group {
   rotateOnJoin: boolean
   rotateEvery: number
   created: number
+  /** The key that may carry this group's chain on; null is CBOR null. */
+  successor: Uint8Array | null
   extra: Pair[]
 }
 
@@ -383,7 +443,7 @@ function groupCross(g: Group): void {
 }
 
 export function decodeGroup(b: Uint8Array): Group {
-  const f = decodeRecord(b, MaxGroupRecord, 16, MagicGroup)
+  const f = decodeRecord(b, MaxGroupRecord, 17, MagicGroup)
   const hall = text(f, 1)
   checkHall(hall)
   const org = bytesN(f, 2, -1)
@@ -403,7 +463,9 @@ export function decodeGroup(b: Uint8Array): Group {
   const rotateOnJoin = bool(f, 14)
   const rotateEvery = uint(f, 15, 0, MaxEpoch)
   const created = uint(f, 16, 1, MaxTime)
-  const g: Group = { hall, org, group, seq, prev, name, epoch, epochSeq, commitment, add, remove, count, members, rotateOnJoin, rotateEvery, created, extra: f.extra }
+  const successor = nullableBytes(f, 17)
+  checkSuccessor(successor, org)
+  const g: Group = { hall, org, group, seq, prev, name, epoch, epochSeq, commitment, add, remove, count, members, rotateOnJoin, rotateEvery, created, successor, extra: f.extra }
   groupCross(g)
   return g
 }
@@ -428,10 +490,11 @@ export function encodeGroup(g: Group): Uint8Array {
       { key: 14n, val: g.rotateOnJoin },
       { key: 15n, val: k(g.rotateEvery) },
       { key: 16n, val: k(g.created) },
+      { key: 17n, val: g.successor },
     ],
     g.extra,
     MaxGroupRecord,
-    16,
+    17,
   )
   decodeGroup(b)
   return b
@@ -445,13 +508,13 @@ export function checkGroupTransition(prev: Group, prevTxid: Uint8Array, next: Gr
   if (next.seq === 0) throw new Refusal('transition', 'seq 0 spends no token')
   if (
     next.hall !== prev.hall ||
-    !bytesEqual(next.org, prev.org) ||
     !bytesEqual(next.group, prev.group) ||
     next.seq !== prev.seq + 1 ||
     !bytesEqual(next.prev, prevTxid)
   ) {
     throw new Refusal('transition', 'not the successor of the token spent')
   }
+  checkHandover(prev.org, prev.successor, next.org)
   const mustRotate = next.remove.length > 0 || (prev.rotateOnJoin && next.add.length > 0)
   if (next.epoch === prev.epoch) {
     if (mustRotate) throw new Refusal('rotation')

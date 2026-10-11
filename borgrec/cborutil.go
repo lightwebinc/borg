@@ -109,3 +109,55 @@ func zero32(b []byte) bool {
 	}
 	return true
 }
+
+// textList decodes key k as an array of at most max text strings. Their own
+// rules are the caller's; this bounds the array and the types.
+func (f *fields) textList(k uint64, max int) ([]string, error) {
+	a, err := f.Array(k, max)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(a))
+	for i, e := range a {
+		s, ok := e.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: key %d", ErrList, k)
+		}
+		out[i] = s
+	}
+	return out, nil
+}
+
+// nullableBytes decodes key k as a byte string or as CBOR null, which this
+// package reads as absent. The key itself is required: a record that leaves
+// it out is ErrMissing, so every version writes every key it defines.
+func (f *fields) nullableBytes(k uint64) ([]byte, error) {
+	v, err := f.Need(k)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	b, ok := v.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("%w: key %d", ErrType, k)
+	}
+	return b, nil
+}
+
+// nullableText decodes key k as a text string or as CBOR null, read as "".
+func (f *fields) nullableText(k uint64) (string, error) {
+	v, err := f.Need(k)
+	if err != nil {
+		return "", err
+	}
+	if v == nil {
+		return "", nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("%w: key %d", ErrType, k)
+	}
+	return s, nil
+}

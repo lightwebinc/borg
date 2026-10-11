@@ -32,6 +32,13 @@ func RollRoot(grants [][32]byte) [32]byte {
 	return commit.Root(sorted)
 }
 
+// PolicyRoot is the RFC 6962 root an organisation record commits its policy
+// set to, computed exactly as RollRoot is over the grant commitments: the
+// leaves are the policy carriers' commitments in ascending byte order. The
+// two roots are separate so that a change of membership and a change of
+// policy are told apart, and one chain orders both.
+func PolicyRoot(policies [][32]byte) [32]byte { return RollRoot(policies) }
+
 func sortCommitments(a [][32]byte) {
 	sort.Slice(a, func(i, j int) bool { return string(a[i][:]) < string(a[j][:]) })
 }

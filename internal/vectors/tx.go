@@ -345,7 +345,7 @@ func (e *txEnv) build(s *Scenario) error {
 		return sorted32(out...)
 	}
 	o0 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Name: "Example Organisation", Admit: cs("alice", "bob", "carol"),
-		Count: 3, Roll: borgrec.RollRoot(cs("alice", "bob", "carol")), Created: Created}
+		Count: 3, Roll: borgrec.RollRoot(cs("alice", "bob", "carol")), Created: Created, Policy: emptyPolicy}
 	rec0, err := o0.Encode()
 	if err != nil {
 		return err
@@ -356,7 +356,8 @@ func (e *txEnv) build(s *Scenario) error {
 	}
 	e.c.mine(t0)
 	o1 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: [32]byte(*t0.TxID()), Name: "Example Organisation",
-		Revoke: cs("bob"), Count: 2, Roll: borgrec.RollRoot(cs("alice", "carol")), Created: Created + 7200}
+		Revoke: cs("bob"), Count: 2, Roll: borgrec.RollRoot(cs("alice", "carol")), Created: Created + 7200,
+		Policy: emptyPolicy}
 	rec1, err := o1.Encode()
 	if err != nil {
 		return err
