@@ -9,6 +9,7 @@ imported.
 | --- | --- |
 | `github.com/lightwebinc/borg/borgrec` | The byte-level contract ([spec.md](spec.md)): records, tokens, wraps, the folds, the registry values and the bounds. No network. |
 | `github.com/lightwebinc/borg/reader` | A client that asks overlay hosts the `ls_borg` questions and verifies every answer against the caller's own headers. |
+| `github.com/lightwebinc/borg/enforce` | The decision procedure of [spec.md](spec.md) section 13 behind one call, for a service deciding on a requester's behalf: fail-closed, with the signed receipt returned. |
 
 ## Supported surface
 
@@ -34,7 +35,7 @@ any tag.
   wraps the organization makes to its own signer key.
 - Policy records (spec section 5A): `Policy`, `DecodePolicy`,
   `Policy.IsBinding`, `Policy.BoundToGroup`, `PolicyRole`, `PolicyBinding`,
-  `PolicyRoot`, and on the organisation record the policy keys and
+  `PolicyRoot`, and on the organization record the policy keys and
   `Successor`.
 - The permission grammar: `Permission`, `ParsePermission`, `Asked`,
   `Permission.Grants`, `GrantsAny`, `Intersect` and `CheckRoleName`.
@@ -129,6 +130,29 @@ tokens answer an older state, every token of which verifies.
 its work is bounded by the chain and by `Client.MaxPages`, never by a seq
 a host names. An answer is at most `Client.MaxAnswer` bytes (16 MiB by
 default), and at most 16 tokens are taken from one answer to a seq.
+
+**`enforce`**
+
+- `Enforcer`, made once per organization a service answers for, with a
+  `reader.Client` (its `Headers` are the service's own), a `reader.Spends`,
+  the service's `wallet.Interface` and originator, the hall and the
+  organization key, and a `Freshness` (zero is `DefaultFreshness`).
+- `Enforcer.Allow(ctx, subject, permission)`: the whole of section 13 for
+  one subject and one permission asked in full (a wildcard is refused), and
+  a `Verdict` with the `reader.Decision` and the signed receipt
+  (bcommon `authz.Signed`), which a checker verifies alone under the
+  service's identity key. A read that cannot be completed is a deny with a
+  reason; the error says why. Without a spend source nothing is current and
+  every call denies.
+- An allow is reused for the same subject and permission at the same seq
+  within `Freshness`; a deny never is. `Enforcer.Forget` drops every reused
+  allow and reads the organization afresh. The organization's view is read
+  again once it is older than `Freshness`, so the seq a receipt names is at
+  most that stale, which is the staleness the service states.
+- The cache holds at most `MaxCached` allows and is cleared past that.
+
+A service keeps an interface of its own in front of `Enforcer`, so that
+this package, and with it borg, is a dependency of one file.
 
 ## Versions
 

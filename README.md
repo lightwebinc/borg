@@ -102,6 +102,7 @@ sandbox that needs no coin is [QUICKSTART.md](QUICKSTART.md).
 | Implement a compatible organization, member client or host | [docs/spec.md](docs/spec.md) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
 | Read borg's chains from another Go program | [docs/packages.md](docs/packages.md) |
+| See what comes next, and what is left open on purpose | [docs/roadmap.md](docs/roadmap.md) |
 
 ## Build and test
 

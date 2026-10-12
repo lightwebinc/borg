@@ -635,6 +635,19 @@ Examples, each a permission some other specification defines:
 `bsecret/release/payroll`, `bchat/moderate/general`, `bstore/put/photos/*`,
 `bstore/get/*`.
 
+One label is this specification's own. `borg` is registered for the
+administration of an organization: defining and retiring roles, binding and
+unbinding them, admitting and revoking grants, and changing groups. This
+version defines no action under it, so a permission under `borg/` is well
+formed and grants nothing, exactly as one for a service that does not
+recognize it does. A later version that lets a key other than the
+organization's sign a token (section 3.4 already has two keys signing one
+chain, which is the shape) will say which `borg/` permissions such a signer
+must hold for each change it makes, and a role carrying them is how an
+organization delegates its administration without handing over its key.
+Reserving the label now means no application claims it, and no binding made
+under it today means anything it should not.
+
 ### 5A.3 Matching
 
 A service asks whether a subject holds one permission, written out in full
@@ -2038,7 +2051,7 @@ both directions).
 | `grant-v1.json`, `grant-*.hex` | four grants (three revealed, one opaque) with their values in the clear, the stand-in revelation keys and IVs, the ciphertexts, the keyring, the BRC-52 binary form signed and the signature; each member opens its own and another member cannot |
 | `wrap-v1.json`, `wrap-*.hex` | the four wrap records of the scenario with each entry's IV, and what each member's wallet opens from each, with the check label of each failure: the removed member opens epoch 0 and neither epoch 1 nor epoch 2; a wrap held against another epoch's token fails check 1 |
 | `scope-v1.json` | the scope grammar and its fail-closed meaning case by case; expiry and role cases |
-| `policy-v1.json`, `policy-*.hex` | eight policy records with their commitments: two role definitions, a second definition of one of them, a binding to a group, two to a key (one attenuated, one with an expiry), one whose role nothing defines and one whose expiry has passed. A chain of two organisation tokens carries them: the first defines five, the second defines two and retires one, each with the set and the root after it. One inclusion context of the shape a `role` or `bound` answer carries, which verifies against the policy root of its `seq` and against the earlier root not at all. The two definitions of one role, read as the intersection of their permissions. The records' own refusals are `refusal-v1.json`'s, and what each subject holds is `authz-v1.json`'s |
+| `policy-v1.json`, `policy-*.hex` | eight policy records with their commitments: two role definitions, a second definition of one of them, a binding to a group, two to a key (one attenuated, one with an expiry), one whose role nothing defines and one whose expiry has passed. A chain of two organization tokens carries them: the first defines five, the second defines two and retires one, each with the set and the root after it. One inclusion context of the shape a `role` or `bound` answer carries, which verifies against the policy root of its `seq` and against the earlier root not at all. The two definitions of one role, read as the intersection of their permissions. The records' own refusals are `refusal-v1.json`'s, and what each subject holds is `authz-v1.json`'s |
 | `permission-v1.json` | the permission grammar accepted and refused case by case, the longest permission the grammar allows, and the matching rule of section 5A.3 over exact, `*` and prefix cases, including a prefix that must not match and an asked permission carrying `*`, which is refused |
 | `authz-v1.json` | the effective-permission procedure of section 5A.4 over the policy set of `policy-v1.json`, one case to a rule: a subject whose grant names a defined role, the same key holding only through its group, one whose grant names a role nothing defines and whose own binding is attenuated, one reached only by a binding whose role nothing defines and one whose expiry has passed, one whose role field is not a well-formed role name, and one who is no member at all. Each with the set it holds and three asked permissions, granted or denied |
 | `refusal-v1.json` | byte strings each record's rules refuse, each with its reason (section 3.1), and the grant's content rules; a record with an unknown key, preserved |
