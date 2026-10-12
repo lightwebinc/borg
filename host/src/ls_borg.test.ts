@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Transaction } from '@bsv/sdk'
 import { KeyGrant, KeyPolicy, KeyRecord, LookupService, encodeGrant } from './borgrec.js'
-import { decodeContext, rollRoot, verifyGrant, verifyPolicy } from './merkle.js'
+import { decodeContext, policyRoot, rollRoot, verifyGrant, verifyPolicy } from './merkle.js'
 import { MemoryJournal } from './journal.js'
 import { borgModule } from './module.js'
 import { answer, config, hall, setup, submit, topic } from './testhost.js'
@@ -442,4 +442,51 @@ test('a token is counted once however often the chain is folded again', async ()
   // decided, the one the bound later turned away included. Before the fix
   // the refold after that bound counted every token of the chain again.
   assert.equal(counted(), 11, `counted ${counted()} consistent tokens`)
+})
+
+test('policy-mismatch: a token whose policy root does not reproduce is reported, the roll is decided first, and both are sticky', async () => {
+  const chain = new Chain(83000)
+  const s = await setup({ chain })
+  const org = new OrgSim(hall, 'policy status org', chain)
+  const def = await org.policyRecord('reader', { permissions: ['s/get/a'] })
+  const other = await org.policyRecord('writer', { permissions: ['s/put/a'] })
+  for (const p of [def, other]) assert.deepEqual(await submit(s.engine, p.tx.toAtomicBEEF()), [0])
+
+  // seq 0 defines one record and says so; seq 1 defines the second but
+  // commits to a root that is not the set's.
+  const o0 = await org.orgToken([], [], { define: [def.c] })
+  assert.deepEqual(await submit(s.engine, o0.beef), [0])
+  const bad = await org.orgToken([], [], { define: [other.c], mutate: (r) => (r.policy = policyRoot([])) })
+  assert.deepEqual(await submit(s.engine, bad.beef), [0])
+  const after = await org.orgToken([], [])
+  assert.deepEqual(await submit(s.engine, after.beef), [0])
+
+  assert.equal(s.ls.tokenStatus(id(o0.tx)), 'consistent')
+  assert.equal(s.ls.tokenStatus(id(bad.tx)), 'policy-mismatch')
+  assert.equal(s.ls.tokenStatus(id(after.tx)), 'policy-mismatch', 'a broken policy fold stays broken')
+  assert.ok(s.host.count('borg_token_status_total', { status: 'policy-mismatch' }) >= 1)
+  assert.ok(s.host.lines.some((l) => l.msg === 'ls_borg token status' && l.extra?.['status'] === 'policy-mismatch'))
+  // The host answers from the fold and reports the status; it does not
+  // decide. A fold that broke on the root still holds what it applied
+  // before the check, as a broken roll does, so both records are answered
+  // and a reader that reads the status refuses the chain from there on
+  // (spec section 13).
+  assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([def.tx, other.tx]))
+})
+
+test('the roll is decided before the policy set: a token that breaks both is roll-mismatch', async () => {
+  const chain = new Chain(83000)
+  const s = await setup({ chain })
+  const org = new OrgSim(hall, 'both broken org', chain)
+  const def = await org.policyRecord('reader', { permissions: ['s/get/a'] })
+  assert.deepEqual(await submit(s.engine, def.tx.toAtomicBEEF()), [0])
+  const both = await org.orgToken([], [], {
+    define: [def.c],
+    mutate: (r) => {
+      r.roll = policyRoot([new Uint8Array(32).fill(9)])
+      r.policy = policyRoot([])
+    },
+  })
+  assert.deepEqual(await submit(s.engine, both.beef), [0])
+  assert.equal(s.ls.tokenStatus(id(both.tx)), 'roll-mismatch')
 })
