@@ -5,13 +5,15 @@ host. Once one record using it is on a public host, readers verify against it
 for as long as anyone reads that record, so changing it afterwards is a new
 identifier or a new record version, never an edit.
 
-**Status: the rows that carried the organization roll, the groups, the
-grants and the wraps are signed. The rows added for the policy record
-(section 5A), the organization record's policy keys, the succession rules of
-both chain records, and the six policy lookup classes are PROVISIONAL and
-await signature; they are marked so in each table. Nothing of this contract
-has been released, so the policy keys were added to the records as they
-stand rather than as a second record version.**
+**Status: signed, every row.** The rows that carried the organization roll,
+the groups, the grants and the wraps were signed earlier. The rows added for
+the policy record (section 5A), the organization record's policy keys, the
+succession rules of both chain records, the six policy lookup classes and
+the policy floors of section 8 were signed on 2026-10-12, against the
+vectors and against the lab, which ran the whole policy drill on the devnet
+plane with them. Nothing of this contract has been released, so the policy
+keys were added to the records as they stand rather than as a second record
+version.
 
 **Status of the signed rows: signed, every one.** Key id `signer` (section 1) was signed with
 the two consequences spec sections 7.4 and 10 state: where more than one
@@ -41,7 +43,7 @@ and no basket starts with `borg`.
 | Key id | `group` | a group token's lock and field signature | signed |
 | Key id | `record` | a wrap carrier's record output and field signature, and the outputs of trees that fund wraps | signed |
 | Key id | `grant` | a grant carrier's record output and field signature, and the outputs of trees that fund grants | signed |
-| Key id | `policy` | a policy carrier's record output and field signature, and the outputs of trees that fund policy records | provisional |
+| Key id | `policy` | a policy carrier's record output and field signature, and the outputs of trees that fund policy records | signed |
 | Key id | `chain` | the outputs of trees that pay for a chain's first token; never a carrier's | signed |
 | Key id | `fund` | the embedded wallet's funding key | signed |
 | Key id | `signer` | the organization's signer key: a member key every instance of the organization's tooling derives, which a wrap is addressed to like any member's (spec section 7.4). No host or reader rule reads it | signed |
@@ -52,12 +54,12 @@ and no basket starts with `borg`.
 | Record magic | `boo` `0x01` | organization record, version 1 | signed |
 | Record magic | `bog` `0x01` | group record, version 1 | signed |
 | Record magic | `bom` `0x01` | membership grant record, version 1 | signed |
-| Record magic | `bop` `0x01` | policy record, version 1 | provisional |
+| Record magic | `bop` `0x01` | policy record, version 1 | signed |
 | Record magic | `bow` `0x01` | wrap record, version 1 | signed |
 | Topics | `tm_borg_<name>_<suffix>` | one topic per hall: a readable `<name>` of at most 31 characters and a 10-letter random `<suffix>` fixed at the hall's creation (spec section 10.1); the `tm_borg_` namespace belongs to borg | signed |
 | Lookup service | `ls_borg` | one per host, all halls; every question names its hall | signed |
 | Host route | `<base>/ls_borg/terms` | the host terms document (spec section 10.3) | signed |
-| Baskets | `borg fund`, `borg grant funding`, `borg policy funding` (provisional), `borg record funding`, `borg chain funding`, `borg chain`, `borg kill tombstone` | wallet baskets: grant trees, policy trees, record (wrap) trees and chain trees kept apart (spec section 9.4), chain tokens, tombstones; never on a public host, registered so no two applications share one in a wallet | signed |
+| Baskets | `borg fund`, `borg grant funding`, `borg policy funding`, `borg record funding`, `borg chain funding`, `borg chain`, `borg kill tombstone` | wallet baskets: grant trees, policy trees, record (wrap) trees and chain trees kept apart (spec section 9.4), chain tokens, tombstones; never on a public host, registered so no two applications share one in a wallet | signed |
 | Certificate type | `base64(SHA-256("borg membership grant v1"))` = `poEEbYGwpJbTzKTeSRBJzV31s8PNknNycAbyjDV3ALc=` | the BRC-52 type of a membership grant, by BRC-169 section 4.5's rule. The registry does not list certificate types today; proposed as a new row kind | signed |
 | Borrowed, not registered | `[2, "keyed content release"]`, key id `SHA-256(epoch id \|\| epoch)` | BRC-369's release derivation, used as written; any BRC-369 implementation shares the protocol, and the key id separates every epoch | signed (as a note in the registry) |
 
@@ -81,10 +83,10 @@ of both versions carry the tags `bo 0x01` and `bo 0x03`.
 | Chain token shape | exactly one claiming output, a two-field signed PushDrop of 1 satoshi; mined; published in a BEEF V1 or V2 of exactly the token and its parent (the transaction its predecessor input, or at `seq` 0 its funding input, spends), each with its minimal path (one merged path flagging exactly both txids when they share a block, which may omit a sibling that is itself an ancestor of the other txid and holds nothing else; two separate paths of one block refused `beef`; no txid-only entries); `seq > 0`: the parent's txid is `prev` and exactly one input spends the parent's token at `seq - 1`, whose record the host reads from the parent; `seq` 0: an input spends a funding output of the parent locked to `derive(org, "chain")` and none spends a token; the organization spends a token output only in its successor; other inputs not read and not held to a canonical form; admitted whether or not the topic holds the predecessor (`pending` until it does); refused in the order `shape`, `beef`, record rules, `hall`, `lock`, `signature`, `unmined`, `token-input`, transition rules; the predecessor is a well-formed token output (its tag, two fields and a signature, 1 satoshi, canonical, its signature verifying) | signed |
 | Script canonicality | every checked script equals, byte for byte, the one rebuilt from its fields and the derived key | signed |
 | Signatures | field, carrier input, certificate signatures strict DER, low S; carrier input signatures sighash `0x41` only | signed |
-| Classifier | the key push, `OP_CHECKSIG`, then one push: a CBOR definite map head, `00 44` and `bom 0x01` claims a grant, `bop 0x01` a policy record (provisional), `bow 0x01` a wrap; the push exactly `bo 0x01` an organization token, `bo 0x03` a group token; the whole script `21 <33> ac 03 62 6f 02 75` is funding-shaped; two claiming outputs refuse the transaction (`script-v1.json`) | signed |
+| Classifier | the key push, `OP_CHECKSIG`, then one push: a CBOR definite map head, `00 44` and `bom 0x01` claims a grant, `bop 0x01` a policy record, `bow 0x01` a wrap; the push exactly `bo 0x01` an organization token, `bo 0x03` a group token; the whole script `21 <33> ac 03 62 6f 02 75` is funding-shaped; two claiming outputs refuse the transaction (`script-v1.json`) | signed |
 | Funding output | `<derive(owner, k)> OP_CHECKSIG <62 6f 02> OP_DROP`, unsigned, `k` being `grant`, `record` or `chain` by what the tree pays for | signed |
 | Sweep | a mined transaction claiming nothing whose output 0 is funding-shaped: output 0 alone admitted; its inputs' spends kept for the host's life where they match a carrier's funding outpoint, otherwise in a bounded table of at least 65536; refused in the order `unmined`, `beef`, `too-large`; a host accepts at least 1024 inputs. A mined funding tree published on its own has this shape and is admitted as a sweep, which is harmless (it spends no carrier's funding outpoint); publishers never publish one. A transaction that only spends held outputs is refused (`not-borg`) | signed |
-| Retraction | an admitted sweep spending a carrier's funding outpoint retracts the carrier; for a grant it is revocation, and an organization revokes only by sweep; for a policy record it is retirement (provisional) | signed |
+| Retraction | an admitted sweep spending a carrier's funding outpoint retracts the carrier; for a grant it is revocation, and an organization revokes only by sweep; for a policy record it is retirement | signed |
 | Publication | tokens and sweeps published once, after they mine and a propagation delay, to the plane and directly to every host named, then confirmed by lookup and offered again where missing; a wrap only after the token that makes its recipient a member is mined (one further block when several tooling instances can sign); a grant before the token that admits it; funding trees only inside the BEEF of what they fund | signed |
 | Commitment | `C = txid(K)`, hash byte order in records, display order in JSON | signed |
 | CBOR | RFC 8949 section 4.2.1 core deterministic encoding, bcommon's subset, enforced on decode | signed |
@@ -106,10 +108,10 @@ of both versions carry the tags `bo 0x01` and `bo 0x03`.
 | The roll: before less `revoke` plus `admit`; its root RFC 6962 over the grant commitments ascending, the empty root `SHA-256()` | signed |
 | Transition rules: same hall and organization, `seq + 1`, `prev` the predecessor's txid, the same `opaque` (fixed at the first token), `count` = predecessor's + `admit` - `revoke` | signed |
 | The organization key is never the anyone key, in any record | signed |
-| Keys 12 `define`, 13 `retire`, 14 `policyCount`, 15 `policy`, 16 `successor`; all required, keys 17 and above unknown | provisional |
-| The policy set: before less `retire` plus `define`; its root RFC 6962 over the policy commitments ascending, the empty root `SHA-256()` | provisional |
-| Succession: a token's `org` equals its predecessor's or the key the predecessor named as `successor`; the handover token is locked to the successor's derived key and spends the announcing token's output, so both keys sign it. A `successor` is a well-formed key, never the anyone key and never the record's own `org` | provisional |
-| Transition rules: `policyCount` = the predecessor's plus `define` less `retire`; a first token defines its whole policy set and retires nothing | provisional |
+| Keys 12 `define`, 13 `retire`, 14 `policyCount`, 15 `policy`, 16 `successor`; all required, keys 17 and above unknown | signed |
+| The policy set: before less `retire` plus `define`; its root RFC 6962 over the policy commitments ascending, the empty root `SHA-256()` | signed |
+| Succession: a token's `org` equals its predecessor's or the key the predecessor named as `successor`; the handover token is locked to the successor's derived key and spends the announcing token's output, so both keys sign it. A `successor` is a well-formed key, never the anyone key and never the record's own `org` | signed |
+| Transition rules: `policyCount` = the predecessor's plus `define` less `retire`; a first token defines its whole policy set and retires nothing | signed |
 
 ## 4. The group record (magic `bog` `0x01`)
 
@@ -121,7 +123,7 @@ of both versions carry the tags `bo 0x01` and `bo 0x03`.
 | **Re-adding a removed key rotates:** a transition that adds a key an earlier token of the group removed MUST begin a new epoch; the tooling MUST rotate, and the index reports a token that does not as `rejoin-unrotated` (not an admission rule: the predecessor names no removed keys) | signed |
 | Members: before less `remove` plus `add`; the root RFC 6962 over `SHA-256(key)`, keys ascending | signed |
 | The epoch id: SHA-256 of the encoded group record of the token that began the epoch | signed |
-| Key 17 `successor`, required, keys 18 and above unknown; the succession rules of the organization record, applied to a group chain, so that group identifiers and epochs survive a handover | provisional |
+| Key 17 `successor`, required, keys 18 and above unknown; the succession rules of the organization record, applied to a group chain, so that group identifiers and epochs survive a handover | signed |
 
 ## 5. The membership grant (magic `bom` `0x01`)
 
@@ -139,7 +141,7 @@ of both versions carry the tags `bo 0x01` and `bo 0x03`.
 
 ## 5A. The policy record (magic `bop` `0x01`)
 
-Every row **provisional**, awaiting signature.
+Every row **signed** (2026-10-12).
 
 | Item |
 | --- |
@@ -176,13 +178,13 @@ Every row **provisional**, awaiting signature.
 | Item | Status |
 | --- | --- |
 | Hall identifier `<name>_<suffix>`, 12 to 42 bytes: `<name>` 1 to 31 bytes of `[a-z]` and single underscores, starting and ending with a letter; `<suffix>` exactly 10 letters drawn uniformly at random once at the hall's creation | signed |
-| Class names and members: free `policy`, `policy-after`, `role`, `role-after`, `bound`, `bound-after` (provisional), and `org`, `org-seq`, `roll`, `roll-after`, `member`, `groups`, `groups-after`, `member-of`, `member-of-after`, `group`, `group-seq`, `wraps`, `wraps-after`, `wrap`, `sweep`; priceable `history` `{hall, history, chain}`, `history-after` (spec section 10.2); no priced class is a superset of a free class | signed |
+| Class names and members: free `policy`, `policy-after`, `role`, `role-after`, `bound`, `bound-after`, and `org`, `org-seq`, `roll`, `roll-after`, `member`, `groups`, `groups-after`, `member-of`, `member-of-after`, `group`, `group-seq`, `wraps`, `wraps-after`, `wrap`, `sweep`; priceable `history` `{hall, history, chain}`, `history-after` (spec section 10.2); no priced class is a superset of a free class | signed |
 | `member` answers carry each grant's inclusion path in the roll as BRC-24 `context`: CBOR `[seq, index, size, [[bytes(32), bool], ...]]` | signed |
-| `role` and `bound` answers carry each policy record's inclusion path in the **policy** root, in the same context shape | provisional |
+| `role` and `bound` answers carry each policy record's inclusion path in the **policy** root, in the same context shape | signed |
 | Query values validated as parsed; every member a string; the value rules of spec section 10.2; an unknown or missing member refused; an unknown hall refused | signed |
 | Answer order: carriers by txid, groups by group id, tokens by `seq` then txid; `-after` strictly after the cursor | signed |
 | Terms document at `<base>/ls_borg/terms`: `service`, `terms` (`1`), `classes` of `{class, satoshis}`; informative; the 402 is authoritative | signed |
-| Retention floors: tokens and outpoint rows for the host's life; grants while in the roll and 31 days after; policy records while in the policy set and 31 days after (provisional); wraps of the current epoch, and of an ended epoch 31 days after the ending token was first seen | signed (floors: a later version may lengthen them, never shorten) |
+| Retention floors: tokens and outpoint rows for the host's life; grants while in the roll and 31 days after; policy records while in the policy set and 31 days after; wraps of the current epoch, and of an ended epoch 31 days after the ending token was first seen | signed (floors: a later version may lengthen them, never shorten) |
 
 ## 8. Bounds that are a floor
 
@@ -193,9 +195,9 @@ roll, 1024 members in a group, 16 entries per wrap record, 64 keys per record,
 a host's BEEF bound of at least 262144 bytes, a host's sweep input bound of
 at least 1024. Signed as floors.
 
-Provisional floors for the policy record: the record 8192 bytes, 24
-permissions per record, a permission 256 bytes, a role name 64 bytes, 65536
-policy records in a set, 64 `define` and 64 `retire` per transition.
+Floors for the policy record, signed the same way: the record 8192 bytes,
+24 permissions per record, a permission 256 bytes, a role name 64 bytes,
+65536 policy records in a set, 64 `define` and 64 `retire` per transition.
 
 ## 9. Not frozen
 
