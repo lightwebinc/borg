@@ -14,7 +14,7 @@ with no operator in the middle: every change is a mined transaction on the
 organization's own chain, every reader verifies against its own block
 headers, and overlay hosts replicate state without deciding anything.
 
-## In this version (0.7.0)
+## In this version (0.7.1)
 
 - An organization as a key and a chain; membership as a revocable
   certificate whose revocation one spend makes visible to every verifier.
