@@ -362,22 +362,22 @@ func (g *global) showPolicy(ctx context.Context) error {
 			continue
 		}
 		shown = true
+		fmt.Fprintf(g.stdout, "set     %d record(s) from %s, the root of seq %d reproduced\n", len(pa.Policies), pa.Host, ov.Token.Seq)
+		// The whole set is answered without a path (spec section 10.2), and
+		// this host's answer reproduced the root above, which is what holds
+		// it. `policy show -role` and `-bound` answer with a path.
 		for _, car := range pa.Policies {
 			p := car.Carrier.Policy
-			path := "inclusion path verified"
-			if !ov.PolicyPathHolds(car) {
-				path = "no inclusion path verified; checked against the set"
-			}
 			if p.Kind == borgrec.PolicyRole {
-				fmt.Fprintf(g.stdout, "role    %s %s %s (%s)\n", car.Txid, p.Role, strings.Join(p.Permissions, " "), path)
+				fmt.Fprintf(g.stdout, "role    %s %s %s\n", car.Txid, p.Role, strings.Join(p.Permissions, " "))
 				continue
 			}
 			what := "key"
 			if p.BoundToGroup() {
 				what = "group"
 			}
-			fmt.Fprintf(g.stdout, "bind    %s %s to %s %s%s%s (%s)\n", car.Txid, p.Role, what, hex.EncodeToString(p.To),
-				suffix(" only ", strings.Join(p.Permissions, " ")), suffix(" until ", p.Expiry), path)
+			fmt.Fprintf(g.stdout, "bind    %s %s to %s %s%s%s\n", car.Txid, p.Role, what, hex.EncodeToString(p.To),
+				suffix(" only ", strings.Join(p.Permissions, " ")), suffix(" until ", p.Expiry))
 		}
 	}
 	if !shown && problem == nil {

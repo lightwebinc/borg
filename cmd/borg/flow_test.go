@@ -1216,10 +1216,10 @@ func TestRolesDecide(t *testing.T) {
 	if !strings.HasPrefix(r.stdout, "ALLOW") {
 		t.Fatalf("the local read:\n%s\n%s", r.stdout, r.stderr)
 	}
-	// The whole set is answered without a path: a reader checks it by
-	// computing the root, which show does for every host before it prints.
+	// The whole set is answered without a path: the host's answer is held
+	// to the root instead, which show says once per host.
 	r = h.must("alice", "policy", "show")
-	if strings.Count(r.stdout, "checked against the set") != 3 {
+	if !strings.Contains(r.stdout, "the root of seq") || strings.Count(r.stdout, "\n") != 4 {
 		t.Fatalf("policy show from the hosts:\n%s\n%s", r.stdout, r.stderr)
 	}
 	// One role's records are answered with a path into the policy root.
