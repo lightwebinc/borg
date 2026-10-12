@@ -1370,3 +1370,37 @@ func TestALyingHostCannotGrantThroughAGroup(t *testing.T) {
 		t.Fatalf("the decision does not say it refused the group:\n%s", r.stderr)
 	}
 }
+
+// A policy record swept but still named by the root grants nothing: the
+// sweep is the fast half of a withdrawal, and a decision checks the
+// outpoint as it checks a grant's.
+func TestASweptPolicyRecordGrantsNothing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	r := h.must("org", "bind", "releaser", "-to", o.group)
+	m := regexp.MustCompile(`(?m)^binding ([0-9a-f]{64})`).FindStringSubmatch(r.stdout)
+	if m == nil {
+		t.Fatalf("bind:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if got := h.must("alice", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "ALLOW") {
+		t.Fatalf("before the sweep:\n%s", got)
+	}
+
+	// Only the fast half: the carrier is retracted and the root still
+	// names the record, so every host still answers it.
+	h.must("org", "unbind", m[1], "-by", "sweep")
+	r = h.run("alice", "", "policy", "check", o.alice, "bsecret/release/payroll")
+	if !strings.HasPrefix(r.stdout, "DENY") {
+		t.Fatalf("a swept binding still granted:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "retracted") {
+		t.Fatalf("the decision does not say the record was retracted:\n%s", r.stderr)
+	}
+	// The committed half then drops it from the set.
+	h.must("org", "unbind", m[1], "-by", "set")
+	if got := h.must("alice", "policy", "show").stdout; strings.Contains(got, m[1]) {
+		t.Fatalf("the record is still in the set:\n%s", got)
+	}
+}

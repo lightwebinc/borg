@@ -75,10 +75,10 @@ variables.
 | `grant issue <key>` | yes, the organization's | a publisher's | issues a grant (`-role`, `-scope`, `-admin`, `-expiry`) and admits it to the roll |
 | `grant revoke <key\|txid>...` | yes, the organization's | a publisher's | revokes by the roll and by sweep, or one of them (`-by roll`, `-by sweep`) |
 | `role define <name>` | yes, the organization's | a publisher's | publishes a role and the permissions it carries (`-permission`, given once per permission), and the organization's next token defines it |
-| `role retire <name>` | yes, the organization's | a publisher's | drops the role's definition from the policy set and sweeps its funding output; the bindings that name it stay and authorize nothing |
+| `role retire <name>` | yes, the organization's | a publisher's | both halves of a withdrawal: a token drops the definition from the policy set and a sweep retracts its carrier. `-by set` or `-by sweep` does one of them. The bindings that name it stay and authorize nothing |
 | `role list` | optional | nothing | the roles the policy set defines, with their permissions |
 | `bind <role> -to <group\|key>` | yes, the organization's | a publisher's | gives the role to a group identifier or to one identity key; `-only` keeps part of it and can never widen it, `-expiry` ends it |
-| `unbind <txid>` | yes, the organization's | a publisher's | retires one binding by its carrier's txid, the same two halves as a retire |
+| `unbind <txid>` | yes, the organization's | a publisher's | retires one binding by its carrier's txid, the same two halves and the same `-by` |
 | `policy [show]` | optional | a reader's settings | the organization's policy set from the hosts, every record verified and each host's answer held to the root the latest token commits to. `-role R` asks for one role's definition and the bindings that give it, `-bound X` for the bindings naming one group or key, each answered with a path into the policy root. `-local` reads this home's own record instead |
 | `policy check <key> <permission>` | optional | a reader's settings | decides one permission as a service does (spec section 13): the subject's current grants, the groups that hold it and the policy set, each from the hosts and checked against this machine's own headers, folded and matched. It fails closed and prints the state it decided over. `-local` uses this home's own record |
 | `group create <name>` | yes, the organization's | a publisher's | a group of `-member` keys (each with a current grant), epoch 0 wrapped to each; `-rotate-on-join`, `-rotate-every` |

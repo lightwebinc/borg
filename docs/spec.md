@@ -677,7 +677,13 @@ a subject `K` in an organization `O`, at the reader's clock:
 A policy record is **current** when its commitment is in the policy set of
 `O`'s latest token, its carrier is held (neither retracted nor superseded,
 section 11.2), and, for a binding, its `expiry` is `null` or not passed,
-within the 300 seconds of clock skew section 5.2 allows a grant's expiry. To
+within the 300 seconds of clock skew section 5.2 allows a grant's expiry. A
+reader settles "held" the way it settles a grant's revocation: the set a
+token commits to is answered whatever each carrier's status, so a record
+swept since is still in that answer, and a reader that took it would grant
+what the sweep has already taken away. It checks the record's funding
+outpoint against a source that indexes spends, positively, as section 13
+requires of a grant's, and never reads an absence as unspent. To
 **attenuate** is to keep the intersection of the binding's `permissions`
 with the definition's; an empty `permissions` keeps the definition's whole
 set. A binding whose role no current definition defines contributes nothing.

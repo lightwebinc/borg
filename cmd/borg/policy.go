@@ -15,16 +15,18 @@ import (
 )
 
 const roleHelp = `usage: borg role define <name> -permission P [-permission P ...]
-       borg role retire <name>
+       borg role retire <name> [-by both|set|sweep]
        borg role list
 
 A role names the permissions it carries (service/action/resource). Define
-publishes the role and the organisation's next token commits to it; retire
-sweeps its funding output and drops it from the set. Giving a role to a
-member or a group is borg bind.`
+publishes the role and the organisation's next token commits to it. Retire
+does both halves of a withdrawal: a token drops it from the set, and a sweep
+retracts its carrier at every host. -by set or -by sweep does one of them;
+the sweep takes effect as soon as it is mined and seen, the token is the
+committed half. Giving a role to a member or a group is borg bind.`
 
 const bindHelp = `usage: borg bind <role> -to <group-id|key> [-only P ...] [-expiry E]
-       borg unbind <txid>
+       borg unbind <txid> [-by both|set|sweep]
 
 A binding gives a role to one key or to a whole group: every current member
 of that group holds the role. -only keeps part of the role and can never
@@ -50,6 +52,7 @@ func cmdRole(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("role", roleHelp)
 	var perms multi
 	fs.Var(&perms, "permission", "a permission the role carries, given once per permission")
+	by := fs.String("by", "both", "retire: both, set or sweep")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -75,7 +78,10 @@ func cmdRole(ctx context.Context, g *global, args []string) error {
 		if len(out) == 0 {
 			return usage("no definition of %q is in the policy set", pos[1])
 		}
-		return g.retirePolicy(ctx, r, out)
+		if *by != "both" && *by != "set" && *by != "sweep" {
+			return usage("-by must be both, set or sweep")
+		}
+		return g.retirePolicy(ctx, r, out, *by)
 	case len(pos) <= 1 && (len(pos) == 0 || pos[0] == "list"):
 		r, err := g.openOrg(ctx, false)
 		if err != nil {
@@ -134,6 +140,7 @@ func cmdBind(ctx context.Context, g *global, args []string) error {
 
 func cmdUnbind(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("unbind", bindHelp)
+	by := fs.String("by", "both", "both, set or sweep")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -153,7 +160,10 @@ func cmdUnbind(ctx context.Context, g *global, args []string) error {
 	if p.Kind != borgrec.PolicyBinding {
 		return usage("%s is a role definition; retire it with borg role retire %s", pos[0], p.Role)
 	}
-	return g.retirePolicy(ctx, r, []*state.Policy{p})
+	if *by != "both" && *by != "set" && *by != "sweep" {
+		return usage("-by must be both, set or sweep")
+	}
+	return g.retirePolicy(ctx, r, []*state.Policy{p}, *by)
 }
 
 func cmdPolicy(ctx context.Context, g *global, args []string) error {
@@ -249,13 +259,19 @@ func (g *global) publishPolicy(ctx context.Context, req engine.PolicyReq, what s
 
 // retirePolicy drops records from the set and sweeps their outputs: the
 // committed half and the fast half of a withdrawal (spec section 9.5).
-func (g *global) retirePolicy(ctx context.Context, r *orgRun, ps []*state.Policy) error {
+func (g *global) retirePolicy(ctx context.Context, r *orgRun, ps []*state.Policy, by string) error {
 	o := r.h.st.Org
-	if err := r.eng.OrgTransitionWith(ctx, nil, nil, nil, ps, "organisation token (retire)"); err != nil {
-		return lost(err)
+	if by == "both" || by == "set" {
+		if err := r.eng.OrgTransitionWith(ctx, nil, nil, nil, ps, "organisation token (retire)"); err != nil {
+			return lost(err)
+		}
+		t := state.Latest(o.Tokens)
+		fmt.Fprintf(g.stdout, "org     seq %d %s retires %d policy record(s)\n", t.Seq, t.Txid, len(ps))
 	}
-	t := state.Latest(o.Tokens)
-	fmt.Fprintf(g.stdout, "org     seq %d %s retires %d policy record(s)\n", t.Seq, t.Txid, len(ps))
+	if by == "set" {
+		g.say("the records are out of the set; their carriers are not retracted (borg unbind -by sweep)")
+		return nil
+	}
 	trees := map[string][]uint32{}
 	var order []string
 	for _, p := range ps {

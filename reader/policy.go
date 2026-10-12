@@ -247,6 +247,23 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 		}
 		matched = true
 		for _, car := range pa.Policies {
+			// The set a token commits to is answered whatever each
+			// carrier's status (spec section 11.2), so a record swept
+			// since is still here. A sweep is the fast half of a
+			// withdrawal: it retracts at once and the next token drops
+			// the commitment. A reader that counted a swept record would
+			// grant what the organisation has already taken away, so the
+			// outpoint is checked here as a grant's revocation outpoint
+			// is, and nothing is current without a positive answer.
+			switch spent, err := spentBy(ctx, spends, car); {
+			case err != nil:
+				d.Refused = append(d.Refused, Refusal{Txid: car.Txid, Reason: "policy", Err: err})
+				continue
+			case spent != "":
+				d.Refused = append(d.Refused, Refusal{Txid: car.Txid, Reason: "policy",
+					Err: fmt.Errorf("retracted: its funding outpoint is spent by %s", spent)})
+				continue
+			}
 			set = append(set, car.Carrier.Policy)
 			d.Policies = append(d.Policies, car.Carrier.Commitment)
 		}
@@ -282,4 +299,19 @@ func (c *Client) Allows(ctx context.Context, ov *OrgView, subject []byte, permis
 
 func sortCommitments(a [][32]byte) {
 	sort.Slice(a, func(i, j int) bool { return bytes.Compare(a[i][:], a[j][:]) < 0 })
+}
+
+// spentBy says whether a policy carrier's funding outpoint is spent. It is
+// the grant's freshness rule (spec section 13) applied to a policy record:
+// an absence is never taken as unspent, so a reader with no spend source
+// treats no record as current.
+func spentBy(ctx context.Context, spends Spends, car *Car) (string, error) {
+	if spends == nil {
+		return "", errors.New("no spend source to say the record's funding outpoint is unspent")
+	}
+	by, err := spends.Spender(ctx, car.Carrier.Funding.Txid.String(), car.Carrier.Funding.Index)
+	if err != nil {
+		return "", fmt.Errorf("the spend source could not say whether the record's funding outpoint is spent: %w", err)
+	}
+	return by, nil
 }
