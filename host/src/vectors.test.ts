@@ -298,6 +298,19 @@ test('permission-v1: the grammar, matching, role names and attenuation', () => {
   for (const i of f.intersect) assert.deepEqual(intersect(i.role, i.keep ?? []), i.kept, i.why)
 })
 
+test('org-v1: succession, announced one token ahead and refused otherwise', () => {
+  const f = load('org-v1.json').succession
+  const announce = decodeOrg(fromHex(f.announce))
+  const handover = decodeOrg(fromHex(f.handover))
+  assert.equal(hex(announce.successor!), f.successor, 'the announcing token names the successor')
+  assert.equal(hex(handover.org), f.successor, 'the next token carries that key')
+  const txid = fromHex(load('org-v1.json').records[0].standInTxid)
+  checkOrgTransition(announce, txid, handover)
+  // A predecessor that names nobody, and a handover to another key.
+  assert.equal(reason(() => checkOrgTransition(decodeOrg(fromHex(load('org-v1.json').records[0].hex)), txid, handover)), f.unannounced.reason)
+  assert.equal(reason(() => checkOrgTransition(announce, txid, decodeOrg(fromHex(f.otherKey.hex)))), f.otherKey.reason)
+})
+
 test('policy-v1: records, the policy set and its root, and a context into it', () => {
   const f = load('policy-v1.json')
   for (const r of f.records) {

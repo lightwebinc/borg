@@ -344,3 +344,49 @@ func TestEffectiveFoldRules(t *testing.T) {
 		t.Fatal("a binding inside the clock skew was dropped")
 	}
 }
+
+// TestSuccessionNeedsTheAnnouncement pins spec section 3.4: a chain carries
+// its predecessor's organisation key, or the key that predecessor named as
+// its successor, and no other.
+func TestSuccessionNeedsTheAnnouncement(t *testing.T) {
+	succ := key(0x57).PubKey().Compressed()
+	base := func() *Org {
+		return &Org{Hall: testHall, Org: orgKey(), Name: "Example", Created: 1,
+			Policy: PolicyRoot(nil), Roll: RollRoot(nil)}
+	}
+	prev := base()
+	txid := [32]byte{9}
+	next := base()
+	next.Seq, next.Prev = 1, txid
+
+	// The predecessor names nobody: the key cannot change.
+	handover := *next
+	handover.Org = succ
+	if err := CheckOrgTransition(prev, txid, &handover); Reason(err) != "transition" {
+		t.Fatalf("an unannounced handover: %v", err)
+	}
+	// It names the successor: that key, and only that key, may carry it on.
+	announced := base()
+	announced.Successor = succ
+	if err := CheckOrgTransition(announced, txid, &handover); err != nil {
+		t.Fatalf("the announced handover: %v", err)
+	}
+	other := *next
+	other.Org = key(0x58).PubKey().Compressed()
+	if err := CheckOrgTransition(announced, txid, &other); Reason(err) != "transition" {
+		t.Fatalf("a handover to another key: %v", err)
+	}
+	// The predecessor's own key still carries it on.
+	if err := CheckOrgTransition(announced, txid, next); err != nil {
+		t.Fatalf("the predecessor's key after an announcement: %v", err)
+	}
+	// A successor that is the anyone key or the key it would succeed is
+	// refused by the record itself.
+	for _, bad := range [][]byte{AnyoneKey(), orgKey(), {1, 2, 3}} {
+		o := base()
+		o.Successor = bad
+		if _, err := o.Encode(); Reason(err) != "identity" {
+			t.Fatalf("successor %x: %v", bad[:3], err)
+		}
+	}
+}

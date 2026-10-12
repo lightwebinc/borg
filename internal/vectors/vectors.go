@@ -336,7 +336,7 @@ func genOrg(s *Scenario, files map[string][]byte) error {
 	}{
 		{"seq skips", func(o *borgrec.Org) { o.Seq = 2 }, borgrec.ErrTransition},
 		{"prev names another transaction", func(o *borgrec.Org) { o.Prev = label("txid/elsewhere") }, borgrec.ErrTransition},
-		{"another organisation", func(o *borgrec.Org) { o.Org = OrgOpaque.Pub() }, borgrec.ErrTransition},
+		{"another organisation, which the predecessor did not name as its successor", func(o *borgrec.Org) { o.Org = OrgOpaque.Pub() }, borgrec.ErrTransition},
 		{"another hall", func(o *borgrec.Org) { o.Hall = "example_hall_qzxkvbmwtr" }, borgrec.ErrTransition},
 		{"opaque changed after the first token", func(o *borgrec.Org) { o.Opaque = true }, borgrec.ErrTransition},
 		{"count disagrees", func(o *borgrec.Org) { o.Count = 3 }, borgrec.ErrCount},
@@ -353,6 +353,39 @@ func genOrg(s *Scenario, files map[string][]byte) error {
 		}
 		refused = append(refused, otv{c.label, hx(rec), borgrec.Reason(c.want)})
 	}
+	// Succession: a token announces a successor, and the next token carries
+	// that key as its org. The announcement is what a host checks, from the
+	// bytes of the token and its parent alone (spec section 3.4).
+	announce := *s.Orgs[0]
+	announce.Successor = Successor.Pub()
+	announceRec, err := announce.Encode()
+	if err != nil {
+		return fmt.Errorf("the announcing token: %w", err)
+	}
+	handover := *s.Orgs[1]
+	handover.Org = Successor.Pub()
+	handoverRec, err := handover.Encode()
+	if err != nil {
+		return fmt.Errorf("the handover token: %w", err)
+	}
+	if err := borgrec.CheckOrgTransition(&announce, s.OrgTxids[0], &handover); err != nil {
+		return fmt.Errorf("the handover: %w", err)
+	}
+	// The same token after a predecessor that named nobody is refused, and
+	// so is a handover to a key the predecessor did not name.
+	if err := borgrec.CheckOrgTransition(s.Orgs[0], s.OrgTxids[0], &handover); !errors.Is(err, borgrec.ErrTransition) {
+		return fmt.Errorf("an unannounced handover: got %v", err)
+	}
+	other := handover
+	other.Org = OrgOpaque.Pub()
+	if err := borgrec.CheckOrgTransition(&announce, s.OrgTxids[0], &other); !errors.Is(err, borgrec.ErrTransition) {
+		return fmt.Errorf("a handover to another key: got %v", err)
+	}
+	otherRec, err := other.Encode()
+	if err != nil {
+		return err
+	}
+
 	// The member answer's inclusion context: alice's grant in the roll of
 	// token 1, and bob's (revoked there) refused against it.
 	kept := [][32]byte{s.Commit["alice"], s.Commit["carol"]}
@@ -375,6 +408,14 @@ func genOrg(s *Scenario, files map[string][]byte) error {
 	putHex(files, "org-offboard.hex", s.OrgRecs[1])
 	putHex(files, "org-opaque.hex", s.OpaqueRaw)
 	return put(files, "org-v1.json", map[string]any{
+		"succession": map[string]any{
+			"successor":   hx(Successor.Pub()),
+			"announce":    hx(announceRec),
+			"handover":    hx(handoverRec),
+			"unannounced": map[string]string{"hex": hx(handoverRec), "against": "the seq 0 token that names no successor", "reason": "transition"},
+			"otherKey":    map[string]string{"hex": hx(otherRec), "against": "the announcing token", "reason": "transition"},
+			"why":         "a token carries its predecessor's organisation key, or the key that predecessor named as its successor and no other; both keys sign the handover, because only the predecessor can spend the announcing token's output and only the successor can sign the claiming record",
+		},
 		"note": "Grant commitments are fixed stand-ins for carrier txids, SHA-256(\"borg/vector/commitment/grant/<member>\"); " +
 			"standInTxid is the stand-in for the mined token's txid that the next token's prev names. Hashes are in hash byte order.",
 		"commitments": func() map[string]string {

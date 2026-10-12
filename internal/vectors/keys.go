@@ -43,6 +43,8 @@ var (
 	Carol = party("carol", 0x54)
 	// Dave is never a member: the stranger of refusal cases.
 	Dave = party("dave", 0x56)
+	// Successor is the key an organisation hands over to (spec section 3.4).
+	Successor = party("successor", 0x57)
 )
 
 // Pub is the party's compressed identity key.
