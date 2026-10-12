@@ -1547,8 +1547,16 @@ func TestAPolicyCarrierLostToOneHostIsOfferedAgain(t *testing.T) {
 	if len(defined) != 1 {
 		t.Fatalf("host b holds %d policy record(s) after the offer, want 1", len(defined))
 	}
+	// A binding is confirmed by its own class (bound, keyed by the subject),
+	// not by the one a definition uses, so the loss is repeated for one.
+	r = h.must("org", "bind", "releaser", "-to", o.group)
+	if !strings.Contains(r.stderr, "lacked it; offered again and confirmed") {
+		t.Fatalf("the lost binding was not offered again:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if n := len(h.b.Txids("policy")); n != 2 {
+		t.Fatalf("host b holds %d policy record(s) after both offers, want 2", n)
+	}
 	// Both hosts answer a set that holds to the root, so a decision stands.
-	h.must("org", "bind", "releaser", "-to", o.group)
 	if got := h.must("org", "policy", "show").stdout; !strings.Contains(got, "root of seq") {
 		t.Fatalf("the set from the hosts:\n%s", got)
 	}
