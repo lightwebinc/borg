@@ -196,6 +196,13 @@ carries it (`borg role retire`, `borg unbind`), by revoking the grant, by
 removing the subject from the group, or by letting the binding expire. Each
 is a mined change, and until it is mined and seen the permission stands.
 
+To change what a role may do, define it again: one transition replaces the
+definition it supersedes and changes the role for every holder, and nothing
+a member holds is reissued. A binding carries a role's name rather than its
+permissions, so binding a role nothing defines says so and grants nothing
+until a definition lands; `borg doctor` names any binding left in that
+state.
+
 Roles and bindings are in the clear. The opaque setting hides what a
 certificate says, never what a role may do or who holds it.
 

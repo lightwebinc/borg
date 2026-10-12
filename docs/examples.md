@@ -227,19 +227,36 @@ $ borg org due -apply                     # make the removals due now; run from 
 ```console
 $ borg role define releaser -permission bsecret/release/payroll -permission 'bstore/get/*'
 $ borg bind releaser -to $GROUP            # every current member of the group holds it
-$ borg bind releaser -to $ERIN -only 'bstore/get/*'   # one key, narrowed
-$ borg bind oncall -to $ERIN -expiry 2026-12-31T23:59:59Z
+$ borg bind releaser -to $DEV -only 'bstore/get/*'   # one key, narrowed
+$ borg bind oncall -to $DEV -expiry 2026-12-31T23:59:59Z
+this set defines no role oncall; the binding authorizes nothing until it does
+$ borg role define oncall -permission 'bbox/post/*'   # now the binding above grants
 $ borg role list                           # the roles the set defines
-$ borg policy show                         # definitions and bindings
-$ borg policy check $ERIN bsecret/release/payroll
-ALLOW   <key> bsecret/release/payroll
-holds   bsecret/release/payroll bstore/get/*
+$ borg policy show                         # definitions and bindings, from the hosts
+$ borg policy check $DEV bstore/get/logs
+ALLOW   <key> bstore/get/logs
+holds   bbox/post/* bstore/get/*
+over    seq 7 <txid>, 1 grant(s), 5 policy record(s), 0 group(s)
+$ borg policy check $DEV bsecret/release/payroll
+DENY    <key> bsecret/release/payroll
+holds   bbox/post/* bstore/get/*
+over    seq 7 <txid>, 1 grant(s), 5 policy record(s), 0 group(s)
+why     no-match
 $ borg role retire releaser                # drops it from the set and sweeps its output
 $ borg unbind <txid>                       # retire one binding
+$ borg doctor                              # names any binding that authorizes nothing
 ```
 
-`policy check` reads this home's own record. A service decides for itself,
-from a host's answers checked against its own block headers.
+`$DEV` is a member outside `$GROUP`, so it holds `releaser` only through
+its own narrowed binding: the whole role carries `bsecret/release/payroll`
+and the attenuated binding does not, which is why the second check denies.
+Redefining a role replaces the definition it supersedes, so the set never
+holds two.
+
+`policy check` and `policy show` read from the hosts, every record held to
+the root the latest token commits to; `-local` reads this home's own record
+instead. A service decides for itself the same way, from a host's answers
+checked against its own block headers.
 
 ## 10. Hosts that disagree: fill
 
