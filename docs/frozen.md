@@ -11,9 +11,9 @@ the policy record (section 5A), the organization record's policy keys, the
 succession rules of both chain records, the six policy lookup classes and
 the policy floors of section 8 were signed on 2026-10-12, against the
 vectors and against the lab, which ran the whole policy drill on the devnet
-plane with them. Nothing of this contract has been released, so the policy
-keys were added to the records as they stand rather than as a second record
-version.
+plane with them. The contract is released at v0.7.0; the policy keys were
+added to the records as they stood, before any release, rather than as a
+second record version.
 
 **Status of the signed rows: signed, every one.** Key id `signer` (section 1) was signed with
 the two consequences spec sections 7.4 and 10 state: where more than one

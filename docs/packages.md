@@ -169,22 +169,12 @@ borg pins go-sdk at exactly v1.7.1 and bcommon at the version in its
 its own pin and borg's, so an importer that needs the same bytes pins the
 same versions and asserts them, as borg's `make deps-check` does.
 
-## Importing a private module
-
-The repository is private. The public Go proxy and checksum database cannot
-see it, so the `go` command has to be told to go to the repository directly,
-and needs credentials for it:
+## Importing the module
 
 ```console
-$ go env -w GOPRIVATE='github.com/lightwebinc/*'
-$ git config --global url."ssh://git@github.com/lightwebinc/".insteadOf "https://github.com/lightwebinc/"
-$ go get github.com/lightwebinc/borg@v0.1.1
+$ go get github.com/lightwebinc/borg@v0.7.0
 ```
 
-`GOPRIVATE` turns off the proxy and the checksum database for the matching
-paths. The `insteadOf` line makes git fetch over SSH with the key the
-machine already uses; an HTTPS credential helper or a token in `~/.netrc`
-with read access to the repository does the same. A build without
-credentials (a CI job with none, for instance) can instead resolve the
-module from a copy of its tagged archive served as a file proxy
-(`GOPROXY=file://...`), which `go.sum` still verifies against the tag.
+The module is fetched through the public Go proxy and checked against the
+checksum database like any other. Pin an exact tag: the packages above are
+supported at a tag, and `go.sum` holds the build to it.
