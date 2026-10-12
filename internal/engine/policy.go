@@ -78,22 +78,6 @@ func (e *Engine) PublishPolicy(ctx context.Context, req PolicyReq) (*state.Polic
 	return o.PolicyByTxid(txid), nil
 }
 
-// PolicySet is the policy records the organisation's latest token commits
-// to, read from this home's own state.
-func (e *Engine) PolicySet() ([]*state.Policy, error) {
-	o, err := e.org()
-	if err != nil {
-		return nil, err
-	}
-	out := []*state.Policy{}
-	for i := range o.Policies {
-		if o.Policies[i].Defined && !o.Policies[i].Retired {
-			out = append(out, &o.Policies[i])
-		}
-	}
-	return out, nil
-}
-
 // Records decodes this home's policy set, for the effective-permission fold.
 func Records(set []*state.Policy) ([]*borgrec.Policy, error) {
 	out := make([]*borgrec.Policy, 0, len(set))

@@ -193,16 +193,20 @@ func cmdPolicy(ctx context.Context, g *global, args []string) error {
 		defer r.close(ctx, g)
 		set := current(r.h.st.Org)
 		for _, p := range set {
+			// A record this home swept is still in the set until a token
+			// drops it, and it grants nothing from the moment the sweep is
+			// mined and seen (spec section 9.5).
+			swept := suffix(" RETRACTED by ", p.Swept)
 			if p.Kind == borgrec.PolicyRole {
-				fmt.Fprintf(g.stdout, "role    %s %s %s\n", p.Txid, p.Role, strings.Join(p.Permissions, " "))
+				fmt.Fprintf(g.stdout, "role    %s %s %s%s\n", p.Txid, p.Role, strings.Join(p.Permissions, " "), swept)
 				continue
 			}
 			what := "key"
 			if len(p.To) == 2*borgrec.GroupIDLen {
 				what = "group"
 			}
-			fmt.Fprintf(g.stdout, "bind    %s %s to %s %s%s%s\n", p.Txid, p.Role, what, p.To,
-				suffix(" only ", strings.Join(p.Permissions, " ")), suffix(" until ", p.Expiry))
+			fmt.Fprintf(g.stdout, "bind    %s %s to %s %s%s%s%s\n", p.Txid, p.Role, what, p.To,
+				suffix(" only ", strings.Join(p.Permissions, " ")), suffix(" until ", p.Expiry), swept)
 		}
 		if len(set) == 0 {
 			g.say("this organisation's policy set is empty (borg role define)")
