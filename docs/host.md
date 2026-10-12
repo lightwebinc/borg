@@ -198,13 +198,18 @@ log once and keeps no list of it.
 runs is safe. Restore it only when it is lost or damaged, never to roll the
 host back: rows written after the copy are gone.
 
-The module holds every carrier line of `borg-rows.jsonl` in memory for the
-host's life, and nothing bounds it: about 1 KB of memory and 300 bytes of
-journal for each carrier ever admitted, dropped or not, so 1,000,000
-carriers cost about 1 GB of memory and 300 MB of disk
-(`borg_carrier_lines` counts them). Tokens cost a line each as well. Give
-Node the heap for the carriers the host expects (`--max-old-space-size`),
-and watch the gauge.
+The module holds a carrier line in memory for each carrier an outpoint's
+row keeps: its winner and the superseded ones within the kind's evidence
+bound (64 grants or policy records, 8 wraps). A dropped carrier keeps no
+line, so a row's memory does not grow with equivocation: an outpoint
+carries at most 65 lines however many carriers are offered on it.
+`borg_carrier_lines` counts the lines held and
+`borg_carrier_lines_forgotten` those the rows stopped keeping. At about
+1 KB a line, a host's carrier memory is bounded by its outpoints rather
+than by its admissions. The journal is still append-only, so
+`borg-rows.jsonl` grows with what was admitted; tokens cost a line each as
+well. Give Node the heap for the outpoints the host expects
+(`--max-old-space-size`), and watch the gauges.
 
 A state directory written by an earlier build loads unchanged: the lines it
 holds are the lines this build writes, and a `payments.jsonl` line without
@@ -243,7 +248,8 @@ What is borg's own:
 | `borg_dropped_total{why}` | carriers dropped as `evidence` or by `retention`, and sweeps dropped from the `table` |
 | `borg_lookups_total{class}` | questions answered |
 |  `borg_halls`, `borg_tokens`, `borg_tokens_pending`, `borg_grants`, `borg_policies`, `borg_wraps`, `borg_sweeps`, `borg_outpoint_rows`, `borg_spend_table` | what the index holds |
-| `borg_carrier_lines` | carriers ever admitted, each a journal line held in memory for the host's life |
+| `borg_carrier_lines` | carrier lines held in memory: each outpoint's winner and the superseded carriers within its evidence bound |
+| `borg_carrier_lines_forgotten` | carrier lines the rows stopped keeping, because the carrier was dropped |
 | `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}` | the terms route |
 | `borg_payments_total{decision,reason}` | paid questions by what the host did: `requested` (`no-payment`, a 402 with the price); `fast` (`at-or-below-threshold`, `mined`); `hold` (`above-threshold`, `payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`, `broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`, `spend-view-unknown`); `refuse` (`malformed`, `wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`, `network-refused`, `double-spent`, `replayed`, `conflict`) |
 | `borg_payment_events_total{kind}` | fast payments the watch resolved: `confirmed`, `double-spent`, `refused`, `unmined` (all but the first flag the payer) |

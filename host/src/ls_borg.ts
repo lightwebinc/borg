@@ -139,8 +139,22 @@ interface Spend {
 
 /** One funding outpoint's row. */
 interface Row {
+  /**
+   * The carriers the row keeps, by commitment: its winner and the lowest
+   * superseded ones up to the kind's evidence bound. A carrier past the
+   * bound is dropped and its line is not kept, so this map is bounded by
+   * the bound and the row's memory does not grow with equivocation
+   * (spec section 11.3, frozen section 7).
+   */
   carriers: Map<string, CarrierLine>
+  /**
+   * Commitments dropped from the index, so that none is admitted again.
+   * A drop that must stick is cheap to remember: 31 days after a grant
+   * left the roll, re-admitting it would undo retention.
+   */
   dropped: Set<string>
+  /** Carriers the row stopped keeping a line for, counted. */
+  more: number
   /** Its winner was dropped: nothing on it is answered again. */
   closed: boolean
   /** Admitted sweeps that spend it. */
@@ -217,7 +231,10 @@ export class BorgLookupService implements LookupService {
 
   // What the journal holds.
   private readonly rows = new Map<string, Row>()
+  /** The lines of the carriers the rows keep, by commitment. */
   private readonly lines = new Map<string, CarrierLine>()
+  /** Dropped carriers, by commitment: the outpoint alone, not the line. */
+  private readonly droppedIn = new Map<string, string>()
   private readonly tokenSeen = new Map<string, number>()
 
   // What the host holds, from storage.
@@ -296,9 +313,19 @@ export class BorgLookupService implements LookupService {
   get rowCount(): number {
     return this.rows.size
   }
-  /** Carriers ever admitted: one journal line, and one entry in memory, each, for the host's life. */
+  /**
+   * Carrier lines the rows keep: the winner of each outpoint and the
+   * superseded ones within the kind's evidence bound. A dropped carrier
+   * keeps no line, so this does not grow with equivocation (O16).
+   */
   get lineCount(): number {
     return this.lines.size
+  }
+  /** Carrier lines the rows stopped keeping, because the carrier was dropped. */
+  get forgottenLines(): number {
+    let n = 0
+    for (const r of this.rows.values()) n += r.more
+    return n
   }
   get tableSize(): number {
     return this.table.size
@@ -316,7 +343,7 @@ export class BorgLookupService implements LookupService {
 
   private row(op: string): Row {
     let r = this.rows.get(op)
-    if (r === undefined) this.rows.set(op, (r = { carriers: new Map(), dropped: new Set(), closed: false, sweeps: new Map() }))
+    if (r === undefined) this.rows.set(op, (r = { carriers: new Map(), dropped: new Set(), more: 0, closed: false, sweeps: new Map() }))
     return r
   }
 
@@ -330,6 +357,12 @@ export class BorgLookupService implements LookupService {
       case 'd': {
         const r = this.row(l.op)
         r.dropped.add(l.c)
+        this.droppedIn.set(l.c, l.op)
+        // A dropped carrier is out of every answer, so its line is not
+        // kept: the row remembers the commitment, so that it is never
+        // admitted again, and counts the line it stopped keeping (O16).
+        if (r.carriers.delete(l.c)) r.more++
+        this.lines.delete(l.c)
         if (l.w) r.closed = true
         break
       }
@@ -372,18 +405,19 @@ export class BorgLookupService implements LookupService {
 
   /** The status of the carrier with commitment c (hash byte order hex). */
   status(c: string): CarrierStatus | undefined {
-    const l = this.lines.get(c)
-    if (l === undefined) return undefined
-    const r = this.rows.get(l.op)!
+    const op = this.lines.get(c)?.op ?? this.droppedIn.get(c)
+    if (op === undefined) return undefined
+    const r = this.rows.get(op)!
     if (r.sweeps.size > 0) return 'retracted'
-    if (r.closed || this.winnerOf(l.op) !== c) return 'superseded'
+    // A dropped carrier keeps no line, and is superseded whatever else
+    // holds: the row no longer answers it.
+    if (r.closed || r.dropped.has(c) || this.winnerOf(op) !== c) return 'superseded'
     return 'held'
   }
 
   /** Whether the carrier with commitment c was dropped. */
   dropped(c: string): boolean {
-    const l = this.lines.get(c)
-    return l !== undefined && this.rows.get(l.op)!.dropped.has(c)
+    return this.droppedIn.has(c)
   }
 
   // ---- token statuses (spec section 11.2)
@@ -657,6 +691,12 @@ export class BorgLookupService implements LookupService {
       const w = decodeWrap(record)
       e = { kind: 'w', c, txid, hall, org: toHex(w.org), op, group: toHex(w.group), epoch: w.epoch, recipients: recipients(w).map(toHex) }
     }
+    // Refuse before writing: a dropped carrier re-offered must not add a
+    // line to the journal each time it is offered.
+    if (this.rows.get(op)?.dropped.has(c) === true) {
+      this.queueDelete(txid, 0, hall)
+      return false
+    }
     if (!this.lines.has(c)) {
       this.write({ k: 'c', op, c, txid, kind: e.kind, hall, at: this.now() })
       // Spends seen before any carrier used the outpoint join its row.
@@ -668,10 +708,6 @@ export class BorgLookupService implements LookupService {
           this.host.metrics.inc('borg_retractions_total')
         }
       }
-    }
-    if (this.rows.get(op)!.dropped.has(c)) {
-      this.queueDelete(txid, 0, hall)
-      return false
     }
     this.carriers.set(c, e)
     this.carrierByTxid.set(txid, c)
@@ -881,8 +917,10 @@ export class BorgLookupService implements LookupService {
     const sets = new Map<string, ReturnType<BorgLookupService['answerPolicy']>>()
     const retiredAt = new Map<string, Map<string, number>>()
     for (const e of [...this.carriers.values()]) {
+      // A held carrier keeps its line: only a dropped one loses it, and a
+      // dropped carrier is not in this map.
       const l = this.lines.get(e.c)!
-      const r = this.rows.get(l.op)!
+      const r = this.rows.get(e.op)!
       const sweptAt = r.sweeps.size === 0 ? undefined : Math.min(...[...r.sweeps.values()].map((s) => s.at))
       let from: number | undefined
       if (e.kind === 'g') {
@@ -1192,6 +1230,7 @@ export class BorgLookupService implements LookupService {
     for (const m of [
       this.rows,
       this.lines,
+      this.droppedIn,
       this.tokenSeen,
       this.chains,
       this.carriers,

@@ -257,6 +257,16 @@ test('evidence: 64 superseded grants are kept on an outpoint, the 65th dropped',
   assert.equal(s.ls.grantCount, 65)
   assert.ok(s.ls.dropped(cHex(sorted[65]!)))
   assert.equal(s.host.count('borg_dropped_total', { why: 'evidence' }), 1)
+  // O16: the row keeps a line for what it answers and forgets the rest, so
+  // a line is not held for every carrier ever admitted.
+  assert.equal(s.ls.lineCount, 65, 'a line for each carrier the row keeps')
+  assert.equal(s.ls.forgottenLines, 1, 'and none for the one it dropped')
+  // Re-offering a dropped carrier is refused and costs no journal line.
+  const before = s.ls.lineCount
+  assert.deepEqual(await submit(s.engine, sorted[65]!.toAtomicBEEF()), [])
+  assert.equal(s.ls.lineCount, before, 'a refused re-offer adds no line')
+  assert.equal(s.ls.status(cHex(sorted[65]!)), 'superseded')
+  assert.equal(s.ls.grantCount, 65, 'and is not answered again')
 })
 
 test('retention: a revoked or retracted grant and an ended epoch\'s wraps go after the floor; the roll, the current epoch and an unadmitted grant stay', async () => {

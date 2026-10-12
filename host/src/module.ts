@@ -254,6 +254,7 @@ export function borgModule(host: ModuleHost, c: Config, overlayTopics?: readonly
   host.metrics.gauge('borg_sweeps', () => ls.sweepCount)
   host.metrics.gauge('borg_outpoint_rows', () => ls.rowCount)
   host.metrics.gauge('borg_carrier_lines', () => ls.lineCount)
+  host.metrics.gauge('borg_carrier_lines_forgotten', () => ls.forgottenLines)
   host.metrics.gauge('borg_spend_table', () => ls.tableSize)
   const tracker = headers ?? new HeaderTracker(c.headersURL)
   const topics: Record<string, BorgTopicManager> = {}
