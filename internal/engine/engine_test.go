@@ -16,6 +16,7 @@ import (
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/state"
 	"github.com/lightwebinc/borg/internal/testchain"
+	"github.com/lightwebinc/borg/reader"
 )
 
 const hall = "example_abcdefghij"
@@ -178,5 +179,23 @@ func TestAFlaggedGroupStaysOperable(t *testing.T) {
 	add(func(r *borgrec.Group) { r.Epoch, r.EpochSeq, r.Commitment = 2, 3, [32]byte{3} }, [][]byte{a, b})
 	if st, _, err := Flagged(g); err != nil || st != "" {
 		t.Fatalf("after a rotation: %q %v", st, err)
+	}
+}
+
+// Every kind a home persists has a confirmation: the lookup that shows a
+// host took it. A kind without one is published blind, which is what left
+// policy records unconfirmed until 2026-10-11, so the set is asserted here
+// rather than left to be noticed on a plane.
+func TestEveryPendingKindHasAConfirmation(t *testing.T) {
+	e, st := offline(t)
+	e.Legs.Reader = &reader.Client{Hosts: []string{"http://192.0.2.1"}}
+	st.Org = &state.Org{Hall: "example_aaaaaaaaaa",
+		Policies: []state.Policy{{Txid: strings.Repeat("ab", 32), Kind: borgrec.PolicyRole, Role: "releaser"}}}
+	for _, kind := range []string{state.KindGrant, state.KindPolicy, state.KindWrap,
+		state.KindOrgToken, state.KindGroupToken, state.KindSweep} {
+		p := state.Pending{Kind: kind, Hall: st.Org.Hall, Txid: strings.Repeat("ab", 32), Org: e.orgHex()}
+		if e.confirm(p) == nil {
+			t.Errorf("kind %q has no confirmation: it would be published with nothing to show a host took it", kind)
+		}
 	}
 }
