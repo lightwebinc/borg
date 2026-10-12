@@ -509,7 +509,8 @@ func (g *global) orgSync(ctx context.Context, retire bool) error {
 	}
 	g.reportSync(g.stdout, rep)
 	o := h.st.Org
-	fmt.Fprintf(g.stdout, "org     %s %s in %s: seq %d, %d grant(s), %d group(s)\n", h.st.Identity, field(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(o.Groups))
+	fmt.Fprintf(g.stdout, "org     %s %s in %s: seq %d, %d grant(s), %d policy record(s), %d group(s)\n",
+		h.st.Identity, field(o.Name), o.Hall, len(o.Tokens)-1, len(o.Grants), len(current(o)), len(o.Groups))
 	// What the home owes now that it holds the chain: a wrap to a member
 	// another home added, when this one holds the epoch's key. A home with
 	// no coin yet makes them with its next command.
