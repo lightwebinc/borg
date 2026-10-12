@@ -50,6 +50,9 @@ export const Reasons: readonly Reason[] = [
   'fields',
   'signature-form',
   'entry',
+  'role',
+  'permission',
+  'binding',
   'count',
   'grant-revocation',
   'grant-signature',
@@ -69,7 +72,7 @@ export const Reasons: readonly Reason[] = [
 ]
 
 /** What an admitted transaction was. */
-export const AdmitKinds: readonly TxKind[] = ['grant', 'wrap', 'org-token', 'group-token', 'sweep']
+export const AdmitKinds: readonly TxKind[] = ['grant', 'policy', 'wrap', 'org-token', 'group-token', 'sweep']
 
 /** How many admitted txids a manager remembers to count each once. */
 export const RecentAdmissions = 4096

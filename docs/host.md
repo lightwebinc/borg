@@ -236,7 +236,7 @@ What is borg's own:
 
 | Metric | What |
 | --- | --- |
-| `borg_admitted_total{kind}`, `borg_admitted_repeats_total{kind}` | transactions admitted (`grant`, `wrap`, `org-token`, `group-token`, `sweep`), each once; a txid the engine showed the manager again |
+| `borg_admitted_total{kind}`, `borg_admitted_repeats_total{kind}` | transactions admitted (`grant`, `policy`, `wrap`, `org-token`, `group-token`, `sweep`), each once; a txid the engine showed the manager again |
 | `borg_refused_total{reason}` | refusals, by the reason labels of spec sections 3.1 and 11.1 |
 | `borg_token_status_total{status}` | tokens by the status the fold gave them |
 | `borg_retractions_total` | spends of a carrier's funding outpoint |
