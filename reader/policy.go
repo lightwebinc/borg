@@ -150,6 +150,81 @@ type Decision struct {
 	// cares about completeness denies on them.
 	Refused []Refusal
 	HostErr map[string]error
+	// Hosts are the hosts the policy set was taken from: one, or several
+	// when no single host answered the whole set and it was assembled
+	// (Assembled). The receipt names commitments and the token, not hosts,
+	// so this is for the service's log rather than for the receipt.
+	Hosts     []string
+	Assembled bool
+}
+
+// CommittedSet is the policy set the latest token commits to, taken from
+// the hosts and held to its root. One host that answers the whole set is
+// used as it is. When no single host does, the verified records of every
+// host are assembled by commitment and the assembled set is held to the
+// same root. A set that reproduces the root is the committed set whichever
+// hosts its records came from: nothing can be added to a Merkle tree hash
+// or left out of it and still match, and every record was verified on its
+// own before it was counted. Assembly therefore widens what a reader can
+// read without widening what it trusts, which was never a host's word but
+// the root (spec section 13).
+type CommittedSet struct {
+	Policies []*Car
+	// From is the host each record was taken from, by txid.
+	From map[string]string
+	// Hosts are the hosts the set was taken from, in the client's order.
+	Hosts []string
+	// Assembled is set when no single host answered the whole set.
+	Assembled bool
+	// Answers are every host's answer, for the refusals and errors in them.
+	Answers []PolicyAnswer
+	// OK is false when neither a host nor the assembly reproduces the root.
+	OK bool
+}
+
+// CommittedSet is the procedure above.
+func (c *Client) CommittedSet(ctx context.Context, ov *OrgView) CommittedSet {
+	cs := CommittedSet{From: map[string]string{}, Answers: c.PolicySet(ctx, ov)}
+	for _, pa := range cs.Answers {
+		if !pa.Matches {
+			continue
+		}
+		cs.Policies, cs.Hosts, cs.OK = pa.Policies, []string{pa.Host}, true
+		for _, car := range pa.Policies {
+			cs.From[car.Txid] = pa.Host
+		}
+		return cs
+	}
+	// No single host: assemble by commitment in the hosts' order, so the
+	// first host to answer a record is the one named for it.
+	var roots [][32]byte
+	seen := map[[32]byte]bool{}
+	used := map[string]bool{}
+	for _, pa := range cs.Answers {
+		if pa.Err != nil {
+			continue
+		}
+		for _, car := range pa.Policies {
+			k := car.Carrier.Commitment
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			cs.Policies = append(cs.Policies, car)
+			cs.From[car.Txid] = pa.Host
+			roots = append(roots, k)
+			if !used[pa.Host] {
+				used[pa.Host] = true
+				cs.Hosts = append(cs.Hosts, pa.Host)
+			}
+		}
+	}
+	if len(cs.Hosts) > 0 && borgrec.PolicyRoot(roots) == ov.Token.Policy {
+		cs.Assembled, cs.OK = true, true
+		return cs
+	}
+	cs.Policies, cs.Hosts, cs.From = nil, nil, map[string]string{}
+	return cs
 }
 
 // Effective is the procedure of spec section 13 for one subject: its
@@ -234,44 +309,42 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 		sub.Groups = append(sub.Groups, [borgrec.GroupIDLen]byte(b))
 	}
 	// The set the latest token commits to, taken from the hosts and held to
-	// its root: a host that withheld or added a record is not used.
-	var set []*borgrec.Policy
-	matched := false
-	for _, pa := range c.PolicySet(ctx, ov) {
+	// its root: from one host that answers it whole, or assembled from
+	// several when none does (CommittedSet).
+	cs := c.CommittedSet(ctx, ov)
+	for _, pa := range cs.Answers {
 		d.Refused = append(d.Refused, pa.Refused...)
 		if pa.Err != nil {
 			d.HostErr[pa.Host] = pa.Err
-			continue
-		}
-		if !pa.Matches || matched {
-			continue
-		}
-		matched = true
-		for _, car := range pa.Policies {
-			// The set a token commits to is answered whatever each
-			// carrier's status (spec section 11.2), so a record swept
-			// since is still here. A sweep is the fast half of a
-			// withdrawal: it retracts at once and the next token drops
-			// the commitment. A reader that counted a swept record would
-			// grant what the organisation has already taken away, so the
-			// outpoint is checked here as a grant's revocation outpoint
-			// is, and nothing is current without a positive answer.
-			switch spent, err := spentBy(ctx, spends, car); {
-			case err != nil:
-				d.Refused = append(d.Refused, Refusal{Host: pa.Host, Txid: car.Txid, Reason: "policy", Err: err})
-				continue
-			case spent != "":
-				d.Refused = append(d.Refused, Refusal{Host: pa.Host, Txid: car.Txid, Reason: "policy",
-					Err: fmt.Errorf("retracted: its funding outpoint is spent by %s", spent)})
-				continue
-			}
-			set = append(set, car.Carrier.Policy)
-			d.Policies = append(d.Policies, car.Carrier.Commitment)
 		}
 	}
-	if !matched {
+	if !cs.OK {
 		d.Reason = "incomplete"
 		return d
+	}
+	d.Hosts, d.Assembled = cs.Hosts, cs.Assembled
+	var set []*borgrec.Policy
+	for _, car := range cs.Policies {
+		host := cs.From[car.Txid]
+		// The set a token commits to is answered whatever each carrier's
+		// status (spec section 11.2), so a record swept since is still
+		// here. A sweep is the fast half of a withdrawal: it retracts at
+		// once and the next token drops the commitment. A reader that
+		// counted a swept record would grant what the organisation has
+		// already taken away, so the outpoint is checked here as a grant's
+		// revocation outpoint is, and nothing is current without a
+		// positive answer.
+		switch spent, err := spentBy(ctx, spends, car); {
+		case err != nil:
+			d.Refused = append(d.Refused, Refusal{Host: host, Txid: car.Txid, Reason: "policy", Err: err})
+			continue
+		case spent != "":
+			d.Refused = append(d.Refused, Refusal{Host: host, Txid: car.Txid, Reason: "policy",
+				Err: fmt.Errorf("retracted: its funding outpoint is spent by %s", spent)})
+			continue
+		}
+		set = append(set, car.Carrier.Policy)
+		d.Policies = append(d.Policies, car.Carrier.Commitment)
 	}
 	sortCommitments(d.Grants)
 	sortCommitments(d.Policies)

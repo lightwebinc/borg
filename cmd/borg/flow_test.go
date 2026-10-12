@@ -1564,3 +1564,43 @@ func TestAPolicyCarrierLostToOneHostIsOfferedAgain(t *testing.T) {
 		t.Fatalf("the decision:\n%s", got)
 	}
 }
+
+// When no single host holds the whole policy set, the reader assembles it
+// from what the hosts hold between them and holds the assembled set to the
+// committed root. The root is what the reader trusted all along, never a
+// host's word, so a set that reproduces it is the committed set whichever
+// hosts its records came from. This is the failed lab run of 2026-10-11 as
+// it would have gone had the client been able to do this then: one record
+// missing at each host, their union whole.
+func TestThePolicySetIsAssembledWhenNoHostHoldsItWhole(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "bind", "releaser", "-to", o.group)
+	recs := h.a.Txids("policy")
+	if len(recs) != 2 {
+		t.Fatalf("host a holds %d policy record(s), want 2", len(recs))
+	}
+	// Each host loses a different record: neither is whole, their union is.
+	h.a.Forget(recs[0])
+	h.b.Forget(recs[1])
+	r := h.must("org", "policy", "show")
+	if !strings.Contains(r.stdout, "assembled from") || !strings.Contains(r.stdout, "the root of seq") {
+		t.Fatalf("the set was not assembled:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if strings.Count(r.stderr, "withheld or added one") != 2 {
+		t.Fatalf("each host is still named for what it lacks:\n%s", r.stderr)
+	}
+	got := h.must("org", "policy", "check", o.alice, "bsecret/release/payroll")
+	if !strings.HasPrefix(got.stdout, "ALLOW") || !strings.Contains(got.stdout, "assembled from") {
+		t.Fatalf("the decision over the assembled set:\n%s\n%s", got.stdout, got.stderr)
+	}
+	// Both hosts short of the same record leaves the union short, and the
+	// read incomplete: assembly widens what is read, not what is trusted.
+	h.b.Forget(recs[0])
+	r = h.run("org", "", "policy", "check", o.alice, "bsecret/release/payroll")
+	if !strings.HasPrefix(r.stdout, "DENY") || !strings.Contains(r.stdout, "incomplete") {
+		t.Fatalf("a union short of the root is not a set:\n%s\n%s", r.stdout, r.stderr)
+	}
+}

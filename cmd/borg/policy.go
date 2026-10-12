@@ -389,8 +389,8 @@ func (g *global) showPolicy(ctx context.Context) error {
 		return g.chainProblem("the organisation", err)
 	}
 	problem := g.reportChain("organisation chain", ov.ChainView)
-	shown := false
-	for _, pa := range t.rd.PolicySet(ctx, ov) {
+	cs := t.rd.CommittedSet(ctx, ov)
+	for _, pa := range cs.Answers {
 		if pa.Err != nil {
 			g.say("host %s: NOT ASKED: %s", pa.Host, firstLine(pa.Err.Error()))
 			if problem == nil {
@@ -402,20 +402,28 @@ func (g *global) showPolicy(ctx context.Context) error {
 			g.say("%sREFUSED policy record %s (%s): it is not shown: %v", by(r.Host), r.Txid, r.Reason, r.Err)
 			problem = incomplete("a host answered a policy record that does not verify; it is not shown")
 		}
+		// A host short of the set is named whether or not the set was
+		// reached without it: what it lacks is what borg fill gives it.
 		if !pa.Matches {
 			g.say("host %s: its policy records do not reproduce the root of seq %d: it withheld or added one", pa.Host, ov.Token.Seq)
-			problem = incomplete("a host's policy set does not match the committed root")
-			continue
 		}
-		if shown {
-			continue
+	}
+	if !cs.OK {
+		if problem == nil {
+			problem = incomplete("no host's policy set matches the committed root, and neither does what they hold between them")
 		}
-		shown = true
-		fmt.Fprintf(g.stdout, "set     %d record(s) from %s, the root of seq %d reproduced\n", len(pa.Policies), pa.Host, ov.Token.Seq)
+		return problem
+	}
+	if cs.Assembled {
+		fmt.Fprintf(g.stdout, "set     %d record(s) assembled from %s, the root of seq %d reproduced\n", len(cs.Policies), strings.Join(cs.Hosts, " and "), ov.Token.Seq)
+	} else {
+		fmt.Fprintf(g.stdout, "set     %d record(s) from %s, the root of seq %d reproduced\n", len(cs.Policies), cs.Hosts[0], ov.Token.Seq)
+	}
+	{
 		// The whole set is answered without a path (spec section 10.2), and
-		// this host's answer reproduced the root above, which is what holds
-		// it. `policy show -role` and `-bound` answer with a path.
-		for _, car := range pa.Policies {
+		// the answer, or the assembly, reproduced the root above, which is
+		// what holds it. `policy show -role` and `-bound` answer with a path.
+		for _, car := range cs.Policies {
 			p := car.Carrier.Policy
 			if p.Kind == borgrec.PolicyRole {
 				fmt.Fprintf(g.stdout, "role    %s %s %s\n", car.Txid, p.Role, strings.Join(p.Permissions, " "))
@@ -428,9 +436,6 @@ func (g *global) showPolicy(ctx context.Context) error {
 			fmt.Fprintf(g.stdout, "bind    %s %s to %s %s%s%s\n", car.Txid, p.Role, what, hex.EncodeToString(p.To),
 				suffix(" only ", strings.Join(p.Permissions, " ")), suffix(" until ", p.Expiry))
 		}
-	}
-	if !shown && problem == nil {
-		g.say("no host answered a policy set that matches the root of seq %d", ov.Token.Seq)
 	}
 	return problem
 }
@@ -473,6 +478,9 @@ func (g *global) checkFromHosts(ctx context.Context, key, permission string) err
 	fmt.Fprintf(g.stdout, "holds   %s\n", strings.Join(d.Effective, " "))
 	fmt.Fprintf(g.stdout, "over    seq %d %s, %d grant(s), %d policy record(s), %d group(s)\n",
 		d.Seq, d.Token, len(d.Grants), len(d.Policies), len(d.Groups))
+	if d.Assembled {
+		fmt.Fprintf(g.stdout, "from    the policy set assembled from %s: no one host held it whole\n", strings.Join(d.Hosts, " and "))
+	}
 	if !d.Allow {
 		fmt.Fprintf(g.stdout, "why     %s\n", d.Reason)
 	}

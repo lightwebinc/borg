@@ -1830,8 +1830,15 @@ permission in question: `role` for the role `K`'s grant names, `bound` for
 answered carrier and its inclusion path against the latest token's `policy`
 root; without a path that verifies, ask `policy` (all pages), verify every
 record and compute the root, and a mismatch means the host withheld or added
-one, so ask another host. Then compute the effective set (section 5A.4) and
-match the asked permission (section 5A.3).
+one. Ask another host, or assemble the verified records of several hosts by
+commitment and hold the assembled set to the same root: a set that
+reproduces it is the committed set whichever hosts its records came from,
+because nothing can be added to the root or left out of it and still match,
+and each record was verified on its own before it was counted. Assembly
+widens what a reader can read, not what it trusts, which was never a host's
+word. A reader that assembles names every host it drew from. Then compute
+the effective set (section 5A.4) and match the asked permission (section
+5A.3).
 
 Every input of that answer is checked against the reader's own headers, so a
 service decides from the chain and not from a host's word. It **fails
