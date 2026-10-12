@@ -293,6 +293,17 @@ the `member` class and offered it again where it lacks it. A grant fewer
 hosts than the `quorum` then answer is not published: it goes back to the
 outbox (exit 2), and the next command publishes it.
 
+**Policy records.** A policy record is published the same way and for the
+same reason: no free class answers one before a token defines it, so an
+answer that holds nothing for a new record is counted, and once the
+defining token is published each host is asked for it by the `policy`
+class and offered it again where it lacks it. A record fewer hosts than
+the `quorum` then answer is not published: it goes back to the outbox
+(exit 2), and the next command publishes it. This matters more than it
+does for a grant, because a reader holds the whole set to the root the
+latest token commits to: one record a host lacks makes every decision at
+that host fail closed, not one subject's.
+
 **Revocation.** `grant revoke` revokes by the roll (an organization token
 revoking the grants' commitments) and by a mined sweep of their
 revocation outpoints (each grant-tree output its carrier spent), which

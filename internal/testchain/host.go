@@ -750,10 +750,21 @@ func (h *Host) Txids(kind string) []string {
 	defer h.mu.Unlock()
 	var out []string
 	switch kind {
-	case "grant", "wrap":
+	case "grant", "policy", "wrap":
 		for id, c := range h.carriers {
-			if (kind == "grant") == (c.grant != nil) {
-				out = append(out, id)
+			switch kind {
+			case "grant":
+				if c.grant != nil {
+					out = append(out, id)
+				}
+			case "policy":
+				if c.policy != nil {
+					out = append(out, id)
+				}
+			case "wrap":
+				if c.wrap != nil {
+					out = append(out, id)
+				}
 			}
 		}
 	case "token":

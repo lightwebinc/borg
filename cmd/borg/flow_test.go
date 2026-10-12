@@ -1492,3 +1492,67 @@ func TestDoctorNamesABindingThatAuthorizesNothing(t *testing.T) {
 		t.Fatalf("want two dead bindings, got %d:\n%s", n, got)
 	}
 }
+
+// A policy record is published like any other carrier: a host that takes
+// nothing is not counted, the record is persisted, and the next command
+// publishes it. Until the policy class could confirm one, a policy carrier
+// was sent with no confirmation at all and a host that took nothing still
+// counted, which left a set no reader could hold to its root.
+func TestAPolicyRecordIsNotPublishedWithoutTheQuorum(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.env["BORG_MODE"] = "unicast"
+	delete(h.env, "BORG_FACADE")
+	o := h.orgWithGroup()
+	h.b.SetDown(true)
+	r := h.run("org", "", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.want(r, exitUsage, "1 of 2 host(s) took it and the quorum is 2")
+	if got := h.must("org", "doctor").stdout; !strings.Contains(got, "outbox      policy") {
+		t.Fatalf("doctor does not name the persisted record:\n%s", got)
+	}
+	h.b.SetDown(false)
+	r = h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	if !strings.Contains(r.stderr, "publishing what a previous run persisted") {
+		t.Fatalf("resume:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// Both hosts answer the set, and it holds to the committed root.
+	h.must("org", "bind", "releaser", "-to", o.group)
+	if got := h.must("org", "policy", "show").stdout; !strings.Contains(got, "root of seq") {
+		t.Fatalf("the set from the hosts:\n%s", got)
+	}
+	if got := h.must("org", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "ALLOW") {
+		t.Fatalf("the decision:\n%s", got)
+	}
+}
+
+// A policy carrier lost on the way to one host is offered to it again by
+// the token that defines it, so the set every host answers reproduces the
+// committed root without anyone running borg fill. This is the lab failure
+// of 2026-10-11: the carrier never reached a host, nothing confirmed it,
+// and one missing record made every decision at that host fail closed.
+func TestAPolicyCarrierLostToOneHostIsOfferedAgain(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	// The plane loses the policy carrier on the way to host b, and nothing
+	// else: the token that defines it reaches both.
+	h.plane.Lost = func(host int, tx []byte) bool {
+		return host == 1 && bytes.Contains(tx, []byte("bop"))
+	}
+	r := h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	if !strings.Contains(r.stderr, "lacked it; offered again and confirmed") {
+		t.Fatalf("the lost carrier was not offered again:\n%s\n%s", r.stdout, r.stderr)
+	}
+	defined := h.b.Txids("policy")
+	if len(defined) != 1 {
+		t.Fatalf("host b holds %d policy record(s) after the offer, want 1", len(defined))
+	}
+	// Both hosts answer a set that holds to the root, so a decision stands.
+	h.must("org", "bind", "releaser", "-to", o.group)
+	if got := h.must("org", "policy", "show").stdout; !strings.Contains(got, "root of seq") {
+		t.Fatalf("the set from the hosts:\n%s", got)
+	}
+	if got := h.must("org", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "ALLOW") {
+		t.Fatalf("the decision:\n%s", got)
+	}
+}

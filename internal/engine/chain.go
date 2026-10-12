@@ -1069,9 +1069,15 @@ func (e *Engine) adopt(ctx context.Context, tr *state.Transition, tx *transactio
 	if err := e.publishToken(ctx, tr.Kind, tr.Group, tok.Txid); err != nil {
 		return err
 	}
-	if tr.Kind == state.KindOrgToken && len(tr.Grants) > 0 {
+	if tr.Kind == state.KindOrgToken && (len(tr.Grants) > 0 || len(tr.Defines) > 0) {
 		// The wraps the transition owes are made whatever a host lacks.
 		if err := e.ConfirmGrants(ctx, tr.Grants); err != nil {
+			if oerr := e.Owed(ctx); oerr != nil {
+				e.note("%v", oerr)
+			}
+			return err
+		}
+		if err := e.ConfirmPolicies(ctx, tr.Defines); err != nil {
 			if oerr := e.Owed(ctx); oerr != nil {
 				e.note("%v", oerr)
 			}
@@ -1270,6 +1276,70 @@ func (e *Engine) ConfirmGrants(ctx context.Context, commitments []string) error 
 				}
 			}
 			err := fmt.Errorf("grant %s: %d of %d host(s) named answer it and %d must (%s lack it or could not be asked); it is persisted and the next command publishes it", Short(g.Txid), held, len(rd.Hosts), need, strings.Join(missing, ", "))
+			if first == nil {
+				first = err
+			} else {
+				e.note("%v", err)
+			}
+		}
+	}
+	return first
+}
+
+// ConfirmPolicies is ConfirmGrants for the policy records a token defines.
+// It matters more than it does for a grant: a reader holds the whole set to
+// the root the latest token commits to, so one record a host lacks makes
+// every decision at that host fail closed, not just one subject's.
+func (e *Engine) ConfirmPolicies(ctx context.Context, commitments []string) error {
+	o := e.St.Org
+	rd := e.Legs.Reader
+	if rd == nil || o == nil {
+		return nil
+	}
+	q := reader.Query{"hall": o.Hall, "policy": e.orgHex()}
+	var first error
+	for _, c := range commitments {
+		pr := o.PolicyByCommitment(c)
+		if pr == nil {
+			continue
+		}
+		held := 0
+		var missing []string
+		for _, host := range rd.Hosts {
+			ok, err := rd.Held(ctx, host, q, pr.Txid)
+			if ok {
+				held++
+				continue
+			}
+			if err != nil {
+				e.note("policy record %s: host %s could not be asked: %v", Short(pr.Txid), host, err)
+				missing = append(missing, host)
+				continue
+			}
+			beef, err := hex.DecodeString(pr.Beef)
+			if err != nil {
+				e.note("policy record %s: %v", Short(pr.Txid), err)
+				missing = append(missing, host)
+				continue
+			}
+			set := &unicast.Set{Hosts: []string{host}, Need: 1, Retries: Retries, HTTP: rd.HTTP, Note: e.Note}
+			confirm := func(ctx context.Context, h string) (bool, error) { return rd.Held(ctx, h, q, pr.Txid) }
+			if err := set.Send(ctx, "policy record "+Short(pr.Txid), borgrec.Topic(o.Hall), beef, 1, confirm).Err(); err != nil {
+				e.note("policy record %s: host %s lacks it and did not take it again: %v", Short(pr.Txid), host, err)
+				missing = append(missing, host)
+				continue
+			}
+			e.note("policy record %s: host %s lacked it; offered again and confirmed", Short(pr.Txid), host)
+			held++
+		}
+		if need := e.carrierNeed(); held < need {
+			if !e.St.Queued(pr.Txid) {
+				e.St.Outbox = append(e.St.Outbox, state.Pending{Kind: state.KindPolicy, Hall: o.Hall, Txid: pr.Txid, Beef: pr.Beef, Org: e.orgHex()})
+				if err := e.St.Save(); err != nil {
+					return err
+				}
+			}
+			err := fmt.Errorf("policy record %s: %d of %d host(s) named answer it and %d must (%s lack it or could not be asked); it is persisted and the next command publishes it", Short(pr.Txid), held, len(rd.Hosts), need, strings.Join(missing, ", "))
 			if first == nil {
 				first = err
 			} else {

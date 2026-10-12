@@ -743,7 +743,8 @@ func (e *Engine) submitFacade(ctx context.Context, what, topic string, beef []by
 
 // confirm is the lookup that shows a host took p (spec section 12): the
 // org-seq or group-seq class for a token, the wrap class for a wrap, the
-// sweep class for a sweep, the member class for a grant. A grant that no
+// sweep class for a sweep, the member class for a grant, the policy class
+// for a policy record. A grant that no
 // organisation token admits yet is answered by no free class; an answer
 // that admits nothing for it is counted, and confirmed by the member class
 // once the token that admits it is published (ConfirmGrants).
@@ -761,6 +762,23 @@ func (e *Engine) confirm(p state.Pending) unicast.Confirm {
 		q = reader.Query{"hall": p.Hall, "org": p.Org, "group": p.Group, "epoch": fmt.Sprint(p.Epoch), "member": p.Member}
 	case state.KindSweep:
 		q = reader.Query{"hall": p.Hall, "spent": p.Outpoint}
+	case state.KindPolicy:
+		// As with a grant, no free class answers a policy record before
+		// the token that defines it: the policy classes answer the set a
+		// token commits to. So an answer that holds nothing for it counts
+		// here, and ConfirmPolicies settles it once the token is published.
+		q = reader.Query{"hall": p.Hall, "policy": p.Org}
+		return func(ctx context.Context, host string) (bool, error) {
+			ok, err := e.Legs.Reader.Held(ctx, host, q, p.Txid)
+			if ok || err != nil {
+				return ok, err
+			}
+			if r := e.policy(p.Txid); r != nil && !r.Defined {
+				e.note("policy record %s: host %s admitted nothing, and no free class answers a policy record before a token defines it; confirmed once the organisation token is published", Short(p.Txid), host)
+				return true, nil
+			}
+			return false, nil
+		}
 	case state.KindGrant:
 		q = reader.Query{"hall": p.Hall, "org": p.Org, "member": p.Member}
 		return func(ctx context.Context, host string) (bool, error) {
@@ -787,6 +805,13 @@ func (e *Engine) grant(txid string) *state.Grant {
 		return nil
 	}
 	return e.St.Org.GrantByTxid(txid)
+}
+
+func (e *Engine) policy(txid string) *state.Policy {
+	if e.St.Org == nil {
+		return nil
+	}
+	return e.St.Org.PolicyByTxid(txid)
 }
 
 // carrierNeed is how many of the hosts named must hold a carrier for it to
