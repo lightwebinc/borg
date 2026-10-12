@@ -27,7 +27,8 @@ const fillHelp = `usage: borg fill [group...]
 
 Fills every host in hosts that lacks something another host answered
 (spec sections 11.6 and 12, "Filling a host that missed something"): the
-organization's chain, the grants of its roll, and for each group (every
+organization's chain, the grants of its roll, the records of its policy
+set, and for each group (every
 group any host answers, or those named) its chain and the wraps of every
 epoch a host still answers. Each token is replayed in the BEEF a host admits, assembled
 here from the token and its parent (the token at seq - 1, or at seq 0 the
@@ -71,6 +72,10 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 	f.carriers(ctx, "grant", borgrec.TxGrant, reader.Query{"hall": t.hall, "roll": hex.EncodeToString(t.org)},
 		func(c *reader.Car) reader.Query {
 			return reader.Query{"hall": t.hall, "org": hex.EncodeToString(t.org), "member": hex.EncodeToString(c.Carrier.Grant.Subject)}
+		})
+	f.carriers(ctx, "policy record", borgrec.TxPolicy, reader.Query{"hall": t.hall, "policy": hex.EncodeToString(t.org)},
+		func(c *reader.Car) reader.Query {
+			return reader.Query{"hall": t.hall, "org": hex.EncodeToString(t.org), "role": c.Carrier.Policy.Role}
 		})
 	groups := pos
 	if len(groups) == 0 {

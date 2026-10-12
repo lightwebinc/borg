@@ -91,7 +91,7 @@ variables.
 | `member <key>` | optional | a reader's settings | whether the key is a current member, and its grants; for this home's own key, each grant is kept whole in the home and opened through its keyring |
 | `member-of <key>` | optional | a reader's settings | the groups whose members include the key, each group's chain folded here |
 | `history` | yes, funded | a reader's settings, `history_host`, `chain`, `settle` | the priced question: pays the host's 402 from the pool and prints every token of a chain (`-chain org` or a group id), one page, or every page with `-all`. One payment a question, at most `-max-sats`, and at most `-budget` in all |
-| `fill [group...]` | optional | a reader's settings, `chain` | replays to each host what another host answered and it lacks: the organization's chain, the roll's grants, and each group's chain and wraps (spec section 12); signs nothing |
+| `fill [group...]` | optional | a reader's settings, `chain` | replays to each host what another host answered and it lacks: the organization's chain, the roll's grants, the policy set's records, and each group's chain and wraps (spec section 12); signs nothing |
 | `terms [URL]` | no | `history_host` or URL | prints a host's terms document |
 | `payee key -out FILE` | yes | nothing | writes `BORG_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
 | `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `chain`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
