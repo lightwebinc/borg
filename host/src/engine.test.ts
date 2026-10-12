@@ -99,7 +99,7 @@ test('every transaction vector through the engine: admitted as the vectors say, 
       assert.equal(await applied(storage, t.txid), false, t.name)
     }
   }
-  assert.equal(v.cases.length, 95)
+  assert.equal(v.cases.length, 100)
   const id = (n: string): string => byName(v, n).txid
   const c = (n: string): string => byName(v, n).admits!.commitment!
   // Statuses: the sweep spends bob's grant outpoint; a second carrier on alice's is superseded.

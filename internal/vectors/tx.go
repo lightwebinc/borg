@@ -192,14 +192,15 @@ func params(d pushdrop.Derivation) carrier.Params {
 
 // txEnv is everything the transaction vectors are built from.
 type txEnv struct {
-	ctx   context.Context
-	o, d  *actor // the organisation, and a stranger
-	c     *chain
-	coin  *transaction.Transaction
-	grant *transaction.Transaction // grant tree
-	rec   *transaction.Transaction // record tree, funding wraps
-	chain *transaction.Transaction // chain tree
-	misc  *transaction.Transaction // outputs nothing may be funded from
+	ctx    context.Context
+	o, d   *actor // the organisation, and a stranger
+	c      *chain
+	coin   *transaction.Transaction
+	grant  *transaction.Transaction // grant tree
+	policy *transaction.Transaction // policy tree
+	rec    *transaction.Transaction // record tree, funding wraps
+	chain  *transaction.Transaction // chain tree
+	misc   *transaction.Transaction // outputs nothing may be funded from
 
 	grants   map[string]*borgrec.Grant
 	carriers map[string]*transaction.Transaction // grant carriers by member
@@ -287,6 +288,9 @@ func (e *txEnv) build(s *Scenario) error {
 	e.c.mine(e.coin)
 	var err error
 	if e.grant, err = e.tree(borgrec.GrantDerivation, 6); err != nil {
+		return err
+	}
+	if e.policy, err = e.tree(borgrec.PolicyDerivation, 4); err != nil {
 		return err
 	}
 	if e.rec, err = e.tree(borgrec.RecordDerivation, 4); err != nil {

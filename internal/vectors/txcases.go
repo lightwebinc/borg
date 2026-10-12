@@ -104,7 +104,7 @@ func recordWith(rec []byte, k uint64, v cbor.Value) []byte { return mutate(rec, 
 // cases builds every transaction case.
 func (e *txEnv) cases(s *Scenario) ([]txCase, error) {
 	o := e.o
-	gd, rd := borgrec.GrantDerivation, borgrec.RecordDerivation
+	gd, rd, pd := borgrec.GrantDerivation, borgrec.RecordDerivation, borgrec.PolicyDerivation
 	ka := e.carriers["alice"]
 	recA, _ := firstPushOf(ka.Outputs[0].LockingScript)
 	lockA := ka.Outputs[0].LockingScript
@@ -243,6 +243,32 @@ func (e *txEnv) cases(s *Scenario) ([]txCase, error) {
 		tx: carrierFrom(e.grant, 0, gUnlock, out(1000, fieldSigOf(lockA, gk, 1, signWith(Dave.Priv, recA)))), reason: "signature"})
 	add(txCase{name: "carrier-field-signature-identity-key", note: "a strict signature over the record by the organisation's identity key rather than its grant key", rule: "signatures",
 		tx: carrierFrom(e.grant, 0, gUnlock, out(1000, fieldSigOf(lockA, gk, 1, signWith(Org.Priv, recA)))), reason: "signature"})
+
+	// ---- policy carriers ----
+	// One definition and one binding, on the policy tree, and the ways a
+	// host refuses one: the wrong funding key, the wrong locking key, and
+	// a record its own rules refuse.
+	polRec, err := (&borgrec.Policy{Hall: Hall, Org: Org.Pub(), Kind: borgrec.PolicyRole, Role: "releaser",
+		Permissions: []string{"bsecret/release/payroll", "bstore/get/*"}, Created: Created}).Encode()
+	if err != nil {
+		return nil, err
+	}
+	bindRec, err := (&borgrec.Policy{Hall: Hall, Org: Org.Pub(), Kind: borgrec.PolicyBinding, Role: "releaser",
+		To: Alice.Pub(), Created: Created}).Encode()
+	if err != nil {
+		return nil, err
+	}
+	pUnlock := o.unlocker(pd)
+	add(txCase{name: "policy-carrier-definition", note: "a role definition on policy-tree output 0, the outpoint a sweep retires it by",
+		tx: carrierFrom(e.policy, 0, pUnlock, out(1000, o.lock(pd, true, polRec)))})
+	add(txCase{name: "policy-carrier-binding", note: "a binding of that role to alice's key, on policy-tree output 1",
+		tx: carrierFrom(e.policy, 1, pUnlock, out(1000, o.lock(pd, true, bindRec)))})
+	add(txCase{name: "policy-on-grant-tree", note: "a policy record funded from a grant-tree output: a grant's outpoint revokes a grant, so policy records are kept apart by their key", rule: "carrier shape",
+		tx: carrierFrom(e.grant, 4, gUnlock, out(1000, o.lock(pd, true, polRec))), reason: "funding"})
+	add(txCase{name: "policy-under-grant-key", note: "a policy record locked and signed under the grant key", rule: "script canonicality",
+		tx: carrierFrom(e.policy, 2, pUnlock, out(1000, o.lock(gd, true, polRec))), reason: "lock"})
+	add(txCase{name: "policy-record-upper-case-role", note: "a policy record whose role name is not the grammar's", rule: "the policy record",
+		tx: carrierFrom(e.policy, 3, pUnlock, out(1000, o.lock(pd, true, recordWith(polRec, 4, "Releaser")))), reason: "role"})
 
 	// ---- carriers: funding ----
 	add(txCase{name: "carrier-grant-on-record-tree", note: "alice's grant funded from a record-tree output (funding-shaped under the record key): grant and wrap trees are kept apart by their keys", rule: "carrier shape",

@@ -20,7 +20,8 @@ command first catches up; and a payer broadcasts its own payment for a
 priced question. The four rows of section 2 that waited
 for the transaction vectors (carrier shape, chain-token shape, script
 canonicality and sweep) and the carrier-input half of the signatures row
-were signed against the 95 transaction vectors, with the wording of spec
+were signed against the transaction vectors (95 at signing; 100 since the
+policy cases were added), with the wording of spec
 sections 11.1, 11.2 and 11.5 that the vectors settled. The registry rows of section 1
 belong in bcommon's registry (`docs/registry.md`), where they are checked
 against every registered row; this repository does not edit that registry.

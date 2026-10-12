@@ -49,8 +49,8 @@ test('every transaction vector is admitted or refused, raising, as the vectors s
       refused++
     }
   }
-  assert.equal(admitted + refused, 95)
-  assert.equal(v.cases.length, 95)
+  assert.equal(admitted + refused, 100)
+  assert.equal(v.cases.length, 100)
   // A txid admitted before in another BEEF is counted once, and once as a
   // repeat. The sweep at its own bound is decided by a second manager,
   // which counts it apart.
