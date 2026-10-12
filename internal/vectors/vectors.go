@@ -318,11 +318,11 @@ func genOrg(s *Scenario, files map[string][]byte) error {
 		return err
 	}
 	ocommit := label("commitment/grant/org-opaque/alice")
-	v2, err := mk("an opaque organisation's genesis", s.OpaqueOrg, s.OpaqueRaw, [][32]byte{ocommit}, nil)
+	v2, err := mk("an opaque organization's genesis", s.OpaqueOrg, s.OpaqueRaw, [][32]byte{ocommit}, nil)
 	if err != nil {
 		return err
 	}
-	// Refused organisation transitions, each one change to the admitted one.
+	// Refused organization transitions, each one change to the admitted one.
 	type otv struct {
 		Label   string `json:"label"`
 		To      string `json:"to"`
@@ -336,7 +336,7 @@ func genOrg(s *Scenario, files map[string][]byte) error {
 	}{
 		{"seq skips", func(o *borgrec.Org) { o.Seq = 2 }, borgrec.ErrTransition},
 		{"prev names another transaction", func(o *borgrec.Org) { o.Prev = label("txid/elsewhere") }, borgrec.ErrTransition},
-		{"another organisation, which the predecessor did not name as its successor", func(o *borgrec.Org) { o.Org = OrgOpaque.Pub() }, borgrec.ErrTransition},
+		{"another organization, which the predecessor did not name as its successor", func(o *borgrec.Org) { o.Org = OrgOpaque.Pub() }, borgrec.ErrTransition},
 		{"another hall", func(o *borgrec.Org) { o.Hall = "example_hall_qzxkvbmwtr" }, borgrec.ErrTransition},
 		{"opaque changed after the first token", func(o *borgrec.Org) { o.Opaque = true }, borgrec.ErrTransition},
 		{"count disagrees", func(o *borgrec.Org) { o.Count = 3 }, borgrec.ErrCount},
@@ -414,7 +414,7 @@ func genOrg(s *Scenario, files map[string][]byte) error {
 			"handover":    hx(handoverRec),
 			"unannounced": map[string]string{"hex": hx(handoverRec), "against": "the seq 0 token that names no successor", "reason": "transition"},
 			"otherKey":    map[string]string{"hex": hx(otherRec), "against": "the announcing token", "reason": "transition"},
-			"why":         "a token carries its predecessor's organisation key, or the key that predecessor named as its successor and no other; both keys sign the handover, because only the predecessor can spend the announcing token's output and only the successor can sign the claiming record",
+			"why":         "a token carries its predecessor's organization key, or the key that predecessor named as its successor and no other; both keys sign the handover, because only the predecessor can spend the announcing token's output and only the successor can sign the claiming record",
 		},
 		"note": "Grant commitments are fixed stand-ins for carrier txids, SHA-256(\"borg/vector/commitment/grant/<member>\"); " +
 			"standInTxid is the stand-in for the mined token's txid that the next token's prev names. Hashes are in hash byte order.",

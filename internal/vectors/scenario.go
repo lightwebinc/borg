@@ -10,7 +10,7 @@ import (
 	"github.com/lightwebinc/borg/borgrec"
 )
 
-// Scenario is the story every record vector tells: an organisation grants
+// Scenario is the story every record vector tells: an organization grants
 // three members, makes a group of two, adds the third without rotating,
 // removes one (the epoch rotates and the removed member cannot open it),
 // rotates on schedule, and offboards the removed member from the roll.
@@ -38,12 +38,12 @@ type Scenario struct {
 	WrapIVs  []map[string][32]byte
 }
 
-// OrgOpaque is the second test organisation, whose roll is opaque.
+// OrgOpaque is the second test organization, whose roll is opaque.
 var OrgOpaque = party("org-opaque", 0x55)
 
 var members = []Party{Alice, Bob, Carol}
 
-// emptyPolicy is the policy root of an organisation that has published no
+// emptyPolicy is the policy root of an organization that has published no
 // policy record: the RFC 6962 root of nothing, never the zero value.
 var emptyPolicy = borgrec.PolicyRoot(nil)
 
@@ -123,9 +123,9 @@ func Build() (*Scenario, error) {
 	all := sorted32(s.Commit["alice"], s.Commit["bob"], s.Commit["carol"])
 	kept := sorted32(s.Commit["alice"], s.Commit["carol"])
 	s.Orgs = []*borgrec.Org{
-		{Hall: Hall, Org: Org.Pub(), Seq: 0, Name: "Example Organisation", Admit: all,
+		{Hall: Hall, Org: Org.Pub(), Seq: 0, Name: "Example Organization", Admit: all,
 			Count: 3, Roll: borgrec.RollRoot(all), Created: Created, Policy: emptyPolicy},
-		{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: label("txid/org/0"), Name: "Example Organisation",
+		{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: label("txid/org/0"), Name: "Example Organization",
 			Revoke: [][32]byte{s.Commit["bob"]}, Count: 2, Roll: borgrec.RollRoot(kept), Created: Created + 7200,
 			Policy: emptyPolicy},
 	}
@@ -141,7 +141,7 @@ func Build() (*Scenario, error) {
 		return nil, fmt.Errorf("org transition: %w", err)
 	}
 	ocommit := label("commitment/grant/org-opaque/alice")
-	s.OpaqueOrg = &borgrec.Org{Hall: Hall, Org: OrgOpaque.Pub(), Name: "Opaque Organisation",
+	s.OpaqueOrg = &borgrec.Org{Hall: Hall, Org: OrgOpaque.Pub(), Name: "Opaque Organization",
 		Admit: [][32]byte{ocommit}, Count: 1, Roll: borgrec.RollRoot([][32]byte{ocommit}), Opaque: true,
 		Created: Created, Policy: emptyPolicy}
 	if s.OpaqueRaw, err = s.OpaqueOrg.Encode(); err != nil {

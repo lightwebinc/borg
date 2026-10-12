@@ -12,7 +12,7 @@ import { toHex } from './util.js'
 export type TokenStatus = 'consistent' | 'pending' | 'roll-mismatch' | 'policy-mismatch' | 'members-mismatch' | 'commitment-reuse' | 'rejoin-unrotated'
 export type CarrierStatus = 'retracted' | 'superseded' | 'held'
 
-/** An organisation's roll, folded from seq 0; a broken fold stays broken. */
+/** An organization's roll, folded from seq 0; a broken fold stays broken. */
 export class OrgFold {
   private readonly roll = new Map<string, Uint8Array>()
   private readonly policy = new Map<string, Uint8Array>()

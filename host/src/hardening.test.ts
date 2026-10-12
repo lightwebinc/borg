@@ -26,7 +26,7 @@ async function restored(s: Awaited<ReturnType<typeof setup>>, chain: Chain, jour
   return ls
 }
 
-/** n wrap carriers on one funding output of the organisation's record tree, lowest commitment first. */
+/** n wrap carriers on one funding output of the organization's record tree, lowest commitment first. */
 async function equivocations(org: OrgSim, name: string, n: number): Promise<Transaction[]> {
   const grp = await org.group(name, [new Party(`${name} member`)])
   const vout = org.nextRecordVout()
@@ -49,7 +49,7 @@ test('a sweep that waits in the table still retracts after a restart, although a
   const s1 = await sweep(org.grantTree, [ga.vout], org.party, KeyGrant, chain)
   assert.deepEqual(await submit(s.engine, s1.toAtomicBEEF()), [0])
   assert.equal(s.ls.tableSize, 1)
-  // The organisation funds its next grant from the sweep's output: storage now holds the tombstone as spent.
+  // The organization funds its next grant from the sweep's output: storage now holds the tombstone as spent.
   const gb = await issueGrant(hall, org.party, new Party('funded by the tombstone'), s1, 0)
   const b = await carrier(s1, 0, org.party, KeyGrant, encodeGrant(gb))
   assert.deepEqual(await submit(s.engine, b.toAtomicBEEF()), [0])
@@ -86,7 +86,7 @@ test('a token turned away from a full seq while it was pending is read again onc
   const chain = new Chain(92000)
   const s = await setup({ chain })
   // The real token at seq 2 has to sort above eight others at its seq, and a txid is as good as drawn at random. So
-  // the organisation's chain is minted again, on new trees, until that token's txid is in the upper half of them all:
+  // the organization's chain is minted again, on new trees, until that token's txid is in the upper half of them all:
   // a rogue then sorts below it at least every second time.
   const real = async () => {
     for (let tries = 0; tries < 64; tries++) {
@@ -100,7 +100,7 @@ test('a token turned away from a full seq while it was pending is read again onc
     org,
     tokens: [o0, o1, o2, o3],
   } = await real()
-  // The organisation's own tokens at seq 2, each on a parent no host admits and on a tree of its own, so there is
+  // The organization's own tokens at seq 2, each on a parent no host admits and on a tree of its own, so there is
   // always another to mint, until eight have a txid below the real one's.
   const rogues: Array<{ beef: Uint8Array; txid: string }> = []
   for (let n = 0; rogues.filter((r) => r.txid < id(o2.tx)).length < 8; n++) {

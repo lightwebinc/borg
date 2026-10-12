@@ -65,7 +65,7 @@ interface TokenEntry {
   kind: 'org' | 'group'
   hall: string
   org: string
-  /** The group id in hex; empty for an organisation's chain. */
+  /** The group id in hex; empty for an organization's chain. */
   group: string
   chain: string
   seq: number
@@ -565,7 +565,7 @@ export class BorgLookupService implements LookupService {
     return out
   }
 
-  /** The roll the answers use for an organisation, with the seq of the token it is after. */
+  /** The roll the answers use for an organization, with the seq of the token it is after. */
   private answerRoll(hall: string, org: string): { seq: number; roll: Uint8Array[]; set: Set<string>; path: TokenEntry[] } | undefined {
     const ch = this.chains.get(this.chainKey(hall, org, ''))
     if (ch === undefined) return undefined
@@ -576,7 +576,7 @@ export class BorgLookupService implements LookupService {
   }
 
   /**
-   * The policy set of the organisation's answerable token, the set a role,
+   * The policy set of the organization's answerable token, the set a role,
    * bound or policy answer is taken from and the root its context proves
    * against.
    */
@@ -904,7 +904,7 @@ export class BorgLookupService implements LookupService {
    * the refusal is decided by the row and not by memory of this carrier.
    * Offered again, it meets the same row and is refused again, so a
    * journal line would buy nothing and the journal does not grow with
-   * what an equivocating organisation offers (O16).
+   * what an equivocating organization offers (O16).
    */
   private forgetForEvidence(op: string, c: string, txid: string, hall: string): void {
     const r = this.row(op)
@@ -1227,7 +1227,7 @@ export class BorgLookupService implements LookupService {
     throw new Error(`ls_borg: no answer for class ${q.class.name}`)
   }
 
-  /** The group ids of an organisation in a hall, ascending, strictly after after. */
+  /** The group ids of an organization in a hall, ascending, strictly after after. */
   private groupsOf(hall: string, org: string, after: string | undefined): string[] {
     return [...(this.groupsByOrg.get(`${hall}|${org}`) ?? [])].filter((g) => after === undefined || g > after).sort(cmp)
   }
@@ -1414,7 +1414,7 @@ export class BorgLookupService implements LookupService {
       '',
       'Answers every hall this host carries (spec section 10.2). Free classes: `org`,',
       '`org-seq`, `group`, `group-seq` (a chain\'s latest tokens or those at one seq, at',
-      'most 8), `roll`, `roll-after` (the grant carriers of an organisation\'s roll, 64 a',
+      'most 8), `roll`, `roll-after` (the grant carriers of an organization\'s roll, 64 a',
       'page), `member` (a key\'s grants in the roll, each with its inclusion path as',
       'context), `groups`, `groups-after`, `member-of`, `member-of-after` (the latest',
       'token of each group), `wraps`, `wraps-after`, `wrap` (an epoch\'s wrap carriers)',
@@ -1426,6 +1426,6 @@ export class BorgLookupService implements LookupService {
   }
 
   async getMetaData(): Promise<LookupServiceMetaData> {
-    return { name: ServiceName, shortDescription: 'Answers borg organisations, groups, grants, wraps and sweeps by hall.' }
+    return { name: ServiceName, shortDescription: 'Answers borg organizations, groups, grants, wraps and sweeps by hall.' }
   }
 }

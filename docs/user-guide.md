@@ -354,7 +354,7 @@ Then, on the other machine:
 $ borg init -from identity.json    # the first home's identity file, carried by hand
 $ borg fund -txid <txid>           # its own coin
 $ borg -hall <hall> org sync
-sync    took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)
+sync    took 2 organization token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)
 missing group 5a0c… epoch 0: the signer key was not a member of this epoch
 ```
 

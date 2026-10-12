@@ -36,7 +36,7 @@ import (
 	"github.com/lightwebinc/borg/reader"
 )
 
-// target is what a reading command reads: a hall, an organisation, and the
+// target is what a reading command reads: a hall, an organization, and the
 // reader over the configured hosts and headers.
 type target struct {
 	rd   *reader.Client
@@ -44,8 +44,8 @@ type target struct {
 	org  []byte
 }
 
-// readTarget resolves the organisation (the -org flag or config key, else
-// the organisation this home runs) and its hall.
+// readTarget resolves the organization (the -org flag or config key, else
+// the organization this home runs) and its hall.
 func (g *global) readTarget(_ context.Context) (*target, error) {
 	rd, err := g.reader()
 	if err != nil {
@@ -63,7 +63,7 @@ func (g *global) readTarget(_ context.Context) (*target, error) {
 		}
 	}
 	if orgHex == "" {
-		return nil, usage("no organisation: set org (or -org) to the organisation's identity key")
+		return nil, usage("no organization: set org (or -org) to the organization's identity key")
 	}
 	org, _, err := parseKey("org", orgHex)
 	if err != nil {
@@ -110,13 +110,13 @@ func (g *global) reportChain(what string, v *reader.ChainView) error {
 				top = t
 			}
 		}
-		g.say("WITHHELD: %d verified token(s) of the %s exist above seq %d, the last this command could link (the highest at seq %d, %s): a token between is withheld, or the organisation signed a stray one. What is read may be an older state", len(beyond), what, v.Latest().Seq(), top.Seq(), top.Txid)
+		g.say("WITHHELD: %d verified token(s) of the %s exist above seq %d, the last this command could link (the highest at seq %d, %s): a token between is withheld, or the organization signed a stray one. What is read may be an older state", len(beyond), what, v.Latest().Seq(), top.Seq(), top.Txid)
 		if problem == nil {
 			problem = incomplete("verified tokens of the %s exist above the chain read; ask other hosts", what)
 		}
 	}
 	if v.Replaced != "" {
-		g.say("the %s holds another token at a seq this home verified before (it verified %s): a reorganisation, or a fork", what, v.Replaced)
+		g.say("the %s holds another token at a seq this home verified before (it verified %s): a reorganization, or a fork", what, v.Replaced)
 	}
 	if u := v.Usable(); u < len(v.Tokens) {
 		g.say("the %s folds to %s at seq %d: UNUSABLE from that token on (fail closed)", what, v.Statuses[u], u)
@@ -164,7 +164,7 @@ func (g *global) chainProblem(what string, err error) error {
 		for _, r := range none.Refused {
 			g.say("host %s: REFUSED token %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
 		}
-		return incomplete("%s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (borg doctor), and a proof a reorganisation displaced is replaced only from the chain view (config key chain)", what, len(none.Refused), g.cfg.HeaderURL)
+		return incomplete("%s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (borg doctor), and a proof a reorganization displaced is replaced only from the chain view (config key chain)", what, len(none.Refused), g.cfg.HeaderURL)
 	case errors.Is(err, reader.ErrNoChain):
 		return incomplete("%s: %v", what, err)
 	}
@@ -187,7 +187,7 @@ func (g *global) resolveGroup(ctx context.Context, t *target, s string) (string,
 	}
 	switch len(found) {
 	case 0:
-		return "", incomplete("no host answers a group named %q of the organisation; name it by its id", termsafe.Abbrev(s))
+		return "", incomplete("no host answers a group named %q of the organization; name it by its id", termsafe.Abbrev(s))
 	case 1:
 		return found[0], nil
 	}
@@ -298,7 +298,7 @@ func cmdOpen(ctx context.Context, g *global, args []string) error {
 					// nothing about the key.
 					curErr = incomplete("this key was a member of epoch %d by the group's own chain, and no host answers a wrap of epoch %d to this key that verifies: %d answer(s) refused, each named above; ask other hosts", e, e, len(op.Refused))
 				case op.Label == "entry":
-					curErr = incomplete("no host answers a wrap of epoch %d to this key yet: the organisation publishes it after the token mines; ask again", e)
+					curErr = incomplete("no host answers a wrap of epoch %d to this key yet: the organization publishes it after the token mines; ask again", e)
 				default:
 					curErr = refused("epoch %d does not open (%s): %v", e, op.Label, op.Err)
 				}
@@ -420,9 +420,9 @@ func cmdRoll(ctx context.Context, g *global, args []string) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		return g.chainProblem("the organisation", err)
+		return g.chainProblem("the organization", err)
 	}
-	problem := g.reportChain("organisation chain", ov.ChainView)
+	problem := g.reportChain("organization chain", ov.ChainView)
 	fmt.Fprintf(g.stdout, "org     %s %s\nlatest  seq %d %s, %d grant(s), roll %s, opaque %v\n", hex.EncodeToString(t.org), field(ov.Token.Name),
 		ov.Token.Seq, ov.Latest().Txid, ov.Token.Count, hex.EncodeToString(ov.Token.Roll[:8]), ov.Token.Opaque)
 	answers := t.rd.Roll(ctx, ov)
@@ -509,9 +509,9 @@ func cmdMember(ctx context.Context, g *global, args []string) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		return g.chainProblem("the organisation", err)
+		return g.chainProblem("the organization", err)
 	}
-	problem := g.reportChain("organisation chain", ov.ChainView)
+	problem := g.reportChain("organization chain", ov.ChainView)
 	cars, refusedCars, errs := t.rd.GrantsOf(ctx, ov, k)
 	for h, e := range errs {
 		g.say("host %s: NOT ASKED: %s", h, firstLine(e.Error()))
@@ -614,7 +614,7 @@ func cmdMemberOf(ctx context.Context, g *global, args []string) error {
 		n++
 		fmt.Fprintf(g.stdout, "%s  %s  seq %d epoch %d, %d member(s)\n", id, field(gv.Token.Name), gv.Token.Seq, gv.Token.Epoch, len(gv.Members))
 	}
-	g.say("%s is a member of %d group(s) of the organisation", hex.EncodeToString(k), n)
+	g.say("%s is a member of %d group(s) of the organization", hex.EncodeToString(k), n)
 	return problem
 }
 

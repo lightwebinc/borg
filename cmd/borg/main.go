@@ -1,6 +1,6 @@
-// Command borg runs an organisation and its groups on overlay hosts, and
+// Command borg runs an organization and its groups on overlay hosts, and
 // reads them as a member: it creates an identity home and halls, begins an
-// organisation and issues its members BRC-52 grants, keeps the roll on a
+// organization and issues its members BRC-52 grants, keeps the roll on a
 // chain of mined tokens, creates groups whose every removal begins a new
 // epoch with a fresh key wrapped only to the members who remain, revokes by
 // the roll and by sweep, opens a group's epoch key as a member, reads the

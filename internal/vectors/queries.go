@@ -88,7 +88,7 @@ func genQuery(s *Scenario, files map[string][]byte) error {
 		{q("hall", h, "org", hx(aliasKey())), "", "a key alias"},
 		{q("hall", h, "org", o, "seq", "01"), "", "a leading zero"},
 		{q("hall", h, "org", o, "group", gid, "epoch", "4294967296"), "", "an epoch above 2^32 - 1"},
-		{q("hall", h, "history", o, "chain", "orgs"), "", "chain names neither the organisation nor a group"},
+		{q("hall", h, "history", o, "chain", "orgs"), "", "chain names neither the organization nor a group"},
 		{q("hall", h, "org", o, "history", o, "chain", "org"), "", "a free class's members and a priceable one's together"},
 		{q("hall", h, "roll", o, "after", "12"), "", "a roll cursor is a txid"},
 		{q("hall", h, "spent", txid+":0"), "", "an outpoint with a colon"},
@@ -155,7 +155,7 @@ func genScript(s *Scenario, files map[string][]byte) error {
 		sign   bool
 		want   borgrec.Kind
 	}{
-		{"organisation token: tag, record, signature", borgrec.OrgDerivation, [][]byte{borgrec.TagOrg, s.OrgRecs[0]}, true, borgrec.KindOrg},
+		{"organization token: tag, record, signature", borgrec.OrgDerivation, [][]byte{borgrec.TagOrg, s.OrgRecs[0]}, true, borgrec.KindOrg},
 		{"group token: tag, record, signature", borgrec.GroupDerivation, [][]byte{borgrec.TagGroup, s.GroupRecs[0]}, true, borgrec.KindGroup},
 		{"grant carrier output: record, signature", borgrec.GrantDerivation, [][]byte{s.GrantRecs["alice"]}, true, borgrec.KindGrant},
 		{"wrap carrier output: record, signature", borgrec.RecordDerivation, [][]byte{s.WrapRecs[0]}, true, borgrec.KindWrap},
@@ -185,7 +185,7 @@ func genScript(s *Scenario, files map[string][]byte) error {
 		return err
 	}
 	return put(files, "script-v1.json", map[string]any{
-		"note":    "Real locking scripts from bcommon's PushDrop under the organisation's derivations. Classification reads only the key push, OP_CHECKSIG and the first push.",
+		"note":    "Real locking scripts from bcommon's PushDrop under the organization's derivations. Classification reads only the key push, OP_CHECKSIG and the first push.",
 		"scripts": out,
 	})
 }

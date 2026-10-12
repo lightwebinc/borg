@@ -29,8 +29,8 @@ import (
 	"github.com/lightwebinc/borg/reader"
 )
 
-// ErrNoOrg is a home that runs no organisation yet.
-var ErrNoOrg = errors.New("this home runs no organisation (borg org create)")
+// ErrNoOrg is a home that runs no organization yet.
+var ErrNoOrg = errors.New("this home runs no organization (borg org create)")
 
 // LostError is a transition another transaction spending the same
 // predecessor beat to the chain (spec section 7.3): the epoch key it sampled
@@ -66,7 +66,7 @@ func (e *Engine) org() (*state.Org, error) {
 	return e.St.Org, nil
 }
 
-// OrgKey is the organisation's identity key, compressed.
+// OrgKey is the organization's identity key, compressed.
 func (e *Engine) OrgKey() []byte { return e.Signer.Identity.Compressed() }
 
 func (e *Engine) orgHex() string { return e.Signer.IdentityHex() }
@@ -95,7 +95,7 @@ func (e *Engine) ownToken(txid string) (*transaction.Transaction, error) {
 	return nil, fmt.Errorf("%s is not a token of this home's", txid)
 }
 
-// currentGrant is the subject's current grant by the organisation's own
+// currentGrant is the subject's current grant by the organization's own
 // record: admitted, not revoked, not swept, not expired.
 func (e *Engine) currentGrant(subject string) *state.Grant {
 	o := e.St.Org
@@ -123,7 +123,7 @@ func (e *Engine) currentGrant(subject string) *state.Grant {
 // CurrentGrant is the subject's current grant, or nil.
 func (e *Engine) CurrentGrant(subject string) *state.Grant { return e.currentGrant(subject) }
 
-// orgRecords are the organisation's own chain, decoded.
+// orgRecords are the organization's own chain, decoded.
 func orgRecords(o *state.Org) ([]*borgrec.Org, error) {
 	var out []*borgrec.Org
 	for _, t := range o.Tokens {
@@ -202,7 +202,7 @@ func Flagged(g *state.Group) (string, uint64, error) {
 	return "", 0, nil
 }
 
-// Debt is a group's rotation debt by the organisation's own record: the
+// Debt is a group's rotation debt by the organization's own record: the
 // members with no current grant now (spec section 7.1).
 func (e *Engine) Debt(g *state.Group) ([][]byte, error) {
 	members, _, err := Members(g)
@@ -221,7 +221,7 @@ func (e *Engine) Debt(g *state.Group) ([][]byte, error) {
 // IssueGrant issues a grant to req.Subject (spec sections 5 and 7.1): a
 // BRC-52 certificate signed by orgKey, its revocation outpoint the grant-
 // tree output its carrier spends. The carrier is persisted and published
-// before any organisation token admits it.
+// before any organization token admits it.
 func (e *Engine) IssueGrant(ctx context.Context, orgKey *ec.PrivateKey, req GrantReq) (*state.Grant, error) {
 	o, err := e.org()
 	if err != nil {
@@ -229,7 +229,7 @@ func (e *Engine) IssueGrant(ctx context.Context, orgKey *ec.PrivateKey, req Gran
 	}
 	subject := req.Subject.Compressed()
 	if err := borgrec.CheckIdentity(subject); err != nil || bytes.Equal(subject, e.OrgKey()) || borgrec.IsAnyone(subject) {
-		return nil, fmt.Errorf("%s cannot be granted: neither the organisation nor the anyone key is ever a member", hex.EncodeToString(subject))
+		return nil, fmt.Errorf("%s cannot be granted: neither the organization nor the anyone key is ever a member", hex.EncodeToString(subject))
 	}
 	held := 0
 	for _, g := range o.Grants {
@@ -287,13 +287,13 @@ func random32() [32]byte {
 	return b
 }
 
-// CreateOrg begins the organisation (spec section 7.1): a chain tree and a
-// grant tree, mined; the first grants, published; organisation token seq 0
+// CreateOrg begins the organization (spec section 7.1): a chain tree and a
+// grant tree, mined; the first grants, published; organization token seq 0
 // admitting them, mined and then published with the chain tree. A run that
 // stopped part way is finished: grants issued and not admitted are reused.
 func (e *Engine) CreateOrg(ctx context.Context, orgKey *ec.PrivateKey, hall, name string, opaque bool, members []GrantReq) error {
 	if e.St.Org != nil && len(e.St.Org.Tokens) > 0 {
-		return fmt.Errorf("this home runs the organisation %q in hall %s already", e.St.Org.Name, e.St.Org.Hall)
+		return fmt.Errorf("this home runs the organization %q in hall %s already", e.St.Org.Name, e.St.Org.Hall)
 	}
 	if e.St.Org == nil {
 		e.St.Org = &state.Org{Hall: hall, Name: name, Opaque: opaque}
@@ -303,7 +303,7 @@ func (e *Engine) CreateOrg(ctx context.Context, orgKey *ec.PrivateKey, hall, nam
 	}
 	o := e.St.Org
 	if o.Hall != hall || o.Name != name || o.Opaque != opaque {
-		return fmt.Errorf("an organisation %q in hall %s (opaque %v) was begun in this home; finish it with the same name, hall and setting", o.Name, o.Hall, o.Opaque)
+		return fmt.Errorf("an organization %q in hall %s (opaque %v) was begun in this home; finish it with the same name, hall and setting", o.Name, o.Hall, o.Opaque)
 	}
 	if e.Opts.Signers > 1 && len(members) < borgrec.MaxDelta {
 		// Several instances sign: the signer key's grant is among the
@@ -345,7 +345,7 @@ func (e *Engine) CreateOrg(ctx context.Context, orgKey *ec.PrivateKey, hall, nam
 	rec.Count = uint64(len(rec.Admit))
 	rec.Roll = borgrec.RollRoot(rec.Admit)
 	if st := borgrec.NewOrgFold().Apply(rec); st != borgrec.StatusConsistent {
-		return fmt.Errorf("the organisation's first token would fold to %s; it is not built", st)
+		return fmt.Errorf("the organization's first token would fold to %s; it is not built", st)
 	}
 	b, err := rec.Encode()
 	if err != nil {
@@ -355,7 +355,7 @@ func (e *Engine) CreateOrg(ctx context.Context, orgKey *ec.PrivateKey, hall, nam
 	if err != nil {
 		return err
 	}
-	tr.What = "organisation token seq 0"
+	tr.What = "organization token seq 0"
 	for _, g := range admit {
 		tr.Grants = append(tr.Grants, g.Commitment)
 	}
@@ -379,9 +379,9 @@ func sortKeys(a [][]byte) {
 	sort.Slice(a, func(i, j int) bool { return bytes.Compare(a[i], a[j]) < 0 })
 }
 
-// OrgTransition mints the organisation's next token: admit and revoke
+// OrgTransition mints the organization's next token: admit and revoke
 // grants (spec sections 3 and 5.6). The tooling refuses to build a
-// transition the index would report: its fold over the organisation's own
+// transition the index would report: its fold over the organization's own
 // chain must stay consistent.
 func (e *Engine) OrgTransition(ctx context.Context, admit, revoke []*state.Grant, what string) error {
 	return e.OrgTransitionWith(ctx, admit, revoke, nil, nil, what)
@@ -397,7 +397,7 @@ func (e *Engine) OrgTransitionWith(ctx context.Context, admit, revoke []*state.G
 	}
 	last := state.Latest(o.Tokens)
 	if last == nil {
-		return errors.New("the organisation has no token yet (borg org create)")
+		return errors.New("the organization has no token yet (borg org create)")
 	}
 	if len(admit) > borgrec.MaxDelta || len(revoke) > borgrec.MaxDelta {
 		return fmt.Errorf("one token admits and revokes at most %d grants each; a larger change is several transitions", borgrec.MaxDelta)
@@ -413,7 +413,7 @@ func (e *Engine) OrgTransitionWith(ctx context.Context, admit, revoke []*state.G
 	f := borgrec.NewOrgFold()
 	for _, r := range recs {
 		if st := f.Apply(r); st != borgrec.StatusConsistent {
-			return fmt.Errorf("the organisation's own chain folds to %s at seq %d", st, r.Seq)
+			return fmt.Errorf("the organization's own chain folds to %s at seq %d", st, r.Seq)
 		}
 	}
 	roll := map[[32]byte]bool{}
@@ -541,7 +541,7 @@ func (e *Engine) CreateGroup(ctx context.Context, name string, members [][]byte,
 		return nil, err
 	}
 	if len(o.Tokens) == 0 {
-		return nil, errors.New("the organisation has no token yet (borg org create)")
+		return nil, errors.New("the organization has no token yet (borg org create)")
 	}
 	members = slices.Clone(members)
 	if e.signerActive() {
@@ -602,15 +602,15 @@ func (e *Engine) CreateGroup(ctx context.Context, name string, members [][]byte,
 	return o.Group(id), nil
 }
 
-// checkJoiner refuses a key that may not join a group: the organisation,
+// checkJoiner refuses a key that may not join a group: the organization,
 // the anyone key, or a key with no current grant (spec section 7.1: the
-// organisation wraps a key to nobody without one).
+// organization wraps a key to nobody without one).
 func (e *Engine) checkJoiner(m []byte) error {
 	if err := borgrec.CheckIdentity(m); err != nil {
 		return fmt.Errorf("%s is not an identity key", hex.EncodeToString(m))
 	}
 	if bytes.Equal(m, e.OrgKey()) || borgrec.IsAnyone(m) {
-		return fmt.Errorf("%s cannot be a member: neither the organisation nor the anyone key is ever a member", hex.EncodeToString(m))
+		return fmt.Errorf("%s cannot be a member: neither the organization nor the anyone key is ever a member", hex.EncodeToString(m))
 	}
 	if e.currentGrant(hex.EncodeToString(m)) == nil {
 		return fmt.Errorf("%s holds no current grant (admitted, not revoked, not expired, scope member): grant it first (borg grant issue)", hex.EncodeToString(m))
@@ -651,7 +651,7 @@ func (e *Engine) GroupChange(ctx context.Context, gid string, c Change) (*Change
 	}
 	g := o.Group(gid)
 	if g == nil {
-		return nil, fmt.Errorf("group %s is not one of this organisation's", gid)
+		return nil, fmt.Errorf("group %s is not one of this organization's", gid)
 	}
 	last := state.Latest(g.Tokens)
 	if last == nil {
@@ -1089,7 +1089,7 @@ func (e *Engine) adopt(ctx context.Context, tr *state.Transition, tx *transactio
 
 // tokenTx rebuilds a mined token of the home's own under a proof that
 // verifies against the publisher's headers, replacing a kept proof a
-// reorganisation left stale with the node's current one, in the home too
+// reorganization left stale with the node's current one, in the home too
 // (spec section 11.5).
 func (e *Engine) tokenTx(ctx context.Context, t *state.Token) (*transaction.Transaction, error) {
 	tx, err := rebuild(t)
@@ -1185,7 +1185,7 @@ func (e *Engine) publishToken(ctx context.Context, kind, group, txid string) err
 		return err
 	}
 	// A token just mined waits for its block to reach the header source;
-	// one whose kept proof a reorganisation left stale takes the node's
+	// one whose kept proof a reorganization left stale takes the node's
 	// current proof.
 	tx, err := e.tokenTx(ctx, t)
 	if err != nil {

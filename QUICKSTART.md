@@ -78,6 +78,7 @@ image>`), or set `BORG_IMAGE`, `BORG_HOST_IMAGE` and `DEVCHAIN_IMAGE` to
 published ones.
 
 ```mermaid
+%%{init: {"flowchart": {"diagramPadding": 48}}}%%
 flowchart LR
   O["borg (the organization)"] -->|"submit, each host"| HA["host-a"]
   O -->|"submit, each host"| HB["host-b"]

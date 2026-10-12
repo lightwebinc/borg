@@ -124,7 +124,7 @@ func (e *txEnv) cases(s *Scenario) ([]txCase, error) {
 	add(txCase{name: "grant-carrier-beef-v1", note: "grant-carrier-alice submitted as BEEF V1 (BRC-62) rather than Atomic BEEF: the same two transactions and one proof", tx: ka, beef: v1})
 	add(txCase{name: "wrap-carrier-epoch-0", note: "epoch 0's wrap to alice and bob, spending record-tree output 0", tx: e.wraps[0]})
 	add(txCase{name: "wrap-carrier-epoch-1", note: "epoch 1's wrap to alice and carol, spending record-tree output 1", tx: e.wraps[1]})
-	add(txCase{name: "org-token-genesis", note: "the organisation's seq 0, admitting the three grants, spending chain-tree output 0; its BEEF is BEEF V1 of the chain tree then the token, each with its own path", tx: e.org[0], beef: tokenBEEF(e.org[0], e.chain)})
+	add(txCase{name: "org-token-genesis", note: "the organization's seq 0, admitting the three grants, spending chain-tree output 0; its BEEF is BEEF V1 of the chain tree then the token, each with its own path", tx: e.org[0], beef: tokenBEEF(e.org[0], e.chain)})
 	add(txCase{name: "org-token-revoke", note: "seq 1, revoking bob's grant: it spends seq 0's token output, which the topic holds and retains; the predecessor is read from the parent in the BEEF", tx: e.org[1], beef: tokenBEEF(e.org[1], e.org[0])})
 	add(txCase{name: "org-token-revoke-predecessor-not-held", note: "org-token-revoke offered with no previous coins, as to a host that does not hold seq 0: admitted all the same (the index reports it pending)", tx: e.org[1], beef: tokenBEEF(e.org[1], e.org[0]), held: []int{}})
 	add(txCase{name: "group-token-create", note: "the group's seq 0, epoch 0 (alice and bob), spending chain-tree output 1", tx: e.group[0], beef: tokenBEEF(e.group[0], e.chain)})
@@ -148,7 +148,7 @@ func (e *txEnv) cases(s *Scenario) ([]txCase, error) {
 	add(txCase{name: "carrier-grant-and-wrap", note: "one output claims a grant and another a wrap", rule: "carrier shape",
 		tx: carrierFrom(e.grant, 0, gUnlock, out(500, lockA), out(500, e.wraps[0].Outputs[0].LockingScript)), reason: "shape"})
 	tokLock := e.org[0].Outputs[0].LockingScript
-	add(txCase{name: "carrier-grant-and-token", note: "one output claims a grant and another an organisation token", rule: "carrier shape",
+	add(txCase{name: "carrier-grant-and-token", note: "one output claims a grant and another an organization token", rule: "carrier shape",
 		tx: carrierFrom(e.grant, 0, gUnlock, out(999, lockA), out(1, tokLock)), reason: "shape"})
 
 	// ---- carriers: the BEEF ----
@@ -216,7 +216,7 @@ func (e *txEnv) cases(s *Scenario) ([]txCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	add(txCase{name: "carrier-lock-member-key", note: "the organisation's grant record locked and signed under alice's grant key: the lock is bound to the record's org", rule: "script canonicality",
+	add(txCase{name: "carrier-lock-member-key", note: "the organization's grant record locked and signed under alice's grant key: the lock is bound to the record's org", rule: "script canonicality",
 		tx: carrierFrom(e.grant, 0, gUnlock, out(1000, alice.lock(gd, true, recA))), reason: "lock"})
 	sigA := sigOf(lockA, 1)
 	if len(recA) <= 255 || len(recA) > 65535 {
@@ -241,7 +241,7 @@ func (e *txEnv) cases(s *Scenario) ([]txCase, error) {
 		tx: carrierFrom(e.grant, 0, gUnlock, out(1000, fieldSigOf(lockA, gk, 1, highSBytes))), reason: "signature"})
 	add(txCase{name: "carrier-field-signature-wrong-key", note: "a strict signature over the record by a stranger's key", rule: "signatures",
 		tx: carrierFrom(e.grant, 0, gUnlock, out(1000, fieldSigOf(lockA, gk, 1, signWith(Dave.Priv, recA)))), reason: "signature"})
-	add(txCase{name: "carrier-field-signature-identity-key", note: "a strict signature over the record by the organisation's identity key rather than its grant key", rule: "signatures",
+	add(txCase{name: "carrier-field-signature-identity-key", note: "a strict signature over the record by the organization's identity key rather than its grant key", rule: "signatures",
 		tx: carrierFrom(e.grant, 0, gUnlock, out(1000, fieldSigOf(lockA, gk, 1, signWith(Org.Priv, recA)))), reason: "signature"})
 
 	// ---- policy carriers ----
@@ -413,13 +413,13 @@ func (e *txEnv) tokenCases(s *Scenario, add func(txCase)) error {
 
 	// lock.
 	ug := org1Lock(o.lock(grd, true, borgrec.TagOrg, rec1), 1)
-	add(txCase{name: "token-org-under-group-key", note: "seq 1's organisation record locked and signed under the group key", rule: "script canonicality", tx: ug, beef: tokenBEEF(ug, t0), reason: "lock"})
+	add(txCase{name: "token-org-under-group-key", note: "seq 1's organization record locked and signed under the group key", rule: "script canonicality", tx: ug, beef: tokenBEEF(ug, t0), reason: "lock"})
 	alice, err := newActor(Alice)
 	if err != nil {
 		return err
 	}
 	ua := org1Lock(alice.lock(od, true, borgrec.TagOrg, rec1), 1)
-	add(txCase{name: "token-lock-member-key", note: "the organisation's seq 1 record locked and signed under alice's org key", rule: "script canonicality", tx: ua, beef: tokenBEEF(ua, t0), reason: "lock"})
+	add(txCase{name: "token-lock-member-key", note: "the organization's seq 1 record locked and signed under alice's org key", rule: "script canonicality", tx: ua, beef: tokenBEEF(ua, t0), reason: "lock"})
 	sig1 := sigOf(t1.Outputs[0].LockingScript, 2)
 	if len(rec1) <= 75 || len(rec1) > 255 {
 		return fmt.Errorf("org seq 1 is %d bytes; the non-minimal push case assumes OP_PUSHDATA1", len(rec1))
@@ -462,7 +462,7 @@ func (e *txEnv) tokenCases(s *Scenario, add func(txCase)) error {
 	if err != nil {
 		return err
 	}
-	add(txCase{name: "token-group-spends-org-token", note: "a group token at seq 1 spending the organisation's token: another kind", rule: "chain-token shape", tx: gOnOrg, beef: tokenBEEF(gOnOrg, t0), reason: "token-input"})
+	add(txCase{name: "token-group-spends-org-token", note: "a group token at seq 1 spending the organization's token: another kind", rule: "chain-token shape", tx: gOnOrg, beef: tokenBEEF(gOnOrg, t0), reason: "token-input"})
 	g0rec, _ := e.groupRec[0].Encode()
 	recTree, err := e.token(grd, borgrec.TagGroup, g0rec, e.rec, 3)
 	if err != nil {

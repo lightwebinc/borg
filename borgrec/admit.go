@@ -481,7 +481,7 @@ func (t *ChainToken) prev() [32]byte {
 }
 
 // samePredecessor is rule 8's "a well-formed token of the same kind, hall
-// and organisation (and group) at seq - 1".
+// and organization (and group) at seq - 1".
 func samePredecessor(t, p *ChainToken) bool {
 	if t.Kind != p.Kind || p.Seq()+1 != t.Seq() {
 		return false
@@ -506,7 +506,7 @@ func lockingKeyChain(org []byte) *ec.PublicKey {
 
 // wellFormedToken reads a parent's output as a token of kind k: two fields
 // and a signature, 1 satoshi, the tag, a record that decodes, the canonical
-// lock under the record's organisation and a field signature that verifies.
+// lock under the record's organization and a field signature that verifies.
 func wellFormedToken(o *transaction.TransactionOutput, vout uint32, k Kind) (*ChainToken, error) {
 	if Classify(*o.LockingScript) != k {
 		return nil, errNoPredRead

@@ -23,7 +23,7 @@ type PolicyReq struct {
 }
 
 // PublishPolicy writes one policy record on a policy-tree output and
-// queues its carrier. The organisation's next token defines it (spec
+// queues its carrier. The organization's next token defines it (spec
 // section 3.3): until then the record is published and in no set, which is
 // what a host answers nothing for.
 func (e *Engine) PublishPolicy(ctx context.Context, req PolicyReq) (*state.Policy, error) {
@@ -49,7 +49,7 @@ func (e *Engine) PublishPolicy(ctx context.Context, req PolicyReq) (*state.Polic
 	}
 	if kind == borgrec.PolicyBinding && len(req.To) == 33 {
 		if e.currentGrant(hex.EncodeToString(req.To)) == nil {
-			e.note("warning: %s holds no current grant of this organisation, so the binding authorises nothing until it does", hex.EncodeToString(req.To))
+			e.note("warning: %s holds no current grant of this organization, so the binding authorises nothing until it does", hex.EncodeToString(req.To))
 		}
 	}
 	b, err := rec.Encode()

@@ -57,7 +57,7 @@ export const file = new URL('../../testdata/ts/ts-v1.json', import.meta.url)
 const text = new TextEncoder()
 const sha = (s: string): Uint8Array => Uint8Array.from(Hash.sha256(Array.from(text.encode(s))))
 
-/** The test keys of the Go vectors: 0x51 the organisation, 0x52 alice, 0x53 bob. */
+/** The test keys of the Go vectors: 0x51 the organization, 0x52 alice, 0x53 bob. */
 const orgKey = PrivateKey.fromHex('51'.repeat(32))
 const aliceKey = PrivateKey.fromHex('52'.repeat(32))
 const bobKey = PrivateKey.fromHex('53'.repeat(32))
@@ -210,7 +210,7 @@ export async function generate(): Promise<string> {
   const cA = Uint8Array.from(aliceCarrier.hash() as number[])
   const cB = Uint8Array.from(bobCarrier.hash() as number[])
 
-  // The organisation's seq 0 and seq 1, mined in one block: the BEEF of seq
+  // The organization's seq 0 and seq 1, mined in one block: the BEEF of seq
   // 1 then holds one path merged by the SDK.
   const commits = [cA, cB].sort(compareBytes)
   const o0 = encodeOrg({
@@ -317,7 +317,7 @@ export async function generate(): Promise<string> {
     description:
       'Written by the TypeScript codec (host/src/tsvectors.ts) and read by the Go codec: the hall draw reproduces from the same random bytes; each record decodes and re-encodes to the same bytes, unknown keys kept; ' +
       "the grants (issued, encrypted and signed by the TypeScript SDK) verify as certificates, open for their subjects and, where revealed, for anyone; the wrap opens for each member and matches the group token's commitment; " +
-      'every transaction (carriers signed through the SDK PushDrop unlocker; organisation tokens 0 and 1 mined in one block, so the BEEF of token 1 holds one path the SDK merged) is admitted against the headers below; tokenBeef is the TypeScript tokenBEEF of each token and its parent.',
+      'every transaction (carriers signed through the SDK PushDrop unlocker; organization tokens 0 and 1 mined in one block, so the BEEF of token 1 holds one path the SDK merged) is admitted against the headers below; tokenBeef is the TypeScript tokenBEEF of each token and its parent.',
     hall: Hall,
     hallDraw: { name: 'ts_written', random: hx(random), hall: drawn },
     epochKey: hx(epochKey),

@@ -512,16 +512,15 @@ replaced by the node's current one when the node gives one), and the
 token's BEEF must pass the host's rules. A record whose bytes are another
 transaction is named (`REFUSED`) and not used. A second home records each
 chain tree, with its proof, when `org sync` first takes a chain, while the
-node still answers it; a home made by `org sync` before borg v0.1.6 holds
-no such record. When neither the home nor the node supplies the tree,
+node still answers it. When neither the home nor the node supplies the tree,
 `fill` names it and exits 3:
 
 ```text
-organisation chain seq 0 <txid>: cannot assemble its BEEF: its chain tree <txid>: this home keeps no record of it (a home made by org sync before borg v0.1.6 does not), and the node does not answer it with a proof that makes the token's BEEF (a node drops a fully spent transaction, and no host keeps a chain tree); run borg fill from the organisation's home that published the chain
+organization chain seq 0 <txid>: cannot assemble its BEEF: its chain tree <txid>: this home keeps no record of it, and the node does not answer it with a proof that makes the token's BEEF (a node drops a fully spent transaction, and no host keeps a chain tree); run borg fill from the organization's home that published the chain
 ```
 
 From a home that is not the organization's, the message says `this home is
-not the organisation's` in place of the first clause.
+not the organization's` in place of the first clause.
 
 On the plane the organization's own tooling does part of this as it
 publishes: an object is submitted once to the facade, then looked for at

@@ -66,9 +66,9 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		return g.chainProblem("the organisation", err)
+		return g.chainProblem("the organization", err)
 	}
-	f.chain(ctx, "organisation chain", ov.ChainView)
+	f.chain(ctx, "organization chain", ov.ChainView)
 	f.carriers(ctx, "grant", borgrec.TxGrant, reader.Query{"hall": t.hall, "roll": hex.EncodeToString(t.org)},
 		func(c *reader.Car) reader.Query {
 			return reader.Query{"hall": t.hall, "org": hex.EncodeToString(t.org), "member": hex.EncodeToString(c.Carrier.Grant.Subject)}
@@ -124,7 +124,7 @@ type filler struct {
 	g     *global
 	t     *target
 	asset nodeapi.Chain
-	// home is the organisation's home state when fill runs in it: the
+	// home is the organization's home state when fill runs in it: the
 	// chain trees it keeps are taken before the node is asked.
 	home        *state.State
 	filled      int
@@ -193,7 +193,7 @@ func (f *filler) tokenBEEF(ctx context.Context, v *reader.ChainView, s uint64) (
 		return f.assemble(ctx, v.Hall, tok.Tx, v.Tokens[s-1].Tx)
 	}
 	// The chain tree: the transaction the token's chain input spends,
-	// which no host keeps. The organisation's home that published the
+	// which no host keeps. The organization's home that published the
 	// chain keeps it with its proof, and is asked first; the node is
 	// asked after, since a node drops a fully spent transaction.
 	var refused []string
@@ -243,16 +243,16 @@ func (f *filler) tokenBEEF(ctx context.Context, v *reader.ChainView, s uint64) (
 	case len(refused) > 0:
 		return nil, fmt.Errorf("%s; %s", strings.Join(refused, "; "), node)
 	case f.home == nil:
-		return nil, fmt.Errorf("%s: this home is not the organisation's, %s; run borg fill from the organisation's home that published the chain", tree, node)
+		return nil, fmt.Errorf("%s: this home is not the organization's, %s; run borg fill from the organization's home that published the chain", tree, node)
 	default:
-		return nil, fmt.Errorf("%s: this home keeps no record of it (a home made by org sync before borg v0.1.6 does not), %s; run borg fill from the organisation's home that published the chain", tree, node)
+		return nil, fmt.Errorf("%s: this home keeps no record of it, %s; run borg fill from the organization's home that published the chain", tree, node)
 	}
 }
 
 // homeTree is the chain tree id as the home's record keeps it, held to
 // what the node's answer would be held to: its bytes are the transaction
 // the token spends, and its proof verifies against this home's headers. A
-// kept proof that no longer verifies (a reorganisation) is replaced by the
+// kept proof that no longer verifies (a reorganization) is replaced by the
 // node's current one when the node answers; the home is not written.
 func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*transaction.Transaction, error) {
 	tx, err := funding.Rebuild(rec.RawHex, rec.BumpHex, rec.BeefHex)
@@ -273,7 +273,7 @@ func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*t
 	}
 	mp, _, err := f.asset.Proof(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one: %w", err)
+		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganization, or no proof kept), and the node gives no current one: %w", err)
 	}
 	if ok, err := mp.Verify(ctx, tx.TxID(), f.t.rd.Headers); err != nil || !ok {
 		return nil, errors.New("neither its kept proof nor the node's current one verifies against the header source")

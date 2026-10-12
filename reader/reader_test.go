@@ -106,7 +106,7 @@ func TestVerifyToken(t *testing.T) {
 		t.Fatalf("another hall: %v", err)
 	}
 	if _, err := VerifyToken(context.Background(), stored(t, tx), vectors.Hall, vectors.Alice.Pub(), c); err == nil {
-		t.Fatal("another organisation's token")
+		t.Fatal("another organization's token")
 	}
 	if _, err := VerifyToken(context.Background(), stored(t, tx), vectors.Hall, nil, nil); !errors.Is(err, ErrNoHeaders) {
 		t.Fatalf("no headers: %v", err)

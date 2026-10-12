@@ -8,7 +8,7 @@ import (
 	"github.com/lightwebinc/bcommon/record"
 )
 
-// Organisation record keys.
+// Organization record keys.
 const (
 	OKMagic       = 0
 	OKHall        = 1
@@ -30,11 +30,11 @@ const (
 	okLast        = OKSuccessor
 )
 
-// Org is one organisation record: the second field of an organisation chain
-// token. Each token is one transition of the organisation's roll.
+// Org is one organization record: the second field of an organization chain
+// token. Each token is one transition of the organization's roll.
 type Org struct {
 	Hall    string     // key 1
-	Org     []byte     // key 2, the organisation's identity key
+	Org     []byte     // key 2, the organization's identity key
 	Seq     uint64     // key 3, 0 for the first token
 	Prev    [32]byte   // key 4, txid (hash byte order) of the token at seq-1; zero at seq 0
 	Name    string     // key 5, display name
@@ -128,7 +128,7 @@ func (o *Org) cross() error {
 	return nil
 }
 
-// checkSuccessor is the rule of key 16 of an organisation record and key 17
+// checkSuccessor is the rule of key 16 of an organization record and key 17
 // of a group record: CBOR null, or an identity key that is neither the
 // anyone key nor the key it would succeed.
 func checkSuccessor(successor, own []byte) error {
@@ -144,7 +144,7 @@ func checkSuccessor(successor, own []byte) error {
 	return nil
 }
 
-// Encode writes the organisation record in canonical CBOR.
+// Encode writes the organization record in canonical CBOR.
 func (o *Org) Encode() ([]byte, error) {
 	if err := o.Validate(); err != nil {
 		return nil, err
@@ -171,7 +171,7 @@ func (o *Org) Encode() ([]byte, error) {
 	return record.Encode(m, o.Extra, MaxOrgRecord)
 }
 
-// DecodeOrg parses an organisation record in the refusal order.
+// DecodeOrg parses an organization record in the refusal order.
 func DecodeOrg(p []byte) (*Org, error) {
 	f, err := decodeRecord(p, MaxOrgRecord, okLast, MagicOrg)
 	if err != nil {
@@ -248,9 +248,9 @@ func DecodeOrg(p []byte) (*Org, error) {
 	return o, nil
 }
 
-// CheckOrgTransition is the admission rule an organisation token meets
+// CheckOrgTransition is the admission rule an organization token meets
 // against the token it spends (read from the topic's previous coins): same
-// hall and organisation, the next seq, prev naming the predecessor's
+// hall and organization, the next seq, prev naming the predecessor's
 // transaction, and a count that follows from the predecessor's and the
 // change lists.
 func CheckOrgTransition(prev *Org, prevTxid [32]byte, next *Org) error {
@@ -278,7 +278,7 @@ func CheckOrgTransition(prev *Org, prevTxid [32]byte, next *Org) error {
 }
 
 // checkHandover is the succession rule both chains follow (spec section
-// 3.4): a token carries its predecessor's organisation key, or the key that
+// 3.4): a token carries its predecessor's organization key, or the key that
 // predecessor named as its successor and no other. The handover's own
 // signatures are checked by the carrier and token rules: only the
 // predecessor's key can spend the announcing token's output, and only the
@@ -290,5 +290,5 @@ func checkHandover(prevOrg, prevSuccessor, nextOrg []byte) error {
 	if len(prevSuccessor) != 0 && bytes.Equal(nextOrg, prevSuccessor) {
 		return nil
 	}
-	return fmt.Errorf("%w: the organisation key changed without the predecessor naming it", ErrTransition)
+	return fmt.Errorf("%w: the organization key changed without the predecessor naming it", ErrTransition)
 }

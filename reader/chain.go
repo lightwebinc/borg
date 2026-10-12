@@ -14,7 +14,7 @@ import (
 	"github.com/lightwebinc/borg/internal/limits"
 )
 
-// ChainOrg is the chain member of a question about an organisation's own
+// ChainOrg is the chain member of a question about an organization's own
 // chain.
 const ChainOrg = "org"
 
@@ -46,7 +46,7 @@ type ChainView struct {
 	// latest.
 	Claimed []*Tok
 	// Replaced is set when a Floor remembered another token at a seq of
-	// the canonical chain than the one read now: its txid. A reorganisation
+	// the canonical chain than the one read now: its txid. A reorganization
 	// displaced the remembered one, or the chain forked there.
 	Replaced string
 }
@@ -54,7 +54,7 @@ type ChainView struct {
 // Beyond are the verified tokens of the chain at a seq above the chain
 // read, each once: a host answered them (as the latest, or at the seq the
 // walk could not link), and no chain of predecessors reaches them from the
-// first token. A token between was withheld, or the organisation signed a
+// first token. A token between was withheld, or the organization signed a
 // stray one; either way what was read may be an older state than the
 // chain's latest, and a reader with no memory of its own has nothing else
 // to tell it so.
@@ -156,7 +156,7 @@ func matches(t *Tok, chain string) bool {
 // chain, and the walk ends at the highest seq any host claimed as the
 // latest or at the first seq nothing continues: the work is bounded by the
 // chain itself, never by a seq a host, or a stray token of the
-// organisation's, names. Verified tokens above where the walk ended are
+// organization's, names. Verified tokens above where the walk ended are
 // reported (Beyond).
 //
 // With a Floor, hosts that answer the chain only below the seq the caller
@@ -325,7 +325,7 @@ func (v *ChainView) fold() {
 	}
 }
 
-// OrgView is an organisation's state from its canonical chain.
+// OrgView is an organization's state from its canonical chain.
 type OrgView struct {
 	*ChainView
 	// Roll is the roll after the last usable token, ascending.
@@ -336,7 +336,7 @@ type OrgView struct {
 	Token *borgrec.Org
 }
 
-// Org establishes an organisation's chain and folds its roll.
+// Org establishes an organization's chain and folds its roll.
 func (c *Client) Org(ctx context.Context, hall string, org []byte) (*OrgView, error) {
 	v, err := c.Chain(ctx, hall, org, ChainOrg)
 	if err != nil {
@@ -350,7 +350,7 @@ func (c *Client) Org(ctx context.Context, hall string, org []byte) (*OrgView, er
 	}
 	ov.Roll, ov.PolicySet = f.Roll(), f.Policy()
 	if ov.Token == nil {
-		return ov, fmt.Errorf("reader: the organisation's chain breaks its fold at seq 0 (%s)", v.Statuses[0])
+		return ov, fmt.Errorf("reader: the organization's chain breaks its fold at seq 0 (%s)", v.Statuses[0])
 	}
 	return ov, nil
 }

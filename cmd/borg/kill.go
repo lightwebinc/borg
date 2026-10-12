@@ -127,7 +127,7 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 	defer r.close(ctx, g)
 	o := r.h.st.Org
 	if o == nil {
-		return usage("this home runs no organisation: it published no grant and no wrap, so there is nothing to sweep")
+		return usage("this home runs no organization: it published no grant and no wrap, so there is nothing to sweep")
 	}
 	trees := killTrees(r.h.st, func(txid string, vout uint32) bool { return r.eng.SweptBy(txid, vout) != nil })
 	failed := 0

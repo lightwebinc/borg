@@ -13,7 +13,7 @@ import (
 // CheckIdentity refuses anything but a canonical compressed secp256k1 key
 // (bcommon guard.ParsePubKey): 33 bytes, prefix 0x02 or 0x03, an x-coordinate
 // below the field prime, and a point on the curve. Accepting an alias would
-// let two byte strings name one organisation or member.
+// let two byte strings name one organization or member.
 func CheckIdentity(k []byte) error {
 	if _, err := guard.ParsePubKey(k); err != nil {
 		return ErrIdentity
@@ -21,7 +21,7 @@ func CheckIdentity(k []byte) error {
 	return nil
 }
 
-// checkOrgKey is the key rule for an organisation: a canonical identity key
+// checkOrgKey is the key rule for an organization: a canonical identity key
 // that is not the anyone key, whose private key everyone knows.
 func checkOrgKey(k []byte) error {
 	if CheckIdentity(k) != nil || IsAnyone(k) {

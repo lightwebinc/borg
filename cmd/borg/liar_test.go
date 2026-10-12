@@ -161,7 +161,7 @@ func TestAHostSubstitutingATokenOrAGrantIsNamed(t *testing.T) {
 	if r.code != exitIncomplete || !strings.Contains(r.stdout, "CURRENT member") || !strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED grant") {
 		t.Fatalf("member, one host substituting a grant: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
 	}
-	// The organisation's own catch-up names it too, and is incomplete.
+	// The organization's own catch-up names it too, and is incomplete.
 	h.b.Rewrite = lie("roll", "wraps", "wrap")
 	r = h.run("org", "", "org", "sync")
 	if r.code != exitIncomplete || !strings.Contains(r.stdout, "sync    host "+h.bS.URL+": REFUSED") {

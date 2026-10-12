@@ -1,5 +1,5 @@
 // Package state is an identity's durable record in its home: the funding
-// trees its carriers and chains spend, the organisation it runs (its own
+// trees its carriers and chains spend, the organization it runs (its own
 // chain, its grants, its groups and every epoch key it sampled), the
 // objects persisted before they are published, the sweeps it built, and,
 // for a member, the epoch keys it opened, the grants it holds and the
@@ -13,7 +13,7 @@
 // atomically (a temporary file, fsync, rename, fsync of the directory) at
 // mode 0600, and the home is locked while a command writes.
 //
-// The file holds secrets: every epoch key the organisation sampled and
+// The file holds secrets: every epoch key the organization sampled and
 // every epoch key a member opened, beside the identity key the wallet keeps
 // in the same directory. The home is the wallet's encrypted storage's place
 // in this command, so it is kept at mode 0700 and backed up as a secret.
@@ -80,7 +80,7 @@ type State struct {
 	// record in the same save.
 	PendingTrees []PendingTree `json:"pendingTrees,omitempty"`
 
-	// Org is the organisation this home runs, once org create began.
+	// Org is the organization this home runs, once org create began.
 	Org *Org `json:"org,omitempty"`
 
 	// Outbox holds every object persisted and not yet confirmed published,
@@ -250,7 +250,7 @@ func (s *State) TreeOf(txid string) (*funding.Tree, string, bool) {
 	return nil, "", false
 }
 
-// Org is the organisation this home runs.
+// Org is the organization this home runs.
 type Org struct {
 	Hall   string `json:"hall"`
 	Name   string `json:"name"`
@@ -285,7 +285,7 @@ type Token struct {
 	Published bool `json:"published,omitempty"`
 }
 
-// Grant is one grant the organisation issued.
+// Grant is one grant the organization issued.
 type Grant struct {
 	Subject string `json:"subject"`
 	// Txid is the carrier's txid, display order; its commitment C.
@@ -302,7 +302,7 @@ type Grant struct {
 	// Record is the grant record, hex; Beef its carrier as published.
 	Record string `json:"record"`
 	Beef   string `json:"beef"`
-	// Admitted is set once an organisation token admits it; Revoked once
+	// Admitted is set once an organization token admits it; Revoked once
 	// one revokes it, with that token's seq.
 	Admitted bool   `json:"admitted,omitempty"`
 	Revoked  bool   `json:"revoked,omitempty"`
@@ -311,7 +311,7 @@ type Grant struct {
 	Swept string `json:"swept,omitempty"`
 }
 
-// Policy is one policy record the organisation published: a role
+// Policy is one policy record the organization published: a role
 // definition or a binding, on a policy-tree output that retires it.
 type Policy struct {
 	// Txid is the carrier's txid, display order; its commitment C.
@@ -332,7 +332,7 @@ type Policy struct {
 	// Record is the policy record, hex; Beef its carrier as published.
 	Record string `json:"record"`
 	Beef   string `json:"beef"`
-	// Defined is set once an organisation token defines it; Retired once
+	// Defined is set once an organization token defines it; Retired once
 	// one retires it, with that token's seq.
 	Defined bool   `json:"defined,omitempty"`
 	Retired bool   `json:"retired,omitempty"`
@@ -361,7 +361,7 @@ func (o *Org) PolicyByTxid(txid string) *Policy {
 	return nil
 }
 
-// Group is one of the organisation's groups.
+// Group is one of the organization's groups.
 type Group struct {
 	// ID is the group identifier, 32 lowercase hex digits.
 	ID           string `json:"id"`
@@ -370,12 +370,12 @@ type Group struct {
 	RotateEvery  uint64 `json:"rotateEvery,omitempty"`
 	// Tokens are its chain, mined, in seq order.
 	Tokens []Token `json:"tokens,omitempty"`
-	// Epochs are every epoch it began, with the key the organisation
+	// Epochs are every epoch it began, with the key the organization
 	// sampled.
 	Epochs []Epoch `json:"epochs,omitempty"`
 }
 
-// Epoch is one epoch of a group, as the organisation keeps it.
+// Epoch is one epoch of a group, as the organization keeps it.
 type Epoch struct {
 	Epoch uint32 `json:"epoch"`
 	// Seq is the seq of the token that began it.
@@ -433,9 +433,9 @@ type Pending struct {
 	// Beef is the object's BEEF, hex.
 	Beef string `json:"beef"`
 	// The lookup that confirms a host holds it, when the host's answer to
-	// the submission admitted nothing: for a grant the organisation and
-	// subject (member class); for a wrap the organisation, group, epoch
-	// and one recipient (wrap class); for a token the organisation, chain
+	// the submission admitted nothing: for a grant the organization and
+	// subject (member class); for a wrap the organization, group, epoch
+	// and one recipient (wrap class); for a token the organization, chain
 	// and seq (org-seq, group-seq); for a sweep one outpoint it spends.
 	Org      string `json:"org,omitempty"`
 	Group    string `json:"group,omitempty"`
@@ -617,7 +617,7 @@ func (s *State) InFlight() *Sweep {
 	return nil
 }
 
-// Group finds one of the organisation's groups by id.
+// Group finds one of the organization's groups by id.
 func (o *Org) Group(id string) *Group {
 	for i := range o.Groups {
 		if o.Groups[i].ID == id {

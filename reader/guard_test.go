@@ -70,14 +70,14 @@ func groupChain(t *testing.T, c chain, n int) ([]*transaction.Transaction, *borg
 	return txs, g
 }
 
-// A seq a host claims, or a stray token of the organisation's names, never
+// A seq a host claims, or a stray token of the organization's names, never
 // sizes anything and never sets how far a reader walks: the chain is asked
 // for seq by seq, only while each links to the one before.
 func TestAHostileSeqEndsNoWalk(t *testing.T) {
 	c := chain{}
 	ctx := context.Background()
 	txs, g := groupChain(t, c, 2)
-	// A token the organisation signed at an enormous seq, mined: it links
+	// A token the organization signed at an enormous seq, mined: it links
 	// to nothing.
 	stray := *g
 	stray.Seq, stray.Prev = 1<<50, [32]byte{9}
@@ -238,7 +238,7 @@ func (s source) MerkleProof(context.Context, string) (*transaction.MerklePath, e
 }
 
 // A host stores a token with the proof it was given. After a
-// reorganisation that proof may name a block that is no longer in the best
+// reorganization that proof may name a block that is no longer in the best
 // chain: a reader with a chain source takes the transaction's current
 // proof from it, and one without refuses the token as unmined.
 func TestAStaleProofIsReplacedFromTheChainSource(t *testing.T) {

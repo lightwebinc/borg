@@ -70,7 +70,7 @@ test('removal rotates the epoch, and the removed member cannot open the next one
   assert.deepEqual(await submit(s.engine, group.tip.beef), [0])
   for (const w of await group.wraps()) assert.deepEqual(await submit(s.engine, w.toAtomicBEEF()), [0])
 
-  // Epoch 0: all three open it, and it is the key the organisation sampled.
+  // Epoch 0: all three open it, and it is the key the organization sampled.
   const k0 = group.epochs.get(0)!.key
   for (const p of [alice, bob, carol]) assert.deepEqual(await openEpoch(s.engine, org, group.idHex, p), { epoch: 0, key: k0 }, p.label)
 
@@ -133,7 +133,7 @@ test('removal rotates the epoch, and the removed member cannot open the next one
   assert.deepEqual(await openEpoch(s.engine, org, group.idHex, bob), { epoch: 2, refused: 'entry' })
 })
 
-test("a member's checks refuse a wrap the organisation made wrong, each for its own reason, from the host's answers", async () => {
+test("a member's checks refuse a wrap the organization made wrong, each for its own reason, from the host's answers", async () => {
   const chain = new Chain(90500)
   const s = await setup({ chain })
   const org = new OrgSim(hall, 'careless org', chain)

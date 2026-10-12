@@ -1,6 +1,6 @@
 // Package enforce is the whole of borg's decision procedure (docs/spec.md
 // section 13) behind one call, for a service that decides on a requester's
-// behalf: the organisation's latest token and the subject's grants, groups
+// behalf: the organization's latest token and the subject's grants, groups
 // and policy records, each verified against the service's own headers,
 // folded into a verdict, signed into a receipt and handed back. A service
 // adds authorisation in one file and keeps its own interface in front of
@@ -35,8 +35,8 @@ const DefaultFreshness = 60 * time.Second
 // cleared, which costs a read and never an answer.
 const MaxCached = 10000
 
-// Enforcer decides for one organisation. Make one per organisation a
-// service answers for and keep it: it holds the organisation's latest view
+// Enforcer decides for one organization. Make one per organization a
+// service answers for and keep it: it holds the organization's latest view
 // and the allows it may reuse.
 type Enforcer struct {
 	// Reader asks the hosts and verifies what they answer. Its Headers are
@@ -50,7 +50,7 @@ type Enforcer struct {
 	// originator for the service.
 	Wallet     wallet.Interface
 	Originator string
-	// Hall and Org name the organisation.
+	// Hall and Org name the organization.
 	Hall string
 	Org  []byte
 	// Freshness bounds how long an allow is reused; zero is
@@ -114,7 +114,7 @@ func (e *Enforcer) identity(ctx context.Context) ([]byte, error) {
 	return e.by, nil
 }
 
-// orgView is the organisation's latest view, read again once it is older
+// orgView is the organization's latest view, read again once it is older
 // than the freshness: the seq a decision rests on is at most that stale.
 func (e *Enforcer) orgView(ctx context.Context, now time.Time) (*reader.OrgView, error) {
 	if e.view != nil && now.Sub(e.seen) < e.freshness() {
@@ -129,7 +129,7 @@ func (e *Enforcer) orgView(ctx context.Context, now time.Time) (*reader.OrgView,
 	return ov, nil
 }
 
-// Allow decides whether subject holds permission in the organisation now.
+// Allow decides whether subject holds permission in the organization now.
 // The permission is what a service asks, in full and with no wildcard. The
 // verdict is a deny with a reason whenever the read could not be completed,
 // and the error says why; a verdict with a receipt is one a checker can
@@ -151,7 +151,7 @@ func (e *Enforcer) Allow(ctx context.Context, subject []byte, permission string)
 	ov, err := e.orgView(ctx, now)
 	if err != nil {
 		// No token, no seq, nothing to sign over: the deny is the error.
-		return Verdict{Reason: "incomplete"}, fmt.Errorf("enforce: the organisation's chain: %w", err)
+		return Verdict{Reason: "incomplete"}, fmt.Errorf("enforce: the organization's chain: %w", err)
 	}
 	key := string(subject) + "|" + permission
 	if c, ok := e.cache[key]; ok && c.seq == ov.Token.Seq && now.Sub(c.at) < e.freshness() {

@@ -30,7 +30,7 @@ var (
 
 // CheckEpochToken is the member's check 1 (spec section 6.4): the group
 // record of the token that began the wrap's epoch hashes to the wrap's
-// epoch id and names the same hall, organisation, group and epoch. The
+// epoch id and names the same hall, organization, group and epoch. The
 // token's proof against the member's headers is checked by the caller.
 func CheckEpochToken(groupRecord []byte, w *WrapRecord) (*Group, error) {
 	g, err := DecodeGroup(groupRecord)
@@ -101,7 +101,7 @@ func frame(org, member []byte, keyID [32]byte, ciphertext []byte) []byte {
 }
 
 // Wrap releases the epoch key k to member under BRC-369 section 5.2, through
-// the organisation's wallet: the wallet's BRC-2 ciphertext under
+// the organization's wallet: the wallet's BRC-2 ciphertext under
 // [2, "keyed content release"], the derived key id and counterparty member,
 // framed as BRC-78 (version, sender, recipient, key id, ciphertext).
 func Wrap(ctx context.Context, w wallet.Interface, org []byte, member *ec.PublicKey, epochID [32]byte, epoch uint32, k [32]byte) ([]byte, error) {
@@ -158,8 +158,8 @@ func ParseEntry(b []byte) (*Entry, error) {
 }
 
 // CheckEntry is the host's rule for one wrap of a wrap record: exactly
-// WrapLen bytes, the version, the organisation as sender, a canonical
-// recipient that is neither the organisation nor the anyone key, and the key
+// WrapLen bytes, the version, the organization as sender, a canonical
+// recipient that is neither the organization nor the anyone key, and the key
 // id BRC-369 derives for the record's epoch.
 func CheckEntry(b, org []byte, epochID [32]byte, epoch uint32) (*Entry, error) {
 	e, err := ParseEntry(b)
@@ -167,7 +167,7 @@ func CheckEntry(b, org []byte, epochID [32]byte, epoch uint32) (*Entry, error) {
 		return nil, err
 	}
 	if !bytes.Equal(e.Sender, org) {
-		return nil, fmt.Errorf("%w: sender is not the organisation", ErrEntry)
+		return nil, fmt.Errorf("%w: sender is not the organization", ErrEntry)
 	}
 	if CheckIdentity(e.Recipient) != nil || bytes.Equal(e.Recipient, org) || IsAnyone(e.Recipient) {
 		return nil, fmt.Errorf("%w: recipient", ErrEntry)
@@ -179,7 +179,7 @@ func CheckEntry(b, org []byte, epochID [32]byte, epoch uint32) (*Entry, error) {
 }
 
 // Unwrap is the member's side of BRC-369 sections 5.2 and 5.3: it decrypts
-// its wrap through its own wallet (counterparty the organisation), refuses a
+// its wrap through its own wallet (counterparty the organization), refuses a
 // value that is not a scalar, and checks it against the epoch's commitment
 // before anything else uses it.
 func Unwrap(ctx context.Context, w wallet.Interface, wrap []byte, org *ec.PublicKey, epochID [32]byte, epoch uint32, commitment [32]byte) ([32]byte, error) {

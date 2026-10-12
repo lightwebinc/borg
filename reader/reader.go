@@ -247,8 +247,8 @@ func (t *Tok) Before(u *Tok) bool {
 
 // VerifyToken checks one answered token as a reader does (spec section 13):
 // the transaction holds exactly one well-formed token (its record, its lock
-// derived from the record's organisation, its field signature), of hall and
-// organisation org, and its proof verifies against headers.
+// derived from the record's organization, its field signature), of hall and
+// organization org, and its proof verifies against headers.
 func VerifyToken(ctx context.Context, beef []byte, hall string, org []byte, headers chaintracker.ChainTracker) (*Tok, error) {
 	if headers == nil {
 		return nil, ErrNoHeaders
@@ -271,7 +271,7 @@ func VerifyToken(ctx context.Context, beef []byte, hall string, org []byte, head
 		return nil, fmt.Errorf("%w: the token names hall %q", borgrec.ErrHall, h)
 	}
 	if org != nil && !bytes.Equal(o, org) {
-		return nil, errors.New("reader: the token is another organisation's")
+		return nil, errors.New("reader: the token is another organization's")
 	}
 	if !borgrec.Mined(ctx, tx, headers) {
 		return nil, borgrec.ErrUnmined
@@ -340,7 +340,7 @@ func VerifySweep(ctx context.Context, beef []byte, hall string, headers chaintra
 }
 
 // A host stores an object with the proof it was given, and cannot take a
-// new one: after a reorganisation the stored proof may name a block that is
+// new one: after a reorganization the stored proof may name a block that is
 // no longer in the best chain, although the same transaction was mined
 // again elsewhere (spec section 11.5). A reader then fetches the
 // transaction's current proof from a chain source by its txid, and verifies

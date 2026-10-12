@@ -22,7 +22,7 @@ func MembersRoot(keys [][]byte) [32]byte {
 	return commit.Root(leaves)
 }
 
-// RollRoot is the RFC 6962 root an organisation record commits its roll to:
+// RollRoot is the RFC 6962 root an organization record commits its roll to:
 // the leaves are the grant commitments (carrier txids, hash byte order) in
 // ascending byte order.
 func RollRoot(grants [][32]byte) [32]byte {
@@ -32,7 +32,7 @@ func RollRoot(grants [][32]byte) [32]byte {
 	return commit.Root(sorted)
 }
 
-// PolicyRoot is the RFC 6962 root an organisation record commits its policy
+// PolicyRoot is the RFC 6962 root an organization record commits its policy
 // set to, computed exactly as RollRoot is over the grant commitments: the
 // leaves are the policy carriers' commitments in ascending byte order. The
 // two roots are separate so that a change of membership and a change of

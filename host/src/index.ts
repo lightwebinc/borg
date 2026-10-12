@@ -1,5 +1,5 @@
 /**
- * The borg record layer for an overlay host: the organisation, group, grant
+ * The borg record layer for an overlay host: the organization, group, grant
  * and wrap records, the hall grammar, scopes, lookup questions, roots and
  * inclusion contexts, the epoch key and its wraps, the topic manager's
  * transaction rules, and the index's chain rules.

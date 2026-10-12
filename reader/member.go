@@ -37,7 +37,7 @@ type GrantStatus struct {
 	// one.
 	Values map[string]string
 	// InRoll is set when the grant's commitment is in the roll of the
-	// organisation's latest usable token.
+	// organization's latest usable token.
 	InRoll bool
 	// Member is set when the scope grants member.
 	Member bool
@@ -54,7 +54,7 @@ type GrantStatus struct {
 
 // Judge applies the reader's checks to a verified grant carrier: in the
 // roll, a scope that grants member, an expiry not passed (allowing the
-// skew), a reveal unless the organisation is opaque, and a revocation
+// skew), a reveal unless the organization is opaque, and a revocation
 // outpoint positively unspent. spends may be nil: then "unspent" is never
 // known, and the grant is never current for anything that releases a key.
 func Judge(ctx context.Context, car *Car, ov *OrgView, spends Spends, now time.Time) GrantStatus {
@@ -66,7 +66,7 @@ func Judge(ctx context.Context, car *Car, ov *OrgView, spends Spends, now time.T
 		}
 	}
 	if !st.InRoll {
-		why("not in the roll of the organisation's latest token")
+		why("not in the roll of the organization's latest token")
 	}
 	if g.Reveal != nil {
 		vals, err := g.CheckReveal()
@@ -84,7 +84,7 @@ func Judge(ctx context.Context, car *Car, ov *OrgView, spends Spends, now time.T
 			}
 		}
 	} else if !ov.Token.Opaque {
-		why("no reveal, and the organisation is not opaque: its scope cannot be checked")
+		why("no reveal, and the organization is not opaque: its scope cannot be checked")
 	}
 	if spends == nil {
 		st.Unknown = true
@@ -135,7 +135,7 @@ func (c *Client) GrantsOf(ctx context.Context, ov *OrgView, k []byte) ([]*Car, [
 				continue
 			}
 			if err == nil && (!bytes.Equal(car.Carrier.Grant.Org, ov.Org) || !bytes.Equal(car.Carrier.Grant.Subject, k)) {
-				err = errors.New("reader: the grant is not the organisation's grant to this key")
+				err = errors.New("reader: the grant is not the organization's grant to this key")
 			}
 			if err != nil {
 				refused = append(refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})
@@ -196,7 +196,7 @@ func (c *Client) Roll(ctx context.Context, ov *OrgView) []RollAnswer {
 		for _, o := range ho.Outputs {
 			car, _, _, err := vs.carrier(ctx, c, h, o.Beef, ov.Hall, borgrec.TxGrant)
 			if err == nil && !bytes.Equal(car.Carrier.Grant.Org, ov.Org) {
-				err = errors.New("reader: another organisation's grant")
+				err = errors.New("reader: another organization's grant")
 			}
 			if err != nil {
 				ra.Refused = append(ra.Refused, Refusal{Host: h, Txid: SubjectID(o.Beef), Reason: borgrec.Reason(err), Err: err})

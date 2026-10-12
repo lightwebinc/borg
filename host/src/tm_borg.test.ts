@@ -61,7 +61,7 @@ test('every transaction vector is admitted or refused, raising, as the vectors s
   assert.equal(host.count('borg_refused_total', { reason: 'beef' }), 16)
 })
 
-/** The vectors' organisation: 32 bytes of 0x51, a public test key. */
+/** The vectors' organization: 32 bytes of 0x51, a public test key. */
 const vectorOrg = new Party('vector org', PrivateKey.fromHex('51'.repeat(32)))
 
 test('every refusal record, carried by an otherwise valid carrier or token, is refused for its reason', async () => {

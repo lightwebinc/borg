@@ -55,14 +55,14 @@ func (c *Client) PolicySet(ctx context.Context, ov *OrgView) []PolicyAnswer {
 }
 
 // policyCar verifies one answered policy carrier and holds it to this
-// organisation's.
+// organization's.
 func (c *Client) policyCar(ctx context.Context, vs verdicts, host string, ov *OrgView, beef []byte) (*Car, error) {
 	car, _, _, err := vs.carrier(ctx, c, host, beef, ov.Hall, borgrec.TxPolicy)
 	if err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(car.Carrier.Policy.Org, ov.Org) {
-		return nil, errors.New("reader: another organisation's policy record")
+		return nil, errors.New("reader: another organization's policy record")
 	}
 	return car, nil
 }
@@ -137,13 +137,13 @@ type Decision struct {
 	Reason string
 	// Effective is the permission set the subject holds.
 	Effective []string
-	// Seq and Token name the organisation token the decision rested on.
+	// Seq and Token name the organization token the decision rested on.
 	Seq   uint64
 	Token string
 	// Grants and Policies are the commitments the decision used, ascending.
 	Grants   [][32]byte
 	Policies [][32]byte
-	// Groups are the groups of the organisation that hold the subject.
+	// Groups are the groups of the organization that hold the subject.
 	Groups []string
 	// Refused are answers that did not verify, HostErr the hosts that could
 	// not be asked. Either leaves the read incomplete, and a service that
@@ -258,7 +258,7 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 		sub.Member = true
 		d.Grants = append(d.Grants, g.Carrier.Commitment)
 		// The role a grant names is readable only where the grant carries a
-		// reveal. In an opaque organisation the subject discloses it, which
+		// reveal. In an opaque organization the subject discloses it, which
 		// is not something a reader asks a host for, so a grant without one
 		// names no role here and only bindings reach the subject.
 		if role, ok := st.Values["role"]; ok && borgrec.CheckRoleName(role) == nil {
@@ -330,7 +330,7 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 		// status (spec section 11.2), so a record swept since is still
 		// here. A sweep is the fast half of a withdrawal: it retracts at
 		// once and the next token drops the commitment. A reader that
-		// counted a swept record would grant what the organisation has
+		// counted a swept record would grant what the organization has
 		// already taken away, so the outpoint is checked here as a grant's
 		// revocation outpoint is, and nothing is current without a
 		// positive answer.

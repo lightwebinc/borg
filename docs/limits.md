@@ -79,7 +79,7 @@ or a member's client ([usage.md](usage.md)).
 | Revocation check age, for anything that moves value | 60 s | the reader's resolution lifetime | BRC-169 section 4.2 | Same |
 | Expiry skew | 300 s | 300 s (spec) | BRC-169 section 9.6 | Same |
 | What `fill` copies | every token, roll grant and wrap a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it | Off the plane, or a host a publisher missed |
-| Where `fill` finds a chain's first token's parent (the chain tree) | the home's own record, when it runs in the organization's home; else the chain view (`chain`) | none | No host keeps a chain tree, and a node may drop it once all its outputs are spent. The publishing home records every tree it mints, a second home records each chain tree when `org sync` first takes the chain; a home made by `org sync` before v0.1.6 has no record, and a home that is not the organization's has none: from those, a host that lost a chain's first token is filled only while the node answers the tree. Hosts do not keep chain trees: that would change the host contract | Same |
+| Where `fill` finds a chain's first token's parent (the chain tree) | the home's own record, when it runs in the organization's home; else the chain view (`chain`) | none | No host keeps a chain tree, and a node may drop it once all its outputs are spent. The publishing home records every tree it mints, a second home records each chain tree when `org sync` first takes the chain, and a home that is not the organization's has none: from those, a host that lost a chain's first token is filled only while the node answers the tree. Hosts do not keep chain trees: that would change the host contract | Same |
 
 ### Revoking and the kill switch
 

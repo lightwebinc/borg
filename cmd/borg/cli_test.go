@@ -289,7 +289,7 @@ func (h *harness) startPaid(t *testing.T, name string, price uint64) {
 	h.env["BORG_HISTORY_HOST"] = h.paidS.URL
 }
 
-// org is an organisation with three members in one group: the org home
+// org is an organization with three members in one group: the org home
 // "org" and the member homes alice, bob and carol.
 type org struct {
 	key               string
@@ -305,7 +305,7 @@ func (h *harness) orgWithGroup() org {
 	o.bob = h.identity("bob", false)
 	o.carol = h.identity("carol", false)
 	h.newHall("org")
-	r := h.must("org", "org", "create", "Example Organisation", "-member", o.alice, "-member", o.bob, "-member", o.carol)
+	r := h.must("org", "org", "create", "Example Organization", "-member", o.alice, "-member", o.bob, "-member", o.carol)
 	if !strings.Contains(r.stdout, "seq     0 ") || strings.Count(r.stdout, " member\n") != 3 {
 		h.t.Fatalf("org create:\n%s\n%s", r.stdout, r.stderr)
 	}

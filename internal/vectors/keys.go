@@ -35,7 +35,7 @@ func party(name string, b byte) Party {
 	return Party{Name: name, Priv: k}
 }
 
-// The parties: the organisation and three members.
+// The parties: the organization and three members.
 var (
 	Org   = party("org", 0x51)
 	Alice = party("alice", 0x52)
@@ -43,7 +43,7 @@ var (
 	Carol = party("carol", 0x54)
 	// Dave is never a member: the stranger of refusal cases.
 	Dave = party("dave", 0x56)
-	// Successor is the key an organisation hands over to (spec section 3.4).
+	// Successor is the key an organization hands over to (spec section 3.4).
 	Successor = party("successor", 0x57)
 )
 

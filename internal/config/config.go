@@ -3,7 +3,7 @@
 //
 // The overlay addresses have no default: the overlay hosts, the facade and
 // the host a priced question goes to. A default there would quietly send an
-// organisation's records, or a member's questions, to somebody else's
+// organization's records, or a member's questions, to somebody else's
 // server, so a command that needs one and finds none is a usage error.
 //
 // The chain services do, on mainnet and testnet, so that a home needs no
@@ -92,7 +92,7 @@ type Config struct {
 	Network string
 	// ObjectBound is the largest object the plane takes, in bytes.
 	ObjectBound int
-	// Org is the organisation a member's command reads when it names none:
+	// Org is the organization a member's command reads when it names none:
 	// its identity key, 66 lowercase hex digits.
 	Org string
 	// Originator is the BRC-100 originator presented to the wallet.
@@ -110,7 +110,7 @@ type Config struct {
 	// arc:<url>, rpc:<url> or tcp:<host:port>. Resolve defaults it to
 	// arcade:<network> on main and test.
 	Settle string
-	// Signers is how many instances of the organisation's tooling can sign
+	// Signers is how many instances of the organization's tooling can sign
 	// transitions. Above one, wraps wait one further block (spec section
 	// 7.2).
 	Signers int

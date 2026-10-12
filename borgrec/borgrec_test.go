@@ -28,7 +28,7 @@ func pw(t *testing.T, k *ec.PrivateKey) wallet.Interface {
 	return w
 }
 
-// TestWrapThroughWallets wraps through the organisation's BRC-100 wallet with
+// TestWrapThroughWallets wraps through the organization's BRC-100 wallet with
 // a random IV and unwraps through the member's, then checks that nobody
 // else opens it and that the epoch's binding holds.
 func TestWrapThroughWallets(t *testing.T) {
@@ -231,8 +231,8 @@ func mapB64(m map[string][]byte) map[wallet.CertificateFieldNameUnder50Bytes]wal
 	return out
 }
 
-// The signer key anyone derives from the organisation's public key is the
-// public key of the private key only the organisation derives, and a wrap
+// The signer key anyone derives from the organization's public key is the
+// public key of the private key only the organization derives, and a wrap
 // to it opens under that private key.
 func TestSignerKey(t *testing.T) {
 	orgKey, err := ec.NewPrivateKey()
@@ -252,7 +252,7 @@ func TestSignerKey(t *testing.T) {
 		t.Fatal("the public and private derivations of the signer key disagree")
 	}
 	if bytes.Equal(pub, org) || IsAnyone(pub) {
-		t.Fatal("the signer key must be neither the organisation nor the anyone key")
+		t.Fatal("the signer key must be neither the organization nor the anyone key")
 	}
 	k, err := SampleKey(nil)
 	if err != nil {

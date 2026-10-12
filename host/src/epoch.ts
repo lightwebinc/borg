@@ -51,7 +51,7 @@ export const releaseInvoice = (epochId: Uint8Array, epoch: number): string => `2
 
 /**
  * The member's check 1: the group record of the token that began the wrap's
- * epoch hashes to the epoch id and names the same hall, organisation, group
+ * epoch hashes to the epoch id and names the same hall, organization, group
  * and epoch. The token's proof is the caller's.
  */
 export function checkEpochToken(groupRecord: Uint8Array, w: WrapRecord): Group {
@@ -76,7 +76,7 @@ export function checkEpochToken(groupRecord: Uint8Array, w: WrapRecord): Group {
 
 /**
  * The member's side of BRC-369 sections 5.2 and 5.3: decrypt its wrap
- * through its own wallet (counterparty the organisation), refuse a value
+ * through its own wallet (counterparty the organization), refuse a value
  * that is not a scalar, and check it against the epoch's commitment.
  */
 export async function unwrap(
@@ -123,7 +123,7 @@ export function certificate(g: Grant): Certificate {
   )
 }
 
-/** The BRC-52 binary form without the signature: the bytes the organisation signs. */
+/** The BRC-52 binary form without the signature: the bytes the organization signs. */
 export const preimage = (g: Grant): Uint8Array => Uint8Array.from(certificate(g).toBinary(false))
 
 /** grant-revocation: the revocation outpoint is the one the carrier's input spends (display txid). */
@@ -131,7 +131,7 @@ export function checkRevocation(g: Grant, inputTxid: string, inputVout: number):
   if (displayTxid(g.revTxid) !== inputTxid || g.revVout !== inputVout) throw new Refusal('grant-revocation')
 }
 
-/** grant-signature: the certificate verifies under BRC-52 against the organisation. */
+/** grant-signature: the certificate verifies under BRC-52 against the organization. */
 export async function checkCertificate(g: Grant): Promise<void> {
   let ok = false
   try {
@@ -173,7 +173,7 @@ export function checkReveal(g: Grant): Record<string, string> | undefined {
 
 /**
  * The subject's side: decrypt the master keyring through its own wallet
- * (counterparty the organisation, protocol [2, "certificate field
+ * (counterparty the organization, protocol [2, "certificate field
  * encryption"], key id the field name) and every field with it.
  */
 export async function openFields(g: Grant, subject: Decrypter): Promise<Record<string, string>> {

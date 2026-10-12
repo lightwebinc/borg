@@ -68,7 +68,7 @@ interface Rig {
   wallet: PayingWallet
   client: Party
   chain: Chain
-  /** The organisation, and the txids the history class answers for its chain. */
+  /** The organization, and the txids the history class answers for its chain. */
   org: string
   env: string[]
   front: LookupFront
@@ -84,7 +84,7 @@ after(() => {
   for (const s of servers) s.close()
 })
 
-/** A module with one organisation of two tokens, engine and storage, and its terms route on a free port. */
+/** A module with one organization of two tokens, engine and storage, and its terms route on a free port. */
 async function rig(prices: string, sessions?: { max: number; ttlSeconds: number }, budget?: BudgetConfig, responses?: ResponseBudgetConfig, policy: Partial<AcceptancePolicy> = {}, networked = true): Promise<Rig> {
   const host = new FakeHost()
   const chain = new Chain(95000)

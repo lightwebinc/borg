@@ -152,7 +152,7 @@ export class BorgTopicManager implements TopicManager {
       `# ${this.topic}`,
       '',
       `The borg hall ${this.hall}: grant and wrap carriers, each spending one output of`,
-      "its organisation's mined funding tree; organisation and group tokens, each mined",
+      "its organization's mined funding tree; organization and group tokens, each mined",
       'and published with its parent; and the tombstones of mined sweeps (spec section',
       '11.1). Each is admitted on its own bytes and the host\'s headers; nothing the topic',
       'holds is read. Every refusal is raised, so nothing refused is recorded.',

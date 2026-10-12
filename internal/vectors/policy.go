@@ -182,7 +182,7 @@ func policyCases(gid [16]byte) []policyCase {
 			"a second role"},
 		{"def-releaser-again", p(borgrec.PolicyRole, "releaser",
 			[]string{"bstore/get/*", "bstore/put/*"}, nil, ""),
-			"a second definition of one role: the organisation has equivocated, and a reader takes the intersection"},
+			"a second definition of one role: the organization has equivocated, and a reader takes the intersection"},
 		{"bind-releaser-group", p(borgrec.PolicyBinding, "releaser", nil, gid[:], ""),
 			"a binding to a group: every current member of it holds the role"},
 		{"bind-moderator-alice", p(borgrec.PolicyBinding, "moderator", nil, Alice.Pub(), "2030-01-02T03:04:05Z"),
@@ -240,7 +240,7 @@ func genPolicy(s *Scenario, files map[string][]byte) error {
 		putHex(files, "policy-"+c.name+".hex", b)
 	}
 
-	// A chain of two organisation tokens that carries the set: the first
+	// A chain of two organization tokens that carries the set: the first
 	// defines five records, the second defines two more and retires one.
 	first := []string{"def-releaser", "def-moderator", "bind-releaser-group", "bind-moderator-alice", "bind-releaser-bob"}
 	later := []string{"def-releaser-again", "bind-archivist-carol"}
@@ -263,11 +263,11 @@ func genPolicy(s *Scenario, files map[string][]byte) error {
 	}
 	set1 = sorted32(append(set1, define1...)...)
 
-	o0 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Seq: 0, Name: "Example Organisation",
+	o0 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Seq: 0, Name: "Example Organization",
 		Admit: s.Orgs[0].Admit, Count: s.Orgs[0].Count, Roll: s.Orgs[0].Roll, Created: Created,
 		Define: define0, PolicyCount: uint64(len(set0)), Policy: borgrec.PolicyRoot(set0)}
 	o1 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: label("txid/policy-org/0"),
-		Name: "Example Organisation", Count: s.Orgs[0].Count, Roll: s.Orgs[0].Roll, Created: Created + 7200,
+		Name: "Example Organization", Count: s.Orgs[0].Count, Roll: s.Orgs[0].Roll, Created: Created + 7200,
 		Define: define1, Retire: retire1, PolicyCount: uint64(len(set1)), Policy: borgrec.PolicyRoot(set1)}
 	rec0, err := o0.Encode()
 	if err != nil {
@@ -333,7 +333,7 @@ func genPolicy(s *Scenario, files map[string][]byte) error {
 			"role": "releaser",
 			"of":   []string{"def-releaser", "def-releaser-again"},
 			"kept": borgrec.Intersect(cases[0].rec.Permissions, cases[2].rec.Permissions),
-			"why":  "two definitions of one role are read as the intersection of their permissions, the only reading that cannot grant more than the organisation meant by either",
+			"why":  "two definitions of one role are read as the intersection of their permissions, the only reading that cannot grant more than the organization meant by either",
 		},
 	})
 }

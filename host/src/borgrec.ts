@@ -1,6 +1,6 @@
 /**
  * The byte-level contract of borg, the twin of the Go package
- * borgrec: the organisation and group records that ride mined chain
+ * borgrec: the organization and group records that ride mined chain
  * tokens, the membership grant and the epoch-key wrap that ride unmined
  * carriers, and the hall grammar. docs/spec.md is the normative text; the
  * vectors under testdata/vectors hold both codecs to the same bytes.
@@ -102,7 +102,7 @@ export function checkIdentity(k: Uint8Array): void {
   if (strictPublicKey(k) === undefined) throw new Refusal('identity')
 }
 
-/** The organisation's key rule: canonical, and never the anyone key. */
+/** The organization's key rule: canonical, and never the anyone key. */
 export function checkOrgKey(k: Uint8Array): void {
   if (strictPublicKey(k) === undefined || isAnyone(k)) throw new Refusal('identity')
 }
@@ -246,13 +246,13 @@ function checkSuccessor(successor: Uint8Array | null, own: Uint8Array): void {
 
 /**
  * The succession rule both chains follow: a token carries its predecessor's
- * organisation key, or the key that predecessor named as its successor and
+ * organization key, or the key that predecessor named as its successor and
  * no other.
  */
 function checkHandover(prevOrg: Uint8Array, prevSuccessor: Uint8Array | null, nextOrg: Uint8Array): void {
   if (bytesEqual(nextOrg, prevOrg)) return
   if (prevSuccessor !== null && bytesEqual(nextOrg, prevSuccessor)) return
-  throw new Refusal('transition', 'the organisation key changed without the predecessor naming it')
+  throw new Refusal('transition', 'the organization key changed without the predecessor naming it')
 }
 
 const zero32 = (b: Uint8Array): boolean => b.every((x) => x === 0)
@@ -265,7 +265,7 @@ function finish(m: Pair[], extra: Pair[], max: number, last: number): Uint8Array
 
 const k = (n: number): bigint => BigInt(n)
 
-// ---- the organisation record ----
+// ---- the organization record ----
 
 export interface Org {
   hall: string
@@ -355,8 +355,8 @@ export function encodeOrg(o: Org): Uint8Array {
 }
 
 /**
- * The admission rule an organisation token meets against its predecessor:
- * same hall and organisation, the next seq, prev naming the predecessor's
+ * The admission rule an organization token meets against its predecessor:
+ * same hall and organization, the next seq, prev naming the predecessor's
  * transaction (hash byte order), the same opaque, and the count.
  */
 export function checkOrgTransition(prev: Org, prevTxid: Uint8Array, next: Org): void {
@@ -504,7 +504,7 @@ export interface Grant {
   fields: Map<string, Uint8Array>
   signature: Uint8Array
   keyring: Map<string, Uint8Array>
-  /** Absent for an opaque organisation's grant. */
+  /** Absent for an opaque organization's grant. */
   reveal?: Map<string, Uint8Array>
   extra: Pair[]
 }
@@ -538,7 +538,7 @@ function checkSized(m: Map<string, Uint8Array>, size: number, what: string): voi
 export const strictDER = strictSignature
 
 function grantCross(g: Grant): void {
-  if (bytesEqual(g.subject, g.org) || isAnyone(g.subject)) throw new Refusal('members', 'subject is the organisation or the anyone key')
+  if (bytesEqual(g.subject, g.org) || isAnyone(g.subject)) throw new Refusal('members', 'subject is the organization or the anyone key')
 }
 
 export function decodeGrant(b: Uint8Array): Grant {
@@ -605,12 +605,12 @@ export const PolicyBinding = 1
 
 /**
  * One policy record: the payload of a policy carrier's one output. It is
- * either a role definition or a binding, by kind. The organisation's token
+ * either a role definition or a binding, by kind. The organization's token
  * commits to the set of them by its policy root, so what a role may do is a
  * committed fact of the chain and not a claim of whoever serves it.
  *
  * A policy record is in the clear: nothing in it is encrypted, so every host
- * and every follower of the hall reads an organisation's roles and bindings.
+ * and every follower of the hall reads an organization's roles and bindings.
  */
 export interface Policy {
   hall: string
@@ -636,13 +636,13 @@ function checkPermissions(a: string[]): void {
   })
 }
 
-/** Key 6's rule: null, a group identifier, or an identity key that is neither the organisation nor the anyone key. */
+/** Key 6's rule: null, a group identifier, or an identity key that is neither the organization nor the anyone key. */
 function checkTo(p: Policy): void {
   if (p.to === null || p.to.length === GroupIDLen) return
   if (p.to.length === 33) {
     checkIdentity(p.to)
     if (isAnyone(p.to) || bytesEqual(p.to, p.org)) {
-      throw new Refusal('identity', 'a binding to the organisation or the anyone key')
+      throw new Refusal('identity', 'a binding to the organization or the anyone key')
     }
     return
   }
@@ -709,7 +709,7 @@ export interface Subject {
   member: boolean
   /** The roles the subject's current grants name, in the clear. */
   roles: string[]
-  /** The groups of this organisation whose latest token holds the key. */
+  /** The groups of this organization whose latest token holds the key. */
   groups: Uint8Array[]
 }
 
@@ -725,7 +725,7 @@ function currentPolicy(p: Policy, now: number): boolean {
 
 /**
  * The effective permission set of a subject at now (Unix seconds), over the
- * policy set of the organisation's latest token (spec section 5A.4): the
+ * policy set of the organization's latest token (spec section 5A.4): the
  * union of what the subject's own roles carry and what every binding that
  * reaches it carries, attenuated. Nothing subtracts. The result is ascending
  * and holds no duplicate.
@@ -807,7 +807,7 @@ export function parseEntry(b: Uint8Array): Entry {
 /** The host's rule for one wrap of a wrap record. */
 export function checkEntry(b: Uint8Array, org: Uint8Array, epochId: Uint8Array, epoch: number): Entry {
   const e = parseEntry(b)
-  if (!bytesEqual(e.sender, org)) throw new Refusal('entry', 'sender is not the organisation')
+  if (!bytesEqual(e.sender, org)) throw new Refusal('entry', 'sender is not the organization')
   if (strictPublicKey(e.recipient) === undefined || bytesEqual(e.recipient, org) || isAnyone(e.recipient)) throw new Refusal('entry', 'recipient')
   if (!bytesEqual(e.keyID, releaseKeyID(epochId, epoch))) throw new Refusal('entry', 'key id')
   return e

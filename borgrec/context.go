@@ -15,7 +15,7 @@ const MaxPathSteps = 32
 const MaxContext = 2048
 
 // InclusionContext is the BRC-24 context a member answer carries for each
-// grant (spec section 10.2): the organisation token whose roll was used, the
+// grant (spec section 10.2): the organization token whose roll was used, the
 // grant's leaf index and the roll's size, and the RFC 6962 inclusion path.
 type InclusionContext struct {
 	Seq   uint64
@@ -97,7 +97,7 @@ func ProveGrant(seq uint64, roll [][32]byte, grant [32]byte) (*InclusionContext,
 	return nil, fmt.Errorf("%w: not in the roll", ErrRange)
 }
 
-// VerifyGrant checks a context against the roll root of the organisation
+// VerifyGrant checks a context against the roll root of the organization
 // token at its seq: the path takes the grant's commitment to the root. The
 // leaf and node prefixes of RFC 6962 keep a path from passing a subtree off
 // as a leaf, so membership needs no more; index and size are hints.
@@ -113,7 +113,7 @@ func ProvePolicy(seq uint64, set [][32]byte, policy [32]byte) (*InclusionContext
 	return ProveGrant(seq, set, policy)
 }
 
-// VerifyPolicy checks a context against the policy root of the organisation
+// VerifyPolicy checks a context against the policy root of the organization
 // token at its seq: the path takes the policy record's commitment to the
 // root.
 func (c *InclusionContext) VerifyPolicy(policy, root [32]byte) bool {

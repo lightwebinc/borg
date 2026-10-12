@@ -19,7 +19,7 @@ const roleHelp = `usage: borg role define <name> -permission P [-permission P ..
        borg role list
 
 A role names the permissions it carries (service/action/resource). Define
-publishes the role and the organisation's next token commits to it. Retire
+publishes the role and the organization's next token commits to it. Retire
 does both halves of a withdrawal: a token drops it from the set, and a sweep
 retracts its carrier at every host. -by set or -by sweep does one of them;
 the sweep takes effect as soon as it is mined and seen, the token is the
@@ -103,7 +103,7 @@ func cmdRole(ctx context.Context, g *global, args []string) error {
 			fmt.Fprintf(g.stdout, "role    %s %s\n", n, strings.Join(roles[n], " "))
 		}
 		if len(names) == 0 {
-			g.say("this organisation's policy set defines no role (borg role define)")
+			g.say("this organization's policy set defines no role (borg role define)")
 		}
 		return nil
 	}
@@ -155,7 +155,7 @@ func cmdUnbind(ctx context.Context, g *global, args []string) error {
 	defer r.close(ctx, g)
 	p := r.h.st.Org.PolicyByTxid(pos[0])
 	if p == nil {
-		return usage("%s is not a policy record this organisation published", pos[0])
+		return usage("%s is not a policy record this organization published", pos[0])
 	}
 	if p.Kind != borgrec.PolicyBinding {
 		return usage("%s is a role definition; retire it with borg role retire %s", pos[0], p.Role)
@@ -209,7 +209,7 @@ func cmdPolicy(ctx context.Context, g *global, args []string) error {
 				suffix(" only ", strings.Join(p.Permissions, " ")), suffix(" until ", p.Expiry), swept)
 		}
 		if len(set) == 0 {
-			g.say("this organisation's policy set is empty (borg role define)")
+			g.say("this organization's policy set is empty (borg role define)")
 		}
 		return nil
 	case len(pos) == 3 && pos[0] == "check":
@@ -272,7 +272,7 @@ func (g *global) publishPolicy(ctx context.Context, req engine.PolicyReq, what s
 		return err
 	}
 	fmt.Fprintf(g.stdout, "%-7s %s %s %s\n", what, p.Txid, p.Role, strings.Join(p.Permissions, " "))
-	if err := r.eng.OrgTransitionWith(ctx, nil, nil, []*state.Policy{r.h.st.Org.PolicyByTxid(p.Txid)}, replaced, "organisation token (define)"); err != nil {
+	if err := r.eng.OrgTransitionWith(ctx, nil, nil, []*state.Policy{r.h.st.Org.PolicyByTxid(p.Txid)}, replaced, "organization token (define)"); err != nil {
 		return lost(err)
 	}
 	t := state.Latest(r.h.st.Org.Tokens)
@@ -289,7 +289,7 @@ func (g *global) publishPolicy(ctx context.Context, req engine.PolicyReq, what s
 func (g *global) retirePolicy(ctx context.Context, r *orgRun, ps []*state.Policy, by string) error {
 	o := r.h.st.Org
 	if by == "both" || by == "set" {
-		if err := r.eng.OrgTransitionWith(ctx, nil, nil, nil, ps, "organisation token (retire)"); err != nil {
+		if err := r.eng.OrgTransitionWith(ctx, nil, nil, nil, ps, "organization token (retire)"); err != nil {
 			return lost(err)
 		}
 		t := state.Latest(o.Tokens)
@@ -372,7 +372,7 @@ func (g *global) check(ctx context.Context, key, permission string) error {
 	}
 	fmt.Fprintf(g.stdout, "%s   %s %s\n", verdict, key, permission)
 	fmt.Fprintf(g.stdout, "holds   %s\n", strings.Join(eff, " "))
-	g.say("this is what the organisation's own state says; a service decides from a host's answers and its own headers")
+	g.say("this is what the organization's own state says; a service decides from a host's answers and its own headers")
 	return nil
 }
 
@@ -386,9 +386,9 @@ func (g *global) showPolicy(ctx context.Context) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		return g.chainProblem("the organisation", err)
+		return g.chainProblem("the organization", err)
 	}
-	problem := g.reportChain("organisation chain", ov.ChainView)
+	problem := g.reportChain("organization chain", ov.ChainView)
 	cs := t.rd.CommittedSet(ctx, ov)
 	for _, pa := range cs.Answers {
 		if pa.Err != nil {
@@ -457,9 +457,9 @@ func (g *global) checkFromHosts(ctx context.Context, key, permission string) err
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		return g.chainProblem("the organisation", err)
+		return g.chainProblem("the organization", err)
 	}
-	problem := g.reportChain("organisation chain", ov.ChainView)
+	problem := g.reportChain("organization chain", ov.ChainView)
 	d, err := t.rd.Allows(ctx, ov, raw, permission, g.spends(), time.Now())
 	if err != nil {
 		return err
@@ -510,9 +510,9 @@ func (g *global) showPolicyOf(ctx context.Context, role, bound string) error {
 	}
 	ov, err := t.rd.Org(ctx, t.hall, t.org)
 	if err != nil {
-		return g.chainProblem("the organisation", err)
+		return g.chainProblem("the organization", err)
 	}
-	problem := g.reportChain("organisation chain", ov.ChainView)
+	problem := g.reportChain("organization chain", ov.ChainView)
 	var cars []*reader.Car
 	var refused []reader.Refusal
 	var errs map[string]error

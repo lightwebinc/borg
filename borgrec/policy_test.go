@@ -162,7 +162,7 @@ func TestPolicyRefusals(t *testing.T) {
 		{"subject of the wrong length", "identity", func(p *Policy) { p.To = []byte{1, 2, 3} }},
 		{"subject not a key", "identity", func(p *Policy) { p.To = bytes.Repeat([]byte{9}, 33) }},
 		{"subject is anyone", "identity", func(p *Policy) { p.To = AnyoneKey() }},
-		{"subject is the organisation", "identity", func(p *Policy) { p.To = orgKey() }},
+		{"subject is the organization", "identity", func(p *Policy) { p.To = orgKey() }},
 		{"expiry spelling", "expiry", func(p *Policy) { p.Expiry = "2030-01-02 03:04:05" }},
 		{"expiry not a date", "expiry", func(p *Policy) { p.Expiry = "2030-02-30T03:04:05Z" }},
 	} {
@@ -346,7 +346,7 @@ func TestEffectiveFoldRules(t *testing.T) {
 }
 
 // TestSuccessionNeedsTheAnnouncement pins spec section 3.4: a chain carries
-// its predecessor's organisation key, or the key that predecessor named as
+// its predecessor's organization key, or the key that predecessor named as
 // its successor, and no other.
 func TestSuccessionNeedsTheAnnouncement(t *testing.T) {
 	succ := key(0x57).PubKey().Compressed()

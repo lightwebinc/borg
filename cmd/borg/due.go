@@ -79,7 +79,7 @@ func printDue(out io.Writer, items []dueItem, now time.Time) int {
 	for _, it := range items {
 		who := it.member
 		if it.signer {
-			who += " (the organisation's signer key: its grant is renewed by the group's next transition, not removed)"
+			who += " (the organization's signer key: its grant is renewed by the group's next transition, not removed)"
 		}
 		if it.due {
 			if !it.signer {
@@ -124,7 +124,7 @@ func (g *global) orgDue(ctx context.Context, within time.Duration, apply bool) e
 			return err
 		}
 		if st.Org == nil {
-			return usage("this home runs no organisation (borg org create)")
+			return usage("this home runs no organization (borg org create)")
 		}
 		items, err := dueOf(st.Org, st.Identity, now, within)
 		if err != nil {

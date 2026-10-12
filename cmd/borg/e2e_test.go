@@ -203,7 +203,7 @@ func TestClientE2E(t *testing.T) {
 	h.must("payee", "payee", "key", "-out", keyFile)
 	rawKey, _ := os.ReadFile(keyFile)
 	payeeKey := strings.TrimSpace(strings.TrimPrefix(string(rawKey), "BORG_PAYEE_KEY="))
-	step("init and fund the homes (an organisation, three members, a host's payee); hall new " + hall)
+	step("init and fund the homes (an organization, three members, a host's payee); hall new " + hall)
 
 	hosts := refHosts(t, h.chainS.URL, hall, payeeKey, "a", "b")
 	a, b := hosts["a"], hosts["b"]
@@ -219,12 +219,12 @@ func TestClientE2E(t *testing.T) {
 
 	// Plane: every object submitted once to the facade, which the stand-in
 	// plane delivers to both hosts; tokens and sweeps also to each host.
-	r := h.must("org", "org", "create", "Example Organisation", "-member", o.alice, "-member", o.bob, "-member", o.carol)
+	r := h.must("org", "org", "create", "Example Organization", "-member", o.alice, "-member", o.bob, "-member", o.carol)
 	if strings.Count(r.stdout, "grant   ") != 3 {
 		t.Fatalf("org create:\n%s\n%s", r.stdout, r.stderr)
 	}
 	h.env["BORG_ORG"] = o.key
-	step("plane: org create, three grants published, the organisation's first token admits them")
+	step("plane: org create, three grants published, the organization's first token admits them")
 	r = h.must("org", "group", "create", "engineering", "-member", o.alice, "-member", o.bob, "-member", o.carol)
 	o.group = groupLine.FindStringSubmatch(r.stdout)[1]
 	step("plane: group create with the three members, epoch 0 wrapped to each")
@@ -370,7 +370,7 @@ func TestClientE2E(t *testing.T) {
 	}
 	step("b down: a token needs every host, so it stays persisted (exit 2); b back: the next command publishes it first; both agree")
 
-	// A second home of the organisation, made around its identity key on
+	// A second home of the organization, made around its identity key on
 	// another machine, rebuilds from the hosts and goes on.
 	r = h.must("org", "org", "signer")
 	if !strings.Contains(r.stdout, "signer  ") || !strings.Contains(r.stdout, "epoch 5\n") {

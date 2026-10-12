@@ -54,7 +54,7 @@ type Host struct {
 	Rewrite func(q *borgrec.Question, outs []Output) []Output
 	// Stale answers every token, carrier and sweep under a proof that names
 	// another block than the one the chain mined it in: a host whose stored
-	// proofs a reorganisation left behind.
+	// proofs a reorganization left behind.
 	Stale bool
 	// HistoryPage, when set, is the most tokens a history page holds here,
 	// in place of the class's 64.

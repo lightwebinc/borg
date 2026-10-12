@@ -43,9 +43,9 @@ var fieldCipherBounds = map[string][2]int{
 }
 
 // Grant is one membership grant record: the payload of one grant carrier. It
-// is a BRC-52 certificate (certifier the organisation, subject the member)
+// is a BRC-52 certificate (certifier the organization, subject the member)
 // laid out as CBOR, with the subject's master keyring and, unless the
-// organisation is opaque, a public reveal of every field.
+// organization is opaque, a public reveal of every field.
 type Grant struct {
 	Hall      string            // key 1
 	Org       []byte            // key 2, the certifier and the carrier's owner
@@ -142,7 +142,7 @@ func (g *Grant) Validate() error {
 
 func (g *Grant) cross() error {
 	if bytes.Equal(g.Subject, g.Org) || IsAnyone(g.Subject) {
-		return fmt.Errorf("%w: subject is the organisation or the anyone key", ErrMembers)
+		return fmt.Errorf("%w: subject is the organization or the anyone key", ErrMembers)
 	}
 	return nil
 }
@@ -260,7 +260,7 @@ func DecodeGrant(p []byte) (*Grant, error) {
 }
 
 // Certificate is the grant as a go-sdk BRC-52 certificate: the type this
-// version defines, the serial, subject, certifier (the organisation),
+// version defines, the serial, subject, certifier (the organization),
 // revocation outpoint, each field's ciphertext in standard padded base64
 // (the spelling BRC-52's binary form signs), and the signature.
 func (g *Grant) Certificate() (*certificates.Certificate, error) {
@@ -287,7 +287,7 @@ func (g *Grant) Certificate() (*certificates.Certificate, error) {
 }
 
 // Preimage is the BRC-52 binary form without the signature: the bytes the
-// organisation signs.
+// organization signs.
 func (g *Grant) Preimage() ([]byte, error) {
 	c, err := g.Certificate()
 	if err != nil {
@@ -297,7 +297,7 @@ func (g *Grant) Preimage() ([]byte, error) {
 }
 
 // CheckCertificate is the content rule grant-signature: the certificate's
-// signature verifies under BRC-52 against the organisation as certifier.
+// signature verifies under BRC-52 against the organization as certifier.
 func (g *Grant) CheckCertificate(ctx context.Context) error {
 	c, err := g.Certificate()
 	if err != nil {
@@ -357,11 +357,11 @@ type GrantSpec struct {
 	Reveal     bool                // publish the revelation keys
 }
 
-// BuildGrant issues a grant under the organisation's private key: each field
+// BuildGrant issues a grant under the organization's private key: each field
 // encrypted under its revelation key (BRC-52), each revelation key encrypted
 // to the subject under [2, "certificate field encryption"] with the field
 // name as key id (the master keyring), and the certificate signed by the
-// organisation under [2, "certificate signature"] (go-sdk's Sign). A client
+// organization under [2, "certificate signature"] (go-sdk's Sign). A client
 // with only a BRC-100 wallet builds the same record through Encrypt and
 // CreateSignature.
 func BuildGrant(ctx context.Context, orgKey *ec.PrivateKey, s GrantSpec) (*Grant, error) {
@@ -424,7 +424,7 @@ func BuildGrant(ctx context.Context, orgKey *ec.PrivateKey, s GrantSpec) (*Grant
 }
 
 // OpenFields is the subject's side: it decrypts its master keyring through
-// its own wallet (counterparty the organisation) and every field with it, as
+// its own wallet (counterparty the organization) and every field with it, as
 // go-sdk's certificates.DecryptFields does for a stored certificate.
 func (g *Grant) OpenFields(ctx context.Context, subject wallet.Interface) (map[string]string, error) {
 	org, err := ec.PublicKeyFromBytes(g.Org)
@@ -434,10 +434,10 @@ func (g *Grant) OpenFields(ctx context.Context, subject wallet.Interface) (map[s
 	return g.openFields(ctx, subject, org)
 }
 
-// OpenFieldsAsOrg is the organisation's side of the same keyring: the
+// OpenFieldsAsOrg is the organization's side of the same keyring: the
 // BRC-2 key a keyring entry is encrypted under is shared by the two ends,
-// so the organisation's wallet opens it with the subject as counterparty.
-// It is how the organisation reads back the fields of a grant it issued
+// so the organization's wallet opens it with the subject as counterparty.
+// It is how the organization reads back the fields of a grant it issued
 // when the grant carries no reveal.
 func (g *Grant) OpenFieldsAsOrg(ctx context.Context, org wallet.Interface) (map[string]string, error) {
 	subject, err := ec.PublicKeyFromBytes(g.Subject)

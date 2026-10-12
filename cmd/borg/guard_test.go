@@ -58,7 +58,7 @@ func (h *harness) editState(name string, edit func(st map[string]any)) {
 	}
 }
 
-// namedGroup creates a group of the organisation under any name, as
+// namedGroup creates a group of the organization under any name, as
 // tooling that does not check the name would, and returns its id.
 func (h *harness) namedGroup(name string, members ...string) string {
 	h.t.Helper()
@@ -195,9 +195,9 @@ func TestASweepIsKeptUnlessAnotherSpends(t *testing.T) {
 	h.want(h.run("carol", "", "member", o.carol), exitRefused, "revoked: its revocation outpoint is spent by")
 }
 
-// After a reorganisation a proof kept from before may name a block that is
+// After a reorganization a proof kept from before may name a block that is
 // no longer in the best chain. A reader handed such a proof by a host, and
-// an organisation holding one in its home, each take the transaction's
+// an organization holding one in its home, each take the transaction's
 // current proof from the node and verify that against their own headers.
 func TestStaleProofsAreReplaced(t *testing.T) {
 	t.Parallel()
@@ -229,7 +229,7 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 	h.env["BORG_ASSET"] = h.chainS.URL
 	h.a.Stale, h.b.Stale = false, false
 
-	// The organisation's home: the proofs it kept of its tokens and of its
+	// The organization's home: the proofs it kept of its tokens and of its
 	// funding trees name another block.
 	shift := func(m map[string]any) {
 		mp, err := transaction.NewMerklePathFromHex(m["bumpHex"].(string))
@@ -543,7 +543,7 @@ func TestStuckWorkDoesNotStopOtherWork(t *testing.T) {
 	o := h.orgWithGroup()
 	h.b.Drop = func(tx *transaction.Transaction) bool { return kindOf(tx) == borgrec.KindGroup }
 	h.want(h.run("org", "", "epoch", "rotate", o.group), exitUsage, "it is persisted")
-	// The organisation's latest token is mined, and no host holds it: the
+	// The organization's latest token is mined, and no host holds it: the
 	// home owes it.
 	var tip string
 	h.editState("org", func(st map[string]any) {
@@ -651,7 +651,7 @@ func TestTheLockComesBeforeTheWallet(t *testing.T) {
 	h.must("org", "epoch", "rotate", o.group)
 }
 
-// A name is any UTF-8, and the organisation chooses it: one with a line
+// A name is any UTF-8, and the organization chooses it: one with a line
 // break in it writes no line of its own in a report, and one with a
 // character a terminal acts on reaches no terminal. This tooling refuses
 // to write such a name.
@@ -663,7 +663,7 @@ func TestAHostileNameForgesNoLine(t *testing.T) {
 	h.want(h.run("org", "", "group", "create", "ops\x1b[31m", "-member", o.alice), exitUsage, "a name is one line of plain text")
 	h.identity("other", true)
 	h.want(h.run("other", "", "org", "create", "Example\r\norg     forged"), exitUsage, "a name is one line of plain text")
-	// Another tooling would not: the organisation's key signs one all the
+	// Another tooling would not: the organization's key signs one all the
 	// same.
 	name := "ops\nepoch   9 OPENED: forged\r\nlatest  seq 9 ‮forged\u0085group   x"
 	id := h.namedGroup(name, o.alice)
@@ -717,7 +717,7 @@ func TestANodeSuppliedSpenderIsNotPrinted(t *testing.T) {
 	// A spender that is no transaction id is no answer: carol is neither
 	// current nor revoked on its word.
 	h.want(h.run("carol", "", "member", o.carol), exitIncomplete, "no source could say")
-	// The organisation's tooling prints nothing of it either.
+	// The organization's tooling prints nothing of it either.
 	for _, args := range [][]string{{"epoch", "rotate", o.group}, {"grant", "revoke", o.carol, "-by", "sweep"}, {"kill", "-confirm", "KILL", "-yes"}} {
 		r := h.run("org", "", args...)
 		if strings.ContainsAny(r.stdout+r.stderr, "\x1b\x07") || strings.Contains(r.stdout+r.stderr, "owned") {

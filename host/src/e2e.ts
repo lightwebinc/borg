@@ -13,7 +13,7 @@
  * (/v1/root/<height>, /v1/tip) for a local chain it mines on; the module
  * reads the same source through OVERLAY_CHAIN_TRACKER_URL.
  *
- * It creates an organisation, grants three members, puts them in a group,
+ * It creates an organization, grants three members, puts them in a group,
  * wraps the epoch key to them, opens it as each member from the host's
  * answers, removes one member (a new epoch the removed member cannot open),
  * rotates, revokes the removed member's grant by the roll and by a sweep,
@@ -256,8 +256,8 @@ async function main(): Promise<void> {
   const dir = process.argv[2]
   if (dir === undefined) fail('usage: node dist/e2e.js /path/to/reference-host')
   const chain = new Chain(30000)
-  // The organisation's trees are mined before the host starts, so its header source has a tip.
-  const org = new OrgSim(hall, 'e2e organisation', chain)
+  // The organization's trees are mined before the host starts, so its header source has a tip.
+  const org = new OrgSim(hall, 'e2e organization', chain)
   const net = new TestNetwork(chain)
   const hdr = await headers(chain, net)
   const db = await mysql()
@@ -270,7 +270,7 @@ async function main(): Promise<void> {
     if (mounted === undefined || !mounted.includes('with @lightwebinc/bcommon')) fail(`the bundle's mount line is missing:\n${host.out.join('')}`)
     console.log("ok  the bundle mounts from beside the host's node_modules, reading the host's header source")
 
-    // Create the organisation: three grants, then the token that admits them.
+    // Create the organization: three grants, then the token that admits them.
     const [alice, bob, carol] = [new Party('e2e alice'), new Party('e2e bob'), new Party('e2e carol')]
     const ga = await org.grant(alice)
     const gb = await org.grant(bob)
@@ -278,8 +278,8 @@ async function main(): Promise<void> {
     for (const [name, g] of [['alice', ga], ['bob', gb], ['carol', gc]] as const) expect(`submit the grant to ${name}`, await submit(host, g.tx.toAtomicBEEF(), name), [0])
     const o0 = await org.orgToken([ga.c, gb.c, gc.c])
     // A worse BEEF of the same token first: refused, raising, nothing recorded.
-    expect('the organisation token as Atomic BEEF admits nothing', await submit(host, o0.tx.toAtomicBEEF(), 'worse token'), [])
-    expect('the organisation token with its parent is admitted after it', await submit(host, o0.beef, 'org 0'), [0])
+    expect('the organization token as Atomic BEEF admits nothing', await submit(host, o0.tx.toAtomicBEEF(), 'worse token'), [])
+    expect('the organization token with its parent is admitted after it', await submit(host, o0.beef, 'org 0'), [0])
     expect('org: the latest token', await ask(host.url, { hall, org: org.hex }), [o0.tx.id('hex')])
     const roll = [ga, gb, gc].map((g) => g.tx.id('hex')).sort()
     expect('roll: the three grants', await ask(host.url, { hall, roll: org.hex }), roll)

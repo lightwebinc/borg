@@ -6,6 +6,7 @@ cannot change once published is [frozen.md](frozen.md).
 ## The parts
 
 ```mermaid
+%%{init: {"flowchart": {"diagramPadding": 48}}}%%
 flowchart LR
   subgraph org["organization's machine"]
     OB["borg command"] --- OH[("home<br/>key, pool, state")]
@@ -17,7 +18,7 @@ flowchart LR
     H1["tm_borg_&lt;name&gt;_&lt;suffix&gt;<br/>ls_borg"]
     H2["tm_borg_&lt;name&gt;_&lt;suffix&gt;<br/>ls_borg"]
   end
-  OB -->|"carriers: grants, wraps"| H1
+  OB -->|"carriers: grants, policy records, wraps"| H1
   OB -->|"tokens, sweeps"| H2
   OB -->|"settle: arcade (default), arc, rpc or tcp"| BSV[("BSV blockchain")]
   OB -->|"chain: transactions, proofs, spends"| N["chain view<br/>woc:main (default) or a node"]

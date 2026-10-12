@@ -162,7 +162,7 @@ test('statuses: pending answers from the highest complete fold, a fork from the 
   assert.deepEqual(await answer(s.engine, { hall, roll: org.hex }), byTxid([gb.tx, gc.tx]))
 
   // A fork at seq 1 of a group (two tokens on one predecessor, as a
-  // reorganisation leaves): both answered as latest, the roll of the first mined used.
+  // reorganization leaves): both answered as latest, the roll of the first mined used.
   const g = await org.group('fork', [a])
   const g0 = g.tip
   const left = await g.change({ add: [b] })
@@ -380,7 +380,7 @@ test('a sweep retracts a policy carrier and the next token drops it from the roo
   assert.deepEqual(await answer(s.engine, { hall, policy: org.hex }), byTxid([def.tx, keep.tx]))
   assert.deepEqual(await answer(s.engine, { hall, spent: `${org.policyTree.id('hex')}.0` }), [sw.id('hex')])
 
-  // The committed half: the organisation's next token drops the commitment,
+  // The committed half: the organization's next token drops the commitment,
   // and only then does the record leave every answer.
   const o1 = await org.orgToken([], [], { retire: [def.c] })
   assert.deepEqual(await submit(s.engine, o1.beef), [0])

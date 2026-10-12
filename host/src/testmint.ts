@@ -2,7 +2,7 @@
  * Test helpers that make fresh borg objects the golden vectors do not hold:
  * funding trees and chain tokens mined on a local chain, grants issued and
  * wraps sealed by the TypeScript SDK, and sweeps. OrgSim is a minimal
- * stand-in for an organisation's tooling: it keeps the roll, each group's
+ * stand-in for an organization's tooling: it keeps the roll, each group's
  * members and epoch key, and builds every transition the way spec section
  * 7.1 says, or, on request, the way it says not to. Every key is drawn from
  * a fixed label, so a party is the same on every run. Nothing here is part
@@ -294,7 +294,7 @@ export interface Minted<R> {
 }
 
 /**
- * A minimal organisation's tooling over a local chain: its trees, its roll,
+ * A minimal organization's tooling over a local chain: its trees, its roll,
  * its grants and its groups. Each token is mined in a block of its own and
  * published with its parent (tokenBEEF).
  */
@@ -309,10 +309,10 @@ export class OrgSim {
   private recordAt = 0
   private chainAt = 0
   tip: Minted<Org> | undefined
-  /** Every organisation token minted, seq order. */
+  /** Every organization token minted, seq order. */
   readonly history: Array<Minted<Org>> = []
   roll: Uint8Array[] = []
-  /** The policy set this organisation's tokens commit to. */
+  /** The policy set this organization's tokens commit to. */
   policy: Uint8Array[] = []
   readonly groups = new Map<string, GroupSim>()
 
@@ -381,7 +381,7 @@ export class OrgSim {
   }
 
   /**
-   * The next organisation token, admitting and revoking commitments, mined.
+   * The next organization token, admitting and revoking commitments, mined.
    * mutate may change the record before it is encoded (to build what a host
    * must refuse or the index must flag); the roll kept here follows the
    * change lists as given.
@@ -401,7 +401,7 @@ export class OrgSim {
       org: this.party.id,
       seq,
       prev: this.tip === undefined ? new Uint8Array(32) : commitment(this.tip.tx),
-      name: 'Example Organisation',
+      name: 'Example Organization',
       admit: sortKeys(admit),
       revoke: sortKeys(revoke),
       count: roll.length,

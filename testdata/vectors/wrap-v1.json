@@ -1,5 +1,5 @@
 {
-  "note": "Each entry is BRC-369 section 5.2's release in BRC-78 serialization: version 42421033, the organisation, the member, the key id SHA-256(epochId || epoch as 4 bytes big-endian), then BRC-2 ciphertext (32-byte IV, the 32-byte key, 16-byte tag) under [2, \"keyed content release\"]. IVs are fixed stand-ins, SHA-256(\"borg/vector/iv/wrap/<epoch>/<member>\"). opens records what each member's own wallet recovers, checked against the epoch's commitment (BRC-369 section 5.3 check 2).",
+  "note": "Each entry is BRC-369 section 5.2's release in BRC-78 serialization: version 42421033, the organization, the member, the key id SHA-256(epochId || epoch as 4 bytes big-endian), then BRC-2 ciphertext (32-byte IV, the 32-byte key, 16-byte tag) under [2, \"keyed content release\"]. IVs are fixed stand-ins, SHA-256(\"borg/vector/iv/wrap/<epoch>/<member>\"). opens records what each member's own wallet recovers, checked against the epoch's commitment (BRC-369 section 5.3 check 2).",
   "removal": {
     "atSeq": 2,
     "cannotOpen": [

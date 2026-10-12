@@ -398,7 +398,7 @@ func genGrant(s *Scenario, files map[string][]byte) error {
 		vecs = append(vecs, v)
 		putHex(files, "grant-"+m.Name+".hex", s.GrantRecs[m.Name])
 	}
-	v, err := mk("alice, from an opaque organisation: no reveal", OrgOpaque, Alice, s.OpaqueGrant, s.OpaqueRec, 0, false)
+	v, err := mk("alice, from an opaque organization: no reveal", OrgOpaque, Alice, s.OpaqueGrant, s.OpaqueRec, 0, false)
 	if err != nil {
 		return err
 	}
@@ -406,8 +406,8 @@ func genGrant(s *Scenario, files map[string][]byte) error {
 	putHex(files, "grant-opaque.hex", s.OpaqueRec)
 	return put(files, "grant-v1.json", map[string]any{
 		"note": "Field revelation keys and IVs are fixed stand-ins for CSPRNG draws, SHA-256 of labels. " +
-			"preimage is the BRC-52 binary form without the signature (go-sdk ToBinary(false)); the signature is the organisation's " +
-			"under [2, \"certificate signature\"], key id \"<type> <serial>\" in base64, verified with counterparty the organisation. " +
+			"preimage is the BRC-52 binary form without the signature (go-sdk ToBinary(false)); the signature is the organization's " +
+			"under [2, \"certificate signature\"], key id \"<type> <serial>\" in base64, verified with counterparty the organization. " +
 			"Each member opens its own fields through its wallet; another member cannot. The revocation outpoint is a stand-in " +
 			"funding outpoint, written as BRC-100's OutpointString.",
 		"certificateType": borgrec.GrantTypeBase64(),
@@ -527,7 +527,7 @@ func genWrap(s *Scenario, files map[string][]byte) error {
 		return fmt.Errorf("an epoch 0 entry was accepted in an epoch 1 record: %v", err)
 	}
 	return put(files, "wrap-v1.json", map[string]any{
-		"note": "Each entry is BRC-369 section 5.2's release in BRC-78 serialization: version 42421033, the organisation, the member, " +
+		"note": "Each entry is BRC-369 section 5.2's release in BRC-78 serialization: version 42421033, the organization, the member, " +
 			"the key id SHA-256(epochId || epoch as 4 bytes big-endian), then BRC-2 ciphertext (32-byte IV, the 32-byte key, 16-byte tag) " +
 			"under [2, \"keyed content release\"]. IVs are fixed stand-ins, SHA-256(\"borg/vector/iv/wrap/<epoch>/<member>\"). " +
 			"opens records what each member's own wallet recovers, checked against the epoch's commitment (BRC-369 section 5.3 check 2).",

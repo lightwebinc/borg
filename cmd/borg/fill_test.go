@@ -10,7 +10,7 @@ import (
 	"github.com/lightwebinc/borg/internal/state"
 )
 
-// chainTrees are the chain trees the seq 0 tokens of the organisation's
+// chainTrees are the chain trees the seq 0 tokens of the organization's
 // chains spend, as the home name records them.
 func (h *harness) chainTrees(name string) []string {
 	h.t.Helper()
@@ -74,9 +74,9 @@ func (h *harness) forgetTokens() []string {
 }
 
 // Once the node drops the chain trees (fully spent), a host that lost the
-// first tokens is filled from the organisation's home, which keeps each
+// first tokens is filled from the organization's home, which keeps each
 // tree with its proof; a second home records the trees when it catches
-// up. A home that is not the organisation's, and a home made before the
+// up. A home that is not the organization's, and a home made before the
 // record was kept, name the tree and fail.
 func TestFillTakesAPrunedChainTreeFromTheOwnerHome(t *testing.T) {
 	t.Parallel()
@@ -102,15 +102,15 @@ func TestFillTakesAPrunedChainTreeFromTheOwnerHome(t *testing.T) {
 	// where to run it.
 	lost := h.forgetTokens()
 	r := h.run("alice", "", "fill")
-	h.want(r, exitIncomplete, "this home is not the organisation's")
-	if !strings.Contains(r.stderr, "its chain tree "+trees[0]) || !strings.Contains(r.stderr, "run borg fill from the organisation's home") {
+	h.want(r, exitIncomplete, "this home is not the organization's")
+	if !strings.Contains(r.stderr, "its chain tree "+trees[0]) || !strings.Contains(r.stderr, "run borg fill from the organization's home") {
 		t.Fatalf("fill from a member's home:\n%s\n%s", r.stdout, r.stderr)
 	}
 
-	// The organisation's home supplies the trees.
+	// The organization's home supplies the trees.
 	r = h.must("org", "fill")
-	if !strings.Contains(r.stdout, "organisation chain seq 0") || !strings.Contains(r.stdout, "group "+o.group+" seq 0") {
-		t.Fatalf("fill from the organisation's home:\n%s\n%s", r.stdout, r.stderr)
+	if !strings.Contains(r.stdout, "organization chain seq 0") || !strings.Contains(r.stdout, "group "+o.group+" seq 0") {
+		t.Fatalf("fill from the organization's home:\n%s\n%s", r.stdout, r.stderr)
 	}
 	for _, id := range lost {
 		if !h.b.Holds(id) {
@@ -120,7 +120,7 @@ func TestFillTakesAPrunedChainTreeFromTheOwnerHome(t *testing.T) {
 
 	// So does the second home, from the record it made at its catch-up.
 	h.forgetTokens()
-	if r := h.must("org2", "fill"); !strings.Contains(r.stdout, "organisation chain seq 0") {
+	if r := h.must("org2", "fill"); !strings.Contains(r.stdout, "organization chain seq 0") {
 		t.Fatalf("fill from the second home:\n%s\n%s", r.stdout, r.stderr)
 	}
 
@@ -131,14 +131,14 @@ func TestFillTakesAPrunedChainTreeFromTheOwnerHome(t *testing.T) {
 	h.forgetTokens()
 	r = h.run("org2", "", "fill")
 	h.want(r, exitIncomplete, "this home keeps no record of it")
-	if !strings.Contains(r.stderr, "its chain tree "+trees[0]) || strings.Contains(r.stdout, "filled  organisation chain seq 0") {
+	if !strings.Contains(r.stderr, "its chain tree "+trees[0]) || strings.Contains(r.stdout, "filled  organization chain seq 0") {
 		t.Fatalf("fill from a home without the record:\n%s\n%s", r.stdout, r.stderr)
 	}
 }
 
 // A chain tree in the home is held to what the node's answer would be: a
 // record whose bytes are another transaction is refused, and a kept proof
-// a reorganisation left stale is replaced by the node's current one, or
+// a reorganization left stale is replaced by the node's current one, or
 // named when the node gives none.
 func TestFillChecksTheHomeChainTree(t *testing.T) {
 	t.Parallel()
@@ -158,14 +158,14 @@ func TestFillChecksTheHomeChainTree(t *testing.T) {
 	})
 	h.forgetTokens()
 	r := h.must("org", "fill")
-	if !strings.Contains(r.stdout, "organisation chain seq 0") || !strings.Contains(r.stderr, "the node's current proof") {
+	if !strings.Contains(r.stdout, "organization chain seq 0") || !strings.Contains(r.stderr, "the node's current proof") {
 		t.Fatalf("fill with a stale kept proof:\n%s\n%s", r.stdout, r.stderr)
 	}
 	// With the node pruned there is none: the message says so.
 	h.prune(trees...)
 	h.forgetTokens()
 	r = h.run("org", "", "fill")
-	h.want(r, exitIncomplete, "its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one")
+	h.want(r, exitIncomplete, "its kept proof does not verify against the header source (a reorganization, or no proof kept), and the node gives no current one")
 
 	// Bytes that are not the token's parent are refused.
 	h.editChainTrees("org", func(tr map[string]any) {
@@ -182,7 +182,7 @@ func TestFillChecksTheHomeChainTree(t *testing.T) {
 	if !strings.Contains(r.stderr, "the node does not answer it") {
 		t.Fatalf("fill with a tampered tree:\n%s\n%s", r.stdout, r.stderr)
 	}
-	if strings.Contains(r.stdout, "filled  organisation chain seq 0") {
+	if strings.Contains(r.stdout, "filled  organization chain seq 0") {
 		t.Fatalf("a token was filled from a tampered tree:\n%s", r.stdout)
 	}
 }

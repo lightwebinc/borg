@@ -257,7 +257,7 @@ test('engine answers are hydrated from storage, and a dropped carrier is deleted
   const org = new OrgSim(hall, 'evidence org', chain)
   const grp = await org.group('evidence group', [new Party('ev a')])
   const vout = org.nextRecordVout()
-  // Ten wrap carriers on one funding output: the organisation equivocated.
+  // Ten wrap carriers on one funding output: the organization equivocated.
   const ep = grp.epochs.get(0)!
   const many: Transaction[] = []
   for (let i = 0; i < 10; i++) {

@@ -19,7 +19,7 @@ import (
 // a seq on its own: forgetting is the caller's decision.
 type Floor interface {
 	// Seen is the latest token of the chain this caller verified before:
-	// ok is false when it remembers none. org is the organisation's key in
+	// ok is false when it remembers none. org is the organization's key in
 	// hex, chain ChainOrg or a group id.
 	Seen(hall, org, chain string) (seq uint64, txid string, ok bool)
 	// See records the latest token of the chain verified now.

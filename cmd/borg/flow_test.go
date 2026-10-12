@@ -28,7 +28,7 @@ import (
 
 var regexpLatest = regexp.MustCompile(`(?m)^latest  seq \d+ ([0-9a-f]{64})`)
 
-// copyDir copies a home, as a second device of one organisation would hold
+// copyDir copies a home, as a second device of one organization would hold
 // it.
 func copyDir(from, to string) error {
 	return filepath.WalkDir(from, func(p string, d fs.DirEntry, err error) error {
@@ -145,7 +145,7 @@ func TestRevokeBySweepAndDebt(t *testing.T) {
 	if r.code != 0 || !strings.Contains(r.stdout, "not current, revoked") {
 		t.Fatalf("roll:\n%s\n%s", r.stdout, r.stderr)
 	}
-	// The organisation's own record still has carol current until the
+	// The organization's own record still has carol current until the
 	// roll revokes her; revoking by the roll makes her debt.
 	r = h.must("org", "grant", "revoke", o.carol, "-by", "roll")
 	if !strings.Contains(r.stdout, "revokes 1 grant(s) in the roll") || !strings.Contains(r.stderr, "rotation debt") {
@@ -241,7 +241,7 @@ func TestHostsDisagree(t *testing.T) {
 	h.want(h.run("alice", "", "open", o.group), exitIncomplete, "an older state")
 }
 
-// Two instances of the organisation's tooling build on one tip: one is
+// Two instances of the organization's tooling build on one tip: one is
 // mined, and the other loses, discards its epoch key and releases nothing
 // (spec section 7.3).
 func TestConcurrentTransitionLoses(t *testing.T) {
@@ -448,7 +448,7 @@ func TestFillReplaysWhatAHostLacks(t *testing.T) {
 	r := h.run("alice", "", "group", "show", o.group)
 	h.want(r, exitIncomplete, "DISAGREES")
 	r = h.must("alice", "fill")
-	if !strings.Contains(r.stdout, "organisation chain seq 0") || !strings.Contains(r.stdout, "group "+o.group+" seq 1") ||
+	if !strings.Contains(r.stdout, "organization chain seq 0") || !strings.Contains(r.stdout, "group "+o.group+" seq 1") ||
 		!strings.Contains(r.stdout, "filled  grant ") || !strings.Contains(r.stdout, "filled  wrap ") {
 		t.Fatalf("fill:\n%s\n%s", r.stdout, r.stderr)
 	}
@@ -526,7 +526,7 @@ func (h *harness) block() {
 	}
 }
 
-// secondHome makes a home around the organisation's identity key, as on a
+// secondHome makes a home around the organization's identity key, as on a
 // second machine, funds it, and catches it up from the hosts.
 func (h *harness) secondHome(name string) result {
 	h.t.Helper()
@@ -538,7 +538,7 @@ func (h *harness) secondHome(name string) result {
 	return h.run(name, "", "org", "sync")
 }
 
-// Two homes of one organisation race the same transition again and again.
+// Two homes of one organization race the same transition again and again.
 // Each round one is mined and the other loses; the loser catches up from
 // the hosts by itself (the chain, the roll, and the winner's epoch key
 // from the wrap to the signer key) and makes its change on the new tip.
@@ -550,7 +550,7 @@ func TestTwoHomesRaceAndBothStayUsable(t *testing.T) {
 	o := h.orgWithGroup()
 	h.block()
 	r := h.secondHome("org2")
-	if r.code != 0 || !strings.Contains(r.stdout, "took 1 organisation token(s), 1 group token(s) (1 new group(s)), 4 grant(s), 0 policy record(s), 0 epoch key(s)") {
+	if r.code != 0 || !strings.Contains(r.stdout, "took 1 organization token(s), 1 group token(s) (1 new group(s)), 4 grant(s), 0 policy record(s), 0 epoch key(s)") {
 		// The first home has not released epoch 0 yet (signers 2: one
 		// block after the token, by its next command).
 		if r.code != exitIncomplete || !strings.Contains(r.stdout, "epoch 0, the CURRENT epoch") {
@@ -590,7 +590,7 @@ func TestTwoHomesRaceAndBothStayUsable(t *testing.T) {
 		// The loser runs again: it catches up by itself and rotates on
 		// the winner's token.
 		lr = h.must(loser, "epoch", "rotate", o.group)
-		if !strings.Contains(lr.stderr, "sync    took 0 organisation token(s), 1 group token(s)") || !strings.Contains(lr.stdout, "(a new epoch") {
+		if !strings.Contains(lr.stderr, "sync    took 0 organization token(s), 1 group token(s)") || !strings.Contains(lr.stdout, "(a new epoch") {
 			t.Fatalf("round %d: %s did not catch up and rotate:\n%s\n%s", round, loser, lr.stdout, lr.stderr)
 		}
 		h.block()
@@ -609,7 +609,7 @@ func TestTwoHomesRaceAndBothStayUsable(t *testing.T) {
 			t.Fatalf("%s still lacks an epoch key:\n%s\n%s", home, r.stdout, r.stderr)
 		}
 		s := h.must(home, "org", "show").stdout
-		if strings.Contains(s, "KEY NOT HELD") || !strings.Contains(s, "seq 8 epoch 8, 4 member(s)") || !strings.Contains(s, "(the organisation's signer key)") {
+		if strings.Contains(s, "KEY NOT HELD") || !strings.Contains(s, "seq 8 epoch 8, 4 member(s)") || !strings.Contains(s, "(the organization's signer key)") {
 			t.Fatalf("%s org show:\n%s", home, s)
 		}
 		shows = append(shows, s)
@@ -678,7 +678,7 @@ func TestCopiedHomeCatchesUp(t *testing.T) {
 	h.block()
 	h.must("org", "org", "sync")
 	r := h.must("org2", "org", "remove", o.carol, "-group", o.group)
-	if !strings.Contains(r.stderr, "sync    took 1 organisation token(s), 2 group token(s) (0 new group(s)), 1 grant(s), 0 policy record(s), 1 epoch key(s)") ||
+	if !strings.Contains(r.stderr, "sync    took 1 organization token(s), 2 group token(s) (0 new group(s)), 1 grant(s), 0 policy record(s), 1 epoch key(s)") ||
 		strings.Count(r.stderr, "is no longer spent from this home") != 2 || !strings.Contains(r.stderr, "removed (spent by another instance)") ||
 		!strings.Contains(r.stdout, "epoch 2 (a new epoch") {
 		t.Fatalf("the copy:\n%s\n%s", r.stdout, r.stderr)
@@ -694,12 +694,12 @@ func TestCopiedHomeCatchesUp(t *testing.T) {
 	h.want(h.run("carol", "", "open", o.group), exitRefused, "removed at seq 3")
 	// The original catches up in turn and goes on.
 	r = h.must("org", "epoch", "rotate", o.group)
-	if !strings.Contains(r.stderr, "sync    took 0 organisation token(s), 1 group token(s)") || !strings.Contains(r.stdout, "epoch 3 (a new epoch") {
+	if !strings.Contains(r.stderr, "sync    took 0 organization token(s), 1 group token(s)") || !strings.Contains(r.stdout, "epoch 3 (a new epoch") {
 		t.Fatalf("the original:\n%s\n%s", r.stdout, r.stderr)
 	}
 }
 
-// An organisation run from one machine grants its signer key, and a home
+// An organization run from one machine grants its signer key, and a home
 // made on a new machine around the same identity key rebuilds from the
 // hosts: the chains, the roll (an opaque grant's fields opened through its
 // keyring), and each epoch key the signer key was a member of. An epoch
@@ -713,7 +713,7 @@ func TestNewMachineRebuildsFromHosts(t *testing.T) {
 	o.bob = h.identity("bob", false)
 	h.newHall("org")
 	h.env["BORG_ORG"] = o.key
-	h.must("org", "org", "create", "Example Organisation", "-opaque", "-member", o.alice, "-member", o.bob, "-role", "engineer")
+	h.must("org", "org", "create", "Example Organization", "-opaque", "-member", o.alice, "-member", o.bob, "-role", "engineer")
 	r := h.must("org", "group", "create", "engineering", "-member", o.alice, "-member", o.bob)
 	o.group = groupLine.FindStringSubmatch(r.stdout)[1]
 	h.must("org", "epoch", "rotate", o.group)
@@ -728,7 +728,7 @@ func TestNewMachineRebuildsFromHosts(t *testing.T) {
 	h.must("org", "org", "remove", o.bob, "-group", o.group)
 	want := h.must("org", "org", "show").stdout
 	r = h.secondHome("org2")
-	if r.code != 0 || !strings.Contains(r.stdout, "took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 0 policy record(s), 2 epoch key(s)") ||
+	if r.code != 0 || !strings.Contains(r.stdout, "took 2 organization token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 0 policy record(s), 2 epoch key(s)") ||
 		!strings.Contains(r.stdout, "missing group "+o.group+" epoch 0: the signer key was not a member of this epoch") {
 		t.Fatalf("org sync on a new machine:\n%s\n%s", r.stdout, r.stderr)
 	}
@@ -739,10 +739,10 @@ func TestNewMachineRebuildsFromHosts(t *testing.T) {
 		t.Fatalf("the opaque grants' fields were not read back:\n%s", want)
 	}
 	r = h.must("org2", "org", "sync")
-	if !strings.Contains(r.stdout, "took 0 organisation token(s), 0 group token(s) (0 new group(s)), 0 grant(s), 0 policy record(s), 0 epoch key(s)") {
+	if !strings.Contains(r.stdout, "took 0 organization token(s), 0 group token(s) (0 new group(s)), 0 grant(s), 0 policy record(s), 0 epoch key(s)") {
 		t.Fatalf("a second sync:\n%s", r.stdout)
 	}
-	// The rebuilt home runs the organisation: it adds a member, who is
+	// The rebuilt home runs the organization: it adds a member, who is
 	// wrapped the current epoch's key, which only a home that holds it can
 	// do.
 	carol := h.identity("carol", false)
@@ -787,11 +787,11 @@ func TestTransitionWhoseFeeCoinIsSpentElsewhereIsDiscarded(t *testing.T) {
 	if strings.Contains(r.stdout, "transition  ") {
 		t.Fatalf("the transition that cannot mine is still pending:\n%s", r.stdout)
 	}
-	// No signer key in this organisation: the other home's epoch key is
+	// No signer key in this organization: the other home's epoch key is
 	// not at the hosts for this one, and the catch-up says so.
 	r = h.run("org2", "", "org", "sync")
 	h.want(r, exitIncomplete, "the key of the current epoch 1 is not open here")
-	if !strings.Contains(r.stdout, "took 0 organisation token(s), 1 group token(s)") ||
+	if !strings.Contains(r.stdout, "took 0 organization token(s), 1 group token(s)") ||
 		!strings.Contains(r.stdout, "epoch 1, the CURRENT epoch") || !strings.Contains(h.must("org2", "doctor").stdout, "KEY NOT HELD: epoch 1") {
 		t.Fatalf("org sync:\n%s\n%s", r.stdout, r.stderr)
 	}
@@ -1193,7 +1193,7 @@ func TestRolesDecide(t *testing.T) {
 		}
 	}
 
-	// A subject of no organisation holds nothing, whatever the set says.
+	// A subject of no organization holds nothing, whatever the set says.
 	dave := h.identity("dave", false)
 	r = h.must("org", "policy", "check", dave, "bsecret/release/payroll")
 	if !strings.HasPrefix(r.stdout, "DENY") || !strings.Contains(r.stdout, "why     not-member") {
@@ -1202,7 +1202,7 @@ func TestRolesDecide(t *testing.T) {
 
 	// The decision is read from the hosts and names the state it rested
 	// on, which is what a service writes into a receipt. A member of the
-	// organisation who is not its owner reaches the same verdict.
+	// organization who is not its owner reaches the same verdict.
 	r = h.must("alice", "policy", "check", o.alice, "bsecret/release/payroll")
 	if !strings.HasPrefix(r.stdout, "ALLOW") {
 		t.Fatalf("a member's own read of the hosts:\n%s\n%s", r.stdout, r.stderr)
@@ -1211,7 +1211,7 @@ func TestRolesDecide(t *testing.T) {
 		t.Fatalf("the decision does not name what it rested on:\n%s", r.stdout)
 	}
 	// The same question answered from the home's own record, which only
-	// the organisation holds.
+	// the organization holds.
 	r = h.must("org", "policy", "check", o.alice, "bsecret/release/payroll", "-local")
 	if !strings.HasPrefix(r.stdout, "ALLOW") {
 		t.Fatalf("the local read:\n%s\n%s", r.stdout, r.stderr)
@@ -1275,7 +1275,7 @@ func TestPolicyRefusals(t *testing.T) {
 	}
 }
 
-// A second home of the organisation rebuilds the policy set from the hosts
+// A second home of the organization rebuilds the policy set from the hosts
 // alone, and decides the same way the first does.
 func TestSyncRebuildsThePolicySet(t *testing.T) {
 	t.Parallel()
@@ -1340,9 +1340,9 @@ func TestALyingHostCannotGrantThroughAGroup(t *testing.T) {
 	}
 
 	// Now both hosts answer member-of for bob with every group of the
-	// organisation, the bound one included. The decision establishes each
+	// organization, the bound one included. The decision establishes each
 	// group's chain itself, finds bob in neither, and still denies.
-	// member-of for bob is answered with every group of the organisation.
+	// member-of for bob is answered with every group of the organization.
 	all := func(q *borgrec.Question, outs []testOutput) []testOutput {
 		if q.Class.Name != "member-of" && q.Class.Name != "member-of-after" {
 			return outs

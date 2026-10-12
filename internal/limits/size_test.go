@@ -257,7 +257,7 @@ func TestSizes(t *testing.T) {
 	}
 	o := s.OrgRecs[0]
 	n := tokenBEEF(t, borgrec.TagOrg, o, borgrec.OrgDerivation)
-	row("organisation token, admit 3", len(o), n)
+	row("organization token, admit 3", len(o), n)
 	for _, tree := range []int{8, 32} {
 		n := genesisBEEF(t, s.GroupRecs[0], tree)
 		row(fmt.Sprintf("group token seq 0, chain tree %d", tree), len(s.GroupRecs[0]), n)

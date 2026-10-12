@@ -1,4 +1,4 @@
-// Package borgrec is the byte-level contract of borg: the organisation and
+// Package borgrec is the byte-level contract of borg: the organization and
 // group records that ride mined chain tokens, the membership grant and the
 // epoch-key wrap that ride unmined carriers, the hall and scope grammars, the
 // BRC-369 epoch key, and the lookup question classes. docs/spec.md is the
@@ -35,7 +35,7 @@ const (
 	// derivation refuses a name under five characters, so the application
 	// name alone ("borg") cannot be the protocol name.
 	ProtocolName = "borg organisation"
-	// KeyOrg locks an organisation chain token and signs its fields.
+	// KeyOrg locks an organization chain token and signs its fields.
 	KeyOrg = "org"
 	// KeyGroup locks a group chain token and signs its fields.
 	KeyGroup = "group"
@@ -76,13 +76,13 @@ const (
 // Tags and magics. The tag prefix "bo" belongs to borg.
 var (
 	TagPrefix = []byte("bo")
-	// TagOrg is the first field of an organisation chain token.
+	// TagOrg is the first field of an organization chain token.
 	TagOrg = []byte{'b', 'o', 0x01}
 	// TagFunding is the one field of a funding-tree output.
 	TagFunding = []byte{'b', 'o', 0x02}
 	// TagGroup is the first field of a group chain token.
 	TagGroup = []byte{'b', 'o', 0x03}
-	// MagicOrg is key 0 of an organisation record: "bo", 'o', version 1.
+	// MagicOrg is key 0 of an organization record: "bo", 'o', version 1.
 	MagicOrg = []byte{'b', 'o', 'o', 0x01}
 	// MagicGroup is key 0 of a group record: "bo", 'g', version 1.
 	MagicGroup = []byte{'b', 'o', 'g', 0x01}
@@ -141,12 +141,12 @@ const (
 	MinHall = 1 + 1 + SuffixLen
 	// GroupIDLen is the length of a group identifier.
 	GroupIDLen = 16
-	// MaxName bounds an organisation's or a group's display name, in bytes.
+	// MaxName bounds an organization's or a group's display name, in bytes.
 	MaxName = 64
 	// MaxDelta bounds each change list of one transition: grants admitted
 	// or revoked, members added or removed.
 	MaxDelta = 64
-	// MaxRoll bounds the grants an organisation's roll holds.
+	// MaxRoll bounds the grants an organization's roll holds.
 	MaxRoll = 65536
 	// MaxMembers bounds the members of one group (BRC-369 section 8.3: the
 	// linear rekey serves groups of a few hundred).
@@ -162,7 +162,7 @@ const (
 	// MaxPolicyRecord bounds an encoded policy record: 24 permissions of the
 	// grammar's full length take about 6.1 KB.
 	MaxPolicyRecord = 8192
-	// MaxPolicySet bounds the policy records an organisation's set holds.
+	// MaxPolicySet bounds the policy records an organization's set holds.
 	MaxPolicySet = 65536
 	// MaxKeys bounds the entries of a record map, unknown keys included.
 	MaxKeys = 64
@@ -201,7 +201,7 @@ var (
 	ErrName       = errors.New("borgrec: name is not 1 to 64 bytes of text")
 	ErrList       = record.ErrList
 	ErrChain      = errors.New("borgrec: seq, prev and epoch fields disagree")
-	ErrMembers    = errors.New("borgrec: member list names the organisation or the anyone key")
+	ErrMembers    = errors.New("borgrec: member list names the organization or the anyone key")
 	ErrFields     = errors.New("borgrec: grant fields, keyring or reveal are not exactly expiry, role and scope")
 	ErrSignature  = chaintoken.ErrSignature
 	ErrEntry      = errors.New("borgrec: wrap entry does not match the record")

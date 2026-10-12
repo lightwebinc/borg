@@ -1,6 +1,6 @@
-// Package engine is a borg publisher: the organisation's tooling (docs/spec.md
+// Package engine is a borg publisher: the organization's tooling (docs/spec.md
 // sections 7, 9 and 12), run from one identity's home. It issues grants,
-// mints the organisation's and its groups' chain tokens, samples and wraps
+// mints the organization's and its groups' chain tokens, samples and wraps
 // epoch keys, revokes by roll and by sweep, and publishes every object on
 // the plane or to each host.
 //
@@ -57,7 +57,7 @@ import (
 )
 
 // Profile is the embedded wallet's profile: the fund key under [1, "borg
-// organisation"] key id fund, and the registered basket.
+// organization"] key id fund, and the registered basket.
 var Profile = bwallet.Profile{
 	FundProtocol:   borgrec.Protocol,
 	FundKeyID:      borgrec.KeyFund,
@@ -139,7 +139,7 @@ type Legs struct {
 type Engine struct {
 	St     *state.State
 	Signer *bwallet.Signer
-	// Key is the organisation's identity private key. It derives the
+	// Key is the organization's identity private key. It derives the
 	// signer key (signer.go), which only Sync opens wraps with.
 	Key  *ec.PrivateKey
 	Pool *bwallet.Pool
@@ -518,7 +518,7 @@ func (e *Engine) prove(ctx context.Context, kind string, tree *transaction.Trans
 }
 
 // reproveTree holds a funding tree's kept proof to the publisher's headers
-// and, when a reorganisation left it stale, replaces it with the node's
+// and, when a reorganization left it stale, replaces it with the node's
 // current one, in the home too: a carrier or a first token carrying a
 // proof of an orphaned block is refused by every host.
 func (e *Engine) reproveTree(ctx context.Context, tree *transaction.Transaction) error {
@@ -745,7 +745,7 @@ func (e *Engine) submitFacade(ctx context.Context, what, topic string, beef []by
 // org-seq or group-seq class for a token, the wrap class for a wrap, the
 // sweep class for a sweep, the member class for a grant, the policy class
 // for a policy record. A grant that no
-// organisation token admits yet is answered by no free class; an answer
+// organization token admits yet is answered by no free class; an answer
 // that admits nothing for it is counted, and confirmed by the member class
 // once the token that admits it is published (ConfirmGrants).
 func (e *Engine) confirm(p state.Pending) unicast.Confirm {
@@ -779,7 +779,7 @@ func (e *Engine) confirm(p state.Pending) unicast.Confirm {
 				return ok, err
 			}
 			if r := e.policy(p.Txid); r != nil && !r.Defined {
-				e.note("policy record %s: host %s admitted nothing, and no free class answers a policy record before a token defines it; confirmed once the organisation token is published", Short(p.Txid), host)
+				e.note("policy record %s: host %s admitted nothing, and no free class answers a policy record before a token defines it; confirmed once the organization token is published", Short(p.Txid), host)
 				return true, nil
 			}
 			return false, nil
@@ -792,7 +792,7 @@ func (e *Engine) confirm(p state.Pending) unicast.Confirm {
 				return ok, err
 			}
 			if g := e.grant(p.Txid); g != nil && !g.Admitted {
-				e.note("grant %s: host %s admitted nothing, and no free class answers a grant before the roll admits it; confirmed once the organisation token is published", Short(p.Txid), host)
+				e.note("grant %s: host %s admitted nothing, and no free class answers a grant before the roll admits it; confirmed once the organization token is published", Short(p.Txid), host)
 				return true, nil
 			}
 			return false, nil

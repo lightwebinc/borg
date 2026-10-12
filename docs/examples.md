@@ -287,7 +287,7 @@ and the same config:
 $ borg init -from identity.json
 $ borg fund -txid <a payment you sent to this home's fund address>
 $ borg org sync
-sync    took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)
+sync    took 2 organization token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)
 ```
 
 ## 12. The priced question and the payee

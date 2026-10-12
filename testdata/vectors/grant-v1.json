@@ -146,7 +146,7 @@
       "admin": false
     },
     {
-      "label": "alice, from an opaque organisation: no reveal",
+      "label": "alice, from an opaque organization: no reveal",
       "org": "029ac20335eb38768d2052be1dbbc3c8f6178407458e51e6b4ad22f1d91758895b",
       "subject": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
       "hex": "a90044626f6d0101776578616d706c655f68616c6c5f766b717a6d7472777870025821029ac20335eb38768d2052be1dbbc3c8f6178407458e51e6b4ad22f1d91758895b035821029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b5004582037cd45c1479b36f85972a10831db7f697c3cf26641001fa196b9ed288c05dab10582582029f7cadbc600afcdd69851ab9f24e2d29f060ffe5d18c46a35768e4bf11916760006a364726f6c655838fbf7b74c8420757861fd7e58b31db0c705fa0f2e98dbd8cf34fe8a2545445bc722bdd287527f6fdb81055cfa701f8266c8e08dadb906b6356573636f70655836717cdbf3907166f7515f7efc5d405fbdce265485ed0798cca6d381c76cd4418a8deb215b42eba45c6101f2d1631790d1e8cad755e64a66657870697279584460f94a89999a7843085edcf6b703158db1c9bce164dec44d98bf9950ee022669eba18435b0953483f63515c0eca9edf586db8b288f8da7d3db1f16242c4ef0b0cb5ed0ec0758473045022100a6b8ecbe15d6761769ee25970b4641b2fae275b7cbef5d677e49fea465d2e35202205ccb3769dfb805c36aee506240e67752a295e4ec3eeaf865781d1c2f4b7e247908a364726f6c655850d8fcac46e69f48fc966c76419d7d094ef8d53dc99a61328bfa0a972332bdf521752d7c007ad13b6237706ee9991ef66453b59bfa060cf14663c2b8e86e5782fcfac5c2f91482bf3c1ed654593911567d6573636f70655850994299cf287138cfe67d4e0c1d84322a5ef1e6c11a45e36a95845b64ba75cebb8e31bfe9da0c21c3bad9d60c93e7c115a6a659f86b2bfd941acd33c2b7239e8171c253258507b99bb4151bd19477dba2666578706972795850487d57887212b3bd6418621a389122661282cba1ccf606be078b55113390e7caa47105bd37fbd880ef47f99b5de95712232451b0f43de6d3418537e2aeafbeacab20c105335cd546a67cd1b5142e71cf",
@@ -189,5 +189,5 @@
       "admin": false
     }
   ],
-  "note": "Field revelation keys and IVs are fixed stand-ins for CSPRNG draws, SHA-256 of labels. preimage is the BRC-52 binary form without the signature (go-sdk ToBinary(false)); the signature is the organisation's under [2, \"certificate signature\"], key id \"<type> <serial>\" in base64, verified with counterparty the organisation. Each member opens its own fields through its wallet; another member cannot. The revocation outpoint is a stand-in funding outpoint, written as BRC-100's OutpointString."
+  "note": "Field revelation keys and IVs are fixed stand-ins for CSPRNG draws, SHA-256 of labels. preimage is the BRC-52 binary form without the signature (go-sdk ToBinary(false)); the signature is the organization's under [2, \"certificate signature\"], key id \"<type> <serial>\" in base64, verified with counterparty the organization. Each member opens its own fields through its wallet; another member cannot. The revocation outpoint is a stand-in funding outpoint, written as BRC-100's OutpointString."
 }

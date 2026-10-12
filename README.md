@@ -20,10 +20,11 @@ whose key the removed member never receives.
 ## How it works
 
 ```mermaid
+%%{init: {"flowchart": {"diagramPadding": 48}}}%%
 flowchart LR
-  O["borg (organization)"] -->|"grants, tokens, wraps"| H["overlay hosts<br/>tm_borg_&lt;name&gt;_&lt;suffix&gt;, ls_borg"]
+  O["borg (organization)"] -->|"grants, policy records, tokens, wraps"| H["overlay hosts<br/>tm_borg_&lt;name&gt;_&lt;suffix&gt;, ls_borg"]
   O -->|"one small tx per change"| B[("BSV blockchain")]
-  M["borg (member)"] -->|"open, roll, member"| H
+  M["borg (member)"] -->|"open, roll, member, policy"| H
   M -->|headers| S["header source<br/>woc:main"]
   B -.-> S
   H -. "records + proofs" .-> M

@@ -193,7 +193,7 @@ func params(d pushdrop.Derivation) carrier.Params {
 // txEnv is everything the transaction vectors are built from.
 type txEnv struct {
 	ctx    context.Context
-	o, d   *actor // the organisation, and a stranger
+	o, d   *actor // the organization, and a stranger
 	c      *chain
 	coin   *transaction.Transaction
 	grant  *transaction.Transaction // grant tree
@@ -277,7 +277,7 @@ func (e *txEnv) prevUnlocker(prev *transaction.Transaction, vout uint32) transac
 }
 
 func (e *txEnv) build(s *Scenario) error {
-	// The coin: sixty-four outputs paying the organisation's fund key, from
+	// The coin: sixty-four outputs paying the organization's fund key, from
 	// nowhere, mined.
 	e.coin = transaction.NewTransaction()
 	e.coin.AddInput(&transaction.TransactionInput{SourceTXID: fixedHash(0x11), UnlockingScript: &script.Script{},
@@ -303,7 +303,7 @@ func (e *txEnv) build(s *Scenario) error {
 	// misc: outputs a grant carrier must not be funded from, each spent by
 	// one signature: a bare pay-to-public-key under the grant key, the
 	// funding tag under the grant key with a field signature, another tag
-	// under the grant key, and the funding tag under the organisation's
+	// under the grant key, and the funding tag under the organization's
 	// chain key.
 	e.misc = transaction.NewTransaction()
 	e.misc.AddInputFromTx(e.coin, e.nextFee().Vout, e.o.feeUnlocker())
@@ -340,7 +340,7 @@ func (e *txEnv) build(s *Scenario) error {
 		e.grants[m.Name], e.carriers[m.Name] = g, k
 	}
 
-	// The organisation: seq 0 admits the three grants; seq 1 revokes bob's.
+	// The organization: seq 0 admits the three grants; seq 1 revokes bob's.
 	cs := func(names ...string) [][32]byte {
 		var out [][32]byte
 		for _, n := range names {
@@ -348,7 +348,7 @@ func (e *txEnv) build(s *Scenario) error {
 		}
 		return sorted32(out...)
 	}
-	o0 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Name: "Example Organisation", Admit: cs("alice", "bob", "carol"),
+	o0 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Name: "Example Organization", Admit: cs("alice", "bob", "carol"),
 		Count: 3, Roll: borgrec.RollRoot(cs("alice", "bob", "carol")), Created: Created, Policy: emptyPolicy}
 	rec0, err := o0.Encode()
 	if err != nil {
@@ -359,7 +359,7 @@ func (e *txEnv) build(s *Scenario) error {
 		return err
 	}
 	e.c.mine(t0)
-	o1 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: [32]byte(*t0.TxID()), Name: "Example Organisation",
+	o1 := &borgrec.Org{Hall: Hall, Org: Org.Pub(), Seq: 1, Prev: [32]byte(*t0.TxID()), Name: "Example Organization",
 		Revoke: cs("bob"), Count: 2, Roll: borgrec.RollRoot(cs("alice", "carol")), Created: Created + 7200,
 		Policy: emptyPolicy}
 	rec1, err := o1.Encode()

@@ -151,7 +151,7 @@ func GrantsAny(held []string, asked string) (bool, error) {
 // of lower-case ASCII letters, digits, "-", "_" and ".", the characters
 // BRC-169 section 9.2 allows a scope qualifier. A role name is an identifier
 // compared byte for byte, so it carries no case and no character a renderer
-// would strip; an organisation's human wording is in its display names.
+// would strip; an organization's human wording is in its display names.
 func CheckRoleName(s string) error {
 	if !checkRun(s, MaxRoleName, func(c byte) bool {
 		return isLowerDigit(c) || c == '-' || c == '_' || c == '.'

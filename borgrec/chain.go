@@ -26,7 +26,7 @@ const (
 	StatusHeld       = "held"
 )
 
-// OrgFold folds an organisation's chain from seq 0: the roll after each
+// OrgFold folds an organization's chain from seq 0: the roll after each
 // token. Once a token breaks the fold the chain is unusable from it on, and
 // every later token reports the same status.
 type OrgFold struct {

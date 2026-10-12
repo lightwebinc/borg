@@ -22,13 +22,13 @@ import (
 	"github.com/lightwebinc/borg/reader"
 )
 
-// Catching up (spec section 7.4). A home that runs an organisation is not
+// Catching up (spec section 7.4). A home that runs an organization is not
 // the only place its state lives: every chain token, every grant of the
 // roll and every wrap is at the hosts. Sync rebuilds the home's record of
-// the organisation from them, as any reader reads them: each token verified
+// the organization from them, as any reader reads them: each token verified
 // against this home's headers and folded from seq 0, each grant by the
 // host's own admission rules and the roll's root, each epoch key opened
-// from the wrap to the organisation's signer key and checked against the
+// from the wrap to the organization's signer key and checked against the
 // epoch's commitment. It is what a second instance of the tooling runs
 // after another instance changed something, and what a home on a new
 // machine runs once.
@@ -56,7 +56,7 @@ type MissingKey struct {
 // SyncReport is what Sync did.
 type SyncReport struct {
 	// OrgTokens and GroupTokens are the tokens adopted, Displaced those of
-	// this home's that are no longer in the chain (a reorganisation).
+	// this home's that are no longer in the chain (a reorganization).
 	OrgTokens, GroupTokens, Displaced int
 	// Groups are the groups this home did not hold; Grants the grants;
 	// Policies the policy records.
@@ -108,7 +108,7 @@ type groupPlan struct {
 	wrapped map[string]bool
 }
 
-// Stale reports whether another instance changed the organisation since
+// Stale reports whether another instance changed the organization since
 // this home last wrote: the node shows the latest token of one of its
 // chains spent, or a host answers a group this home does not hold. It asks
 // the node once per chain and each host once.
@@ -143,7 +143,7 @@ func (e *Engine) Stale(ctx context.Context) bool {
 	return false
 }
 
-// Sync catches the home up with the organisation as the hosts in hall
+// Sync catches the home up with the organization as the hosts in hall
 // answer it.
 func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncReport, error) {
 	rd := e.Legs.Reader
@@ -151,7 +151,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 		return nil, errors.New("catching up reads the hosts: none is configured (config key hosts)")
 	}
 	if o := e.St.Org; o != nil && o.Hall != hall {
-		return nil, fmt.Errorf("the organisation lives in hall %s, not %s", o.Hall, hall)
+		return nil, fmt.Errorf("the organization lives in hall %s, not %s", o.Hall, hall)
 	}
 	rep := &SyncReport{}
 	if h, err := e.Legs.Headers.CurrentHeight(ctx); err == nil {
@@ -171,12 +171,12 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 	ov, err := rd.Org(ctx, hall, org)
 	if errors.Is(err, reader.ErrNoChain) {
 		if e.St.Org != nil && len(e.St.Org.Tokens) > 0 {
-			return nil, syncIncomplete("no host answers the organisation's chain, and this home holds %d token(s) of it: nothing to catch up from (%v)", len(e.St.Org.Tokens), err)
+			return nil, syncIncomplete("no host answers the organization's chain, and this home holds %d token(s) of it: nothing to catch up from (%v)", len(e.St.Org.Tokens), err)
 		}
-		return nil, syncIncomplete("no host answers an organisation of this home's key in hall %s: %v", hall, err)
+		return nil, syncIncomplete("no host answers an organization of this home's key in hall %s: %v", hall, err)
 	}
 	if err != nil {
-		return nil, syncRefused("the organisation's chain: %v", err)
+		return nil, syncRefused("the organization's chain: %v", err)
 	}
 	for h := range ov.HostErr {
 		rep.Unasked = append(rep.Unasked, h)
@@ -184,7 +184,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 	sort.Strings(rep.Unasked)
 	rep.Refused = append(rep.Refused, ov.Refused...)
 	if u := ov.Usable(); u < len(ov.Tokens) {
-		return nil, syncRefused("the organisation's chain folds to %s at seq %d; nothing is taken from it", ov.Statuses[u], u)
+		return nil, syncRefused("the organization's chain folds to %s at seq %d; nothing is taken from it", ov.Statuses[u], u)
 	}
 	grants := map[[32]byte]*reader.Car{}
 	for _, ra := range rd.Roll(ctx, ov) {
@@ -281,7 +281,7 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 	o.Name, o.Opaque = ov.Token.Name, ov.Token.Opaque
 	var adopted []*reader.Tok
 	var n, d int
-	if o.Tokens, n, d, err = e.merge(ctx, "the organisation's chain", o.Tokens, ov.Tokens, &adopted); err != nil {
+	if o.Tokens, n, d, err = e.merge(ctx, "the organization's chain", o.Tokens, ov.Tokens, &adopted); err != nil {
 		return nil, err
 	}
 	rep.OrgTokens, rep.Displaced = n, d
@@ -375,7 +375,7 @@ func beginsWith(t state.Token, commitment string) bool {
 // of the home's that differs is kept only while its proof still holds
 // against the headers, and then nothing is merged: two mined tokens at one
 // seq is a fork the home does not resolve. One whose proof no longer holds
-// was displaced by a reorganisation and is dropped with everything after
+// was displaced by a reorganization and is dropped with everything after
 // it.
 func (e *Engine) merge(ctx context.Context, what string, local []state.Token, canon []*reader.Tok, adopted *[]*reader.Tok) ([]state.Token, int, int, error) {
 	added, dropped := 0, 0
@@ -385,11 +385,11 @@ func (e *Engine) merge(ctx context.Context, what string, local []state.Token, ca
 				continue
 			}
 			// Mined under the proof the home kept, or under the node's
-			// current one when a reorganisation left the kept one stale.
+			// current one when a reorganization left the kept one stale.
 			if tx, err := rebuild(&local[i]); err == nil && e.minedNow(ctx, tx) {
 				return nil, 0, 0, syncRefused("%s: this home holds %s at seq %d, mined, and the hosts answer %s: a fork; nothing is merged", what, Short(local[i].Txid), i, Short(t.Txid))
 			}
-			e.note("%s: this home's seq %d %s is no longer in the chain (a reorganisation); it and what followed are dropped", what, i, Short(local[i].Txid))
+			e.note("%s: this home's seq %d %s is no longer in the chain (a reorganization); it and what followed are dropped", what, i, Short(local[i].Txid))
 			dropped += len(local) - i
 			local = local[:i]
 		}
@@ -440,7 +440,7 @@ func (e *Engine) syncGrants(ctx context.Context, o *state.Org, grants map[[32]by
 		} else {
 			if ow == nil {
 				if e.Key == nil {
-					return nil, errors.New("the organisation's identity key is not open: a grant without a reveal cannot be read back")
+					return nil, errors.New("the organization's identity key is not open: a grant without a reveal cannot be read back")
 				}
 				if ow, err = wallet.NewCompletedProtoWallet(e.Key); err != nil {
 					return nil, err
@@ -554,7 +554,7 @@ func (e *Engine) syncTrees(ctx context.Context, grants map[[32]byte]*reader.Car,
 
 // keepChainTree records the chain tree a chain's seq 0 token spends, read
 // from the node with its proof, when this home keeps no record of it: the
-// organisation's other home minted it. No host keeps a chain tree and a
+// organization's other home minted it. No host keeps a chain tree and a
 // node drops a fully spent transaction, so fill replays the first token
 // from this record (spec section 11.6). Nothing is spent from it. A node
 // that does not answer leaves the home as it was.

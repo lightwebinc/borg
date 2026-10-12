@@ -402,7 +402,7 @@
     {
       "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"chain\":\"orgs\"}",
       "refused": true,
-      "why": "chain names neither the organisation nor a group"
+      "why": "chain names neither the organization nor a group"
     },
     {
       "question": "{\"hall\":\"example_hall_vkqzmtrwxp\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"chain\":\"org\"}",

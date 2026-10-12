@@ -107,7 +107,7 @@ func (g *global) openHome() (*home, error) {
 	return &home{e: e, st: st, close: unlock}, nil
 }
 
-// orgKey is the home's identity private key: the organisation's, which
+// orgKey is the home's identity private key: the organization's, which
 // signs every grant it issues (BRC-52's certifier).
 func (g *global) orgKey() (*ec.PrivateKey, error) {
 	raw, err := os.ReadFile(filepath.Join(g.cfg.Home, "identity.json"))
@@ -266,7 +266,7 @@ func (g *global) reader() (*reader.Client, error) {
 	}
 	rd := &reader.Client{Hosts: g.cfg.Hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}
 	if c, err := g.chainView(); err == nil {
-		// A proof a host stored that a reorganisation left stale is
+		// A proof a host stored that a reorganization left stale is
 		// replaced by the chain view's current one (spec section 11.5).
 		rd.Source = proofSource{c}
 	}
@@ -993,7 +993,7 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 			case p.Expiry != "" && !bindingLive(p.Expiry, now):
 				why = "its expiry " + p.Expiry + " has passed"
 			case len(p.To) == 2*borgrec.GroupIDLen && o.Group(p.To) == nil:
-				why = "this organisation holds no group " + p.To
+				why = "this organization holds no group " + p.To
 			case len(p.To) != 2*borgrec.GroupIDLen && currentAt(o, p.To, now) == nil:
 				why = p.To + " holds no current membership grant"
 			}
@@ -1065,7 +1065,7 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 	}
 }
 
-// currentAt is the organisation's current grant to subject at now.
+// currentAt is the organization's current grant to subject at now.
 func currentAt(o *state.Org, subject string, now time.Time) *state.Grant {
 	for i := range o.Grants {
 		gr := &o.Grants[i]
@@ -1115,7 +1115,7 @@ func firstLine(s string) string {
 }
 
 // field is someone else's text that fills one field of a line this command
-// prints (an organisation's or a group's name, a role, a class name):
+// prints (an organization's or a group's name, a role, a class name):
 // filtered for the terminal, and held to that line. A name is any UTF-8,
 // and one with a line break in it would otherwise write lines of its own
 // in a report, in this command's voice.

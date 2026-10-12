@@ -66,7 +66,7 @@ func (f grantFlags) req(subject *ec.PublicKey, now time.Time) (engine.GrantReq, 
 	return r, nil
 }
 
-// orgRun is an open home with a publisher, for the organisation's
+// orgRun is an open home with a publisher, for the organization's
 // commands.
 type orgRun struct {
 	h   *home
@@ -75,7 +75,7 @@ type orgRun struct {
 }
 
 // openOrg opens the home and a publisher, finishing whatever a previous
-// run left. need says whether the organisation must exist already.
+// run left. need says whether the organization must exist already.
 func (g *global) openOrg(ctx context.Context, need bool) (*orgRun, error) {
 	return g.openOrgFor(ctx, need, false)
 }
@@ -90,11 +90,11 @@ func (g *global) openOrgFor(ctx context.Context, need, lenient bool) (*orgRun, e
 	o := h.st.Org
 	if need && (o == nil || len(o.Tokens) == 0) {
 		h.close()
-		return nil, usage("this home runs no organisation yet (borg org create)")
+		return nil, usage("this home runs no organization yet (borg org create)")
 	}
 	if o != nil && g.cfg.Hall != "" && g.cfg.Hall != o.Hall {
 		h.close()
-		return nil, usage("the organisation lives in hall %s, and hall is set to %s", o.Hall, g.cfg.Hall)
+		return nil, usage("the organization lives in hall %s, and hall is set to %s", o.Hall, g.cfg.Hall)
 	}
 	if o != nil && g.cfg.Hall == "" {
 		g.cfg.Hall = o.Hall
@@ -121,7 +121,7 @@ func (r *orgRun) close(ctx context.Context, g *global) {
 	r.h.close()
 }
 
-// groupArg resolves a group the organisation runs, by id or by name.
+// groupArg resolves a group the organization runs, by id or by name.
 func groupArg(o *state.Org, s string) (*state.Group, error) {
 	if gr := o.Group(s); gr != nil {
 		return gr, nil
@@ -136,7 +136,7 @@ func groupArg(o *state.Org, s string) (*state.Group, error) {
 		}
 	}
 	if found == nil {
-		return nil, usage("group %q is not one of this organisation's (borg group list)", termsafe.Abbrev(s))
+		return nil, usage("group %q is not one of this organization's (borg group list)", termsafe.Abbrev(s))
 	}
 	return found, nil
 }
@@ -279,9 +279,9 @@ func cmdOrg(ctx context.Context, g *global, args []string) error {
 
 func (g *global) orgCreate(ctx context.Context, name string, opaque bool, members []string, gf grantFlags) error {
 	if l := len(name); l < 1 || l > borgrec.MaxName {
-		return usage("the organisation's name is 1 to %d bytes", borgrec.MaxName)
+		return usage("the organization's name is 1 to %d bytes", borgrec.MaxName)
 	}
-	if err := plainName("the organisation's name", name); err != nil {
+	if err := plainName("the organization's name", name); err != nil {
 		return err
 	}
 	hall, err := g.hall()
@@ -318,9 +318,9 @@ func (g *global) orgCreate(ctx context.Context, name string, opaque bool, member
 		}
 	case len(o.Tokens) == 1 && o.Name == name && o.Hall == hall:
 		// A previous run's first token, finished as this one opened.
-		g.say("the organisation's first token was persisted by a previous run and is finished now")
+		g.say("the organization's first token was persisted by a previous run and is finished now")
 	default:
-		return usage("this home runs the organisation %q already (borg org show)", field(o.Name))
+		return usage("this home runs the organization %q already (borg org show)", field(o.Name))
 	}
 	o := r.h.st.Org
 	t := state.Latest(o.Tokens)
@@ -342,7 +342,7 @@ func (g *global) orgShow() error {
 	}
 	o := st.Org
 	if o == nil {
-		return usage("this home runs no organisation (borg org create)")
+		return usage("this home runs no organization (borg org create)")
 	}
 	fmt.Fprintf(g.stdout, "org     %s\nhall    %s\nname    %s\nopaque  %v\n", st.Identity, o.Hall, field(o.Name), o.Opaque)
 	for _, t := range o.Tokens {
@@ -388,7 +388,7 @@ func (g *global) orgShow() error {
 		for _, m := range members {
 			mark := ""
 			if hex.EncodeToString(m) == signer {
-				mark = "  (the organisation's signer key)"
+				mark = "  (the organization's signer key)"
 			}
 			if currentAt(o, hex.EncodeToString(m), now) == nil {
 				mark += "  ROTATION DEBT: no current grant"
@@ -399,7 +399,7 @@ func (g *global) orgShow() error {
 	return nil
 }
 
-// signerHex is the signer key of the organisation orgHex, hex, or "".
+// signerHex is the signer key of the organization orgHex, hex, or "".
 func signerHex(orgHex string) string {
 	org, err := hex.DecodeString(orgHex)
 	if err != nil {
@@ -455,7 +455,7 @@ func (g *global) reportSync(out io.Writer, rep *engine.SyncReport) {
 	if rep.Displaced > 0 {
 		fmt.Fprintf(out, "sync    %d token(s) of this home's are no longer in the chain and were dropped\n", rep.Displaced)
 	}
-	fmt.Fprintf(out, "sync    took %d organisation token(s), %d group token(s) (%d new group(s)), %d grant(s), %d policy record(s), %d epoch key(s)\n",
+	fmt.Fprintf(out, "sync    took %d organization token(s), %d group token(s) (%d new group(s)), %d grant(s), %d policy record(s), %d epoch key(s)\n",
 		rep.OrgTokens, rep.GroupTokens, rep.Groups, rep.Grants, rep.Policies, rep.Keys)
 	for _, m := range rep.Missing {
 		cur := ""
@@ -481,7 +481,7 @@ func (g *global) orgSync(ctx context.Context, retire bool) error {
 	defer h.close()
 	if o := h.st.Org; o != nil {
 		if g.cfg.Hall != "" && g.cfg.Hall != o.Hall {
-			return usage("the organisation lives in hall %s, and hall is set to %s", o.Hall, g.cfg.Hall)
+			return usage("the organization lives in hall %s, and hall is set to %s", o.Hall, g.cfg.Hall)
 		}
 		g.cfg.Hall = o.Hall
 	}
@@ -562,7 +562,7 @@ func (g *global) orgSigner(ctx context.Context) error {
 }
 
 // admitNew issues a grant to every key that holds no current grant and
-// admits them in one organisation token.
+// admits them in one organization token.
 func (g *global) admitNew(ctx context.Context, r *orgRun, keys []*ec.PublicKey, gf grantFlags) error {
 	var issued []*state.Grant
 	now := time.Now()
@@ -595,7 +595,7 @@ func (g *global) admitNew(ctx context.Context, r *orgRun, keys []*ec.PublicKey, 
 	if len(issued) == 0 {
 		return nil
 	}
-	if err := r.eng.OrgTransition(ctx, issued, nil, "organisation token (admit)"); err != nil {
+	if err := r.eng.OrgTransition(ctx, issued, nil, "organization token (admit)"); err != nil {
 		return lost(err)
 	}
 	t := state.Latest(r.h.st.Org.Tokens)
@@ -660,7 +660,7 @@ func grantsOf(o *state.Org, subject string) []*state.Grant {
 	return out
 }
 
-// revoke revokes grants by the roll (one organisation token) and by sweep
+// revoke revokes grants by the roll (one organization token) and by sweep
 // (one sweep per grant tree), as by says.
 func (g *global) revoke(ctx context.Context, r *orgRun, grants []*state.Grant, by string) error {
 	o := r.h.st.Org
@@ -672,7 +672,7 @@ func (g *global) revoke(ctx context.Context, r *orgRun, grants []*state.Grant, b
 			}
 		}
 		if len(inRoll) > 0 {
-			if err := r.eng.OrgTransition(ctx, nil, inRoll, "organisation token (revoke)"); err != nil {
+			if err := r.eng.OrgTransition(ctx, nil, inRoll, "organization token (revoke)"); err != nil {
 				return lost(err)
 			}
 			t := state.Latest(o.Tokens)
@@ -812,7 +812,7 @@ func (g *global) orgRekey(ctx context.Context, oldS, newS string, gf grantFlags)
 			inRoll = append(inRoll, gr)
 		}
 	}
-	if err := r.eng.OrgTransition(ctx, []*state.Grant{o.GrantByTxid(ng.Txid)}, inRoll, "organisation token (key change)"); err != nil {
+	if err := r.eng.OrgTransition(ctx, []*state.Grant{o.GrantByTxid(ng.Txid)}, inRoll, "organization token (key change)"); err != nil {
 		return lost(err)
 	}
 	t := state.Latest(o.Tokens)
@@ -883,7 +883,7 @@ func cmdGrant(ctx context.Context, g *global, args []string) error {
 			return err
 		}
 		fmt.Fprintf(g.stdout, "grant   %s to %s, %s, %s, until %s\n", gr.Txid, gr.Subject, field(gr.Role), field(gr.Scope), gr.Expiry)
-		if err := r.eng.OrgTransition(ctx, []*state.Grant{r.h.st.Org.GrantByTxid(gr.Txid)}, nil, "organisation token (admit)"); err != nil {
+		if err := r.eng.OrgTransition(ctx, []*state.Grant{r.h.st.Org.GrantByTxid(gr.Txid)}, nil, "organization token (admit)"); err != nil {
 			return lost(err)
 		}
 		t := state.Latest(r.h.st.Org.Tokens)
@@ -919,7 +919,7 @@ func cmdGrant(ctx context.Context, g *global, args []string) error {
 				}
 				gr := o.GrantByTxid(s)
 				if gr == nil {
-					return usage("grant %s is not one this organisation issued", s)
+					return usage("grant %s is not one this organization issued", s)
 				}
 				grants = append(grants, gr)
 				subjects[gr.Subject] = true

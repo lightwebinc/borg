@@ -207,7 +207,7 @@ func (h *harness) settle(name string) string {
 	return errb.String()
 }
 
-// orgOnly is an organisation with three members and no group yet: the next
+// orgOnly is an organization with three members and no group yet: the next
 // group mints the first record tree.
 func (h *harness) orgOnly() org {
 	h.t.Helper()
@@ -217,7 +217,7 @@ func (h *harness) orgOnly() org {
 	o.bob = h.identity("bob", false)
 	o.carol = h.identity("carol", false)
 	h.newHall("org")
-	h.must("org", "org", "create", "Example Organisation", "-member", o.alice, "-member", o.bob, "-member", o.carol)
+	h.must("org", "org", "create", "Example Organization", "-member", o.alice, "-member", o.bob, "-member", o.carol)
 	h.env["BORG_ORG"] = o.key
 	return o
 }

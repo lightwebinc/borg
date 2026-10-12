@@ -33,17 +33,17 @@ const (
 )
 
 // Policy is one policy record: the payload of a policy carrier's one output.
-// It is either a role definition or a binding, by Kind. The organisation's
+// It is either a role definition or a binding, by Kind. The organization's
 // version 2 token commits to the set of them by its policy root, so what a
 // role may do is a committed fact of the chain and not a claim of whoever
 // serves it.
 //
 // A policy record is in the clear: nothing in it is encrypted, so every host
-// and every follower of the hall reads an organisation's roles and bindings
+// and every follower of the hall reads an organization's roles and bindings
 // (spec section 16.16).
 type Policy struct {
 	Hall        string   // key 1
-	Org         []byte   // key 2, the organisation's identity key, and the carrier's owner
+	Org         []byte   // key 2, the organization's identity key, and the carrier's owner
 	Kind        uint64   // key 3, PolicyRole or PolicyBinding
 	Role        string   // key 4, the role this record defines or binds
 	Permissions []string // key 5, a definition's permissions, or a binding's attenuation
@@ -114,7 +114,7 @@ func checkPermissions(a []string) error {
 }
 
 // checkTo is key 6's rule: null, a group identifier of GroupIDLen bytes, or
-// an identity key that is neither the organisation nor the anyone key.
+// an identity key that is neither the organization nor the anyone key.
 func (p *Policy) checkTo() error {
 	switch len(p.To) {
 	case 0:
@@ -126,7 +126,7 @@ func (p *Policy) checkTo() error {
 			return err
 		}
 		if IsAnyone(p.To) || bytes.Equal(p.To, p.Org) {
-			return fmt.Errorf("%w: a binding to the organisation or the anyone key", ErrIdentity)
+			return fmt.Errorf("%w: a binding to the organization or the anyone key", ErrIdentity)
 		}
 		return nil
 	}
@@ -244,7 +244,7 @@ func DecodePolicy(b []byte) (*Policy, error) {
 // what that subject may do. Every field is a conclusion the caller reached by
 // the checks of spec section 13: that the subject is a current member, which
 // roles its current grants name (read in the clear, revealed or disclosed by
-// the subject), and which of the organisation's groups hold it at their
+// the subject), and which of the organization's groups hold it at their
 // latest token.
 type Subject struct {
 	// Key is the subject's identity key.
@@ -254,13 +254,13 @@ type Subject struct {
 	// Roles are the roles the subject's current grants name. A value that is
 	// not a well-formed role name names no role.
 	Roles []string
-	// Groups are the groups of this organisation whose latest token's
+	// Groups are the groups of this organization whose latest token's
 	// members include Key.
 	Groups [][GroupIDLen]byte
 }
 
 // Effective is the effective permission set of a subject at time now, over
-// the policy set of the organisation's latest token (spec section 5A.4): the
+// the policy set of the organization's latest token (spec section 5A.4): the
 // union of what the subject's own roles carry and what every binding that
 // reaches it carries, attenuated. The caller supplies only records it has
 // verified and found current; expiry is the one currency rule applied here,
@@ -274,7 +274,7 @@ func Effective(s Subject, set []*Policy, now time.Time) []string {
 	}
 	// A role's permissions are the intersection of every definition of it:
 	// more than one definition is equivocation, and the intersection is the
-	// only reading that cannot grant more than the organisation meant by
+	// only reading that cannot grant more than the organization meant by
 	// either (section 5A.1).
 	defined := map[string][]string{}
 	for _, p := range set {

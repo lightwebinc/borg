@@ -52,7 +52,7 @@ func offline(t *testing.T) (*Engine, *state.State) {
 	return e, st
 }
 
-// withGroup gives the state an organisation with a group of members at
+// withGroup gives the state an organization with a group of members at
 // seq 0, each holding a grant that ends at expiry.
 func withGroup(t *testing.T, e *Engine, st *state.State, members [][]byte, expiry time.Time) string {
 	t.Helper()
@@ -109,8 +109,8 @@ func TestGroupChangeRefusesBeforeBuilding(t *testing.T) {
 		{"remove a non-member", Change{Remove: [][]byte{stranger}}, "is not a member"},
 		{"add a member", Change{Add: [][]byte{a}}, "is a member of group"},
 		{"add a key with no grant", Change{Add: [][]byte{stranger}}, "holds no current grant"},
-		{"add the organisation", Change{Add: [][]byte{e.OrgKey()}}, "neither the organisation nor the anyone key"},
-		{"add the anyone key", Change{Add: [][]byte{borgrec.AnyoneKey()}}, "neither the organisation nor the anyone key"},
+		{"add the organization", Change{Add: [][]byte{e.OrgKey()}}, "neither the organization nor the anyone key"},
+		{"add the anyone key", Change{Add: [][]byte{borgrec.AnyoneKey()}}, "neither the organization nor the anyone key"},
 		{"nothing", Change{}, "changes nothing"},
 	} {
 		if _, err := e.GroupChange(ctx, id, c.ch); err == nil || !strings.Contains(err.Error(), c.want) {
@@ -137,7 +137,7 @@ func TestLostErrorSaysTheKeyIsDiscarded(t *testing.T) {
 
 // A group whose current epoch holds a token the index reports
 // rejoin-unrotated (one another tool built: this one never does) is still
-// the organisation's to run: its members fold, the flag is reported, and
+// the organization's to run: its members fold, the flag is reported, and
 // every transition of it begins a new epoch.
 func TestAFlaggedGroupStaysOperable(t *testing.T) {
 	e, st := offline(t)
