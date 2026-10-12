@@ -58,8 +58,9 @@ type SyncReport struct {
 	// OrgTokens and GroupTokens are the tokens adopted, Displaced those of
 	// this home's that are no longer in the chain (a reorganisation).
 	OrgTokens, GroupTokens, Displaced int
-	// Groups are the groups this home did not hold; Grants the grants.
-	Groups, Grants int
+	// Groups are the groups this home did not hold; Grants the grants;
+	// Policies the policy records.
+	Groups, Grants, Policies int
 	// Keys are the epoch keys opened from wraps to the signer key.
 	Keys    int
 	Missing []MissingKey
@@ -333,6 +334,9 @@ func (e *Engine) Sync(ctx context.Context, hall string, opt SyncOptions) (*SyncR
 	})
 	foreign, err := e.syncGrants(ctx, o, grants, rep)
 	if err != nil {
+		return nil, err
+	}
+	if err := e.syncPolicies(ctx, o, ov, rd, rep); err != nil {
 		return nil, err
 	}
 	e.syncTrees(ctx, grants, foreign, wraps, opt, rep)
@@ -666,4 +670,50 @@ func (e *Engine) syncPool(ctx context.Context, adopted []*reader.Tok, rep *SyncR
 			}
 		}
 	}
+}
+
+// syncPolicies takes every policy record the set holds that this home does
+// not. The set is not taken in part: a record missing here would read as a
+// role nobody holds, and the home's next transition would be built over a
+// set that is not the chain's.
+func (e *Engine) syncPolicies(ctx context.Context, o *state.Org, ov *reader.OrgView, rd *reader.Client, rep *SyncReport) error {
+	set := map[[32]byte]*reader.Car{}
+	for _, pa := range rd.PolicySet(ctx, ov) {
+		rep.Refused = append(rep.Refused, pa.Refused...)
+		for _, car := range pa.Policies {
+			if ov.InPolicySet(car.Carrier.Commitment) && set[car.Carrier.Commitment] == nil {
+				set[car.Carrier.Commitment] = car
+			}
+		}
+	}
+	if len(set) != len(ov.PolicySet) {
+		return syncIncomplete("the hosts answer %d of the %d policy record(s) in the set: the set is not taken in part (borg fill replays what a host lacks)", len(set), len(ov.PolicySet))
+	}
+	cars := make([]*reader.Car, 0, len(set))
+	for _, car := range set {
+		cars = append(cars, car)
+	}
+	sort.Slice(cars, func(i, j int) bool { return cars[i].Txid < cars[j].Txid })
+	for _, car := range cars {
+		ch := hex.EncodeToString(car.Carrier.Commitment[:])
+		if o.PolicyByCommitment(ch) != nil {
+			continue
+		}
+		p := car.Carrier.Policy
+		o.Policies = append(o.Policies, state.Policy{Txid: car.Txid, Commitment: ch,
+			Tree: car.Carrier.Funding.Txid.String(), Vout: car.Carrier.Funding.Index,
+			Kind: p.Kind, Role: p.Role, Permissions: p.Permissions, To: hex.EncodeToString(p.To),
+			Expiry: p.Expiry, Record: hex.EncodeToString(car.Carrier.Record),
+			Beef: hex.EncodeToString(car.Beef), Defined: true})
+		rep.Policies++
+	}
+	// A record this home holds that the set no longer does was retired by a
+	// token another instance built.
+	for i := range o.Policies {
+		p := &o.Policies[i]
+		if p.Defined && !p.Retired && set[hashOfHex(p.Commitment)] == nil {
+			p.Retired = true
+		}
+	}
+	return nil
 }

@@ -32,7 +32,7 @@ func addGrantFlags(fs interface {
 	Bool(name string, value bool, usage string) *bool
 }) grantFlags {
 	return grantFlags{
-		role:   fs.String("role", "member", "the grant's role: a label a client shows, 1 to 64 bytes"),
+		role:   fs.String("role", "member", "the grant's role: the role the policy set defines for it, 1 to 64 bytes"),
 		scope:  fs.String("scope", "member", "the grant's scope (spec section 5.3); member is what makes a membership"),
 		expiry: fs.String("expiry", "", "when the grant stops being current: a duration from now (8760h) or YYYY-MM-DDTHH:MM:SSZ (default one year)"),
 		admin:  fs.Bool("admin", false, "add admin to the scope (shown by clients; authorizes nothing on chain)"),
@@ -455,8 +455,8 @@ func (g *global) reportSync(out io.Writer, rep *engine.SyncReport) {
 	if rep.Displaced > 0 {
 		fmt.Fprintf(out, "sync    %d token(s) of this home's are no longer in the chain and were dropped\n", rep.Displaced)
 	}
-	fmt.Fprintf(out, "sync    took %d organisation token(s), %d group token(s) (%d new group(s)), %d grant(s), %d epoch key(s)\n",
-		rep.OrgTokens, rep.GroupTokens, rep.Groups, rep.Grants, rep.Keys)
+	fmt.Fprintf(out, "sync    took %d organisation token(s), %d group token(s) (%d new group(s)), %d grant(s), %d policy record(s), %d epoch key(s)\n",
+		rep.OrgTokens, rep.GroupTokens, rep.Groups, rep.Grants, rep.Policies, rep.Keys)
 	for _, m := range rep.Missing {
 		cur := ""
 		if m.Current {

@@ -330,6 +330,8 @@ type OrgView struct {
 	*ChainView
 	// Roll is the roll after the last usable token, ascending.
 	Roll [][32]byte
+	// PolicySet is the policy set after that token, ascending.
+	PolicySet [][32]byte
 	// Token is the last usable token's record.
 	Token *borgrec.Org
 }
@@ -346,7 +348,7 @@ func (c *Client) Org(ctx context.Context, hall string, org []byte) (*OrgView, er
 		f.Apply(t.Token.Org)
 		ov.Token = t.Token.Org
 	}
-	ov.Roll = f.Roll()
+	ov.Roll, ov.PolicySet = f.Roll(), f.Policy()
 	if ov.Token == nil {
 		return ov, fmt.Errorf("reader: the organisation's chain breaks its fold at seq 0 (%s)", v.Statuses[0])
 	}
@@ -357,6 +359,13 @@ func (c *Client) Org(ctx context.Context, hall string, org []byte) (*OrgView, er
 func (o *OrgView) InRoll(c [32]byte) bool {
 	i := sort.Search(len(o.Roll), func(i int) bool { return bytes.Compare(o.Roll[i][:], c[:]) >= 0 })
 	return i < len(o.Roll) && o.Roll[i] == c
+}
+
+// InPolicySet reports whether commitment c (hash byte order) is in the
+// policy set the latest usable token commits to.
+func (o *OrgView) InPolicySet(c [32]byte) bool {
+	i := sort.Search(len(o.PolicySet), func(i int) bool { return bytes.Compare(o.PolicySet[i][:], c[:]) >= 0 })
+	return i < len(o.PolicySet) && o.PolicySet[i] == c
 }
 
 // GroupView is a group's state from its canonical chain.

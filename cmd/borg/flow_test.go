@@ -550,7 +550,7 @@ func TestTwoHomesRaceAndBothStayUsable(t *testing.T) {
 	o := h.orgWithGroup()
 	h.block()
 	r := h.secondHome("org2")
-	if r.code != 0 || !strings.Contains(r.stdout, "took 1 organisation token(s), 1 group token(s) (1 new group(s)), 4 grant(s), 0 epoch key(s)") {
+	if r.code != 0 || !strings.Contains(r.stdout, "took 1 organisation token(s), 1 group token(s) (1 new group(s)), 4 grant(s), 0 policy record(s), 0 epoch key(s)") {
 		// The first home has not released epoch 0 yet (signers 2: one
 		// block after the token, by its next command).
 		if r.code != exitIncomplete || !strings.Contains(r.stdout, "epoch 0, the CURRENT epoch") {
@@ -678,7 +678,7 @@ func TestCopiedHomeCatchesUp(t *testing.T) {
 	h.block()
 	h.must("org", "org", "sync")
 	r := h.must("org2", "org", "remove", o.carol, "-group", o.group)
-	if !strings.Contains(r.stderr, "sync    took 1 organisation token(s), 2 group token(s) (0 new group(s)), 1 grant(s), 1 epoch key(s)") ||
+	if !strings.Contains(r.stderr, "sync    took 1 organisation token(s), 2 group token(s) (0 new group(s)), 1 grant(s), 0 policy record(s), 1 epoch key(s)") ||
 		strings.Count(r.stderr, "is no longer spent from this home") != 2 || !strings.Contains(r.stderr, "removed (spent by another instance)") ||
 		!strings.Contains(r.stdout, "epoch 2 (a new epoch") {
 		t.Fatalf("the copy:\n%s\n%s", r.stdout, r.stderr)
@@ -728,7 +728,7 @@ func TestNewMachineRebuildsFromHosts(t *testing.T) {
 	h.must("org", "org", "remove", o.bob, "-group", o.group)
 	want := h.must("org", "org", "show").stdout
 	r = h.secondHome("org2")
-	if r.code != 0 || !strings.Contains(r.stdout, "took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 2 epoch key(s)") ||
+	if r.code != 0 || !strings.Contains(r.stdout, "took 2 organisation token(s), 4 group token(s) (1 new group(s)), 3 grant(s), 0 policy record(s), 2 epoch key(s)") ||
 		!strings.Contains(r.stdout, "missing group "+o.group+" epoch 0: the signer key was not a member of this epoch") {
 		t.Fatalf("org sync on a new machine:\n%s\n%s", r.stdout, r.stderr)
 	}
@@ -739,7 +739,7 @@ func TestNewMachineRebuildsFromHosts(t *testing.T) {
 		t.Fatalf("the opaque grants' fields were not read back:\n%s", want)
 	}
 	r = h.must("org2", "org", "sync")
-	if !strings.Contains(r.stdout, "took 0 organisation token(s), 0 group token(s) (0 new group(s)), 0 grant(s), 0 epoch key(s)") {
+	if !strings.Contains(r.stdout, "took 0 organisation token(s), 0 group token(s) (0 new group(s)), 0 grant(s), 0 policy record(s), 0 epoch key(s)") {
 		t.Fatalf("a second sync:\n%s", r.stdout)
 	}
 	// The rebuilt home runs the organisation: it adds a member, who is
@@ -1271,6 +1271,44 @@ func TestPolicyRefusals(t *testing.T) {
 		r := h.run("org", "", c.args...)
 		if r.code == 0 {
 			t.Fatalf("%v was accepted:\n%s", c.args, r.stdout)
+		}
+	}
+}
+
+// A second home of the organisation rebuilds the policy set from the hosts
+// alone, and decides the same way the first does.
+func TestSyncRebuildsThePolicySet(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "role", "define", "auditor", "-permission", "bstore/get/audit/*")
+	h.must("org", "bind", "releaser", "-to", o.group)
+	h.must("org", "bind", "auditor", "-to", o.alice, "-expiry", "2099-12-31T23:59:59Z")
+	// One record retired before the rebuild: the set the hosts answer is
+	// what the latest token commits to, not everything ever published.
+	h.must("org", "role", "retire", "auditor")
+	// The signer key joins every group, so a second home can open the
+	// current epoch and its sync is clean (spec section 7.4).
+	h.must("org", "org", "signer")
+
+	r := h.secondHome("org2")
+	if r.code != 0 || !strings.Contains(r.stdout, "policy record(s)") {
+		t.Fatalf("org sync on a second home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "3 policy record(s)") {
+		t.Fatalf("the set the hosts answer is the one the latest token commits to:\n%s", r.stdout)
+	}
+	// The rebuilt home holds the same set, read from its own record.
+	local := h.must("org2", "policy", "show", "-local").stdout
+	if strings.Count(local, "\n") != 3 || !strings.Contains(local, "releaser") || strings.Contains(local, "auditor bstore") {
+		t.Fatalf("the rebuilt home's set:\n%s", local)
+	}
+	// And decides the same way the first home does, from the hosts.
+	for _, home := range []string{"org", "org2"} {
+		got := h.must(home, "policy", "check", o.alice, "bsecret/release/payroll").stdout
+		if !strings.HasPrefix(got, "ALLOW") {
+			t.Fatalf("%s decides differently:\n%s", home, got)
 		}
 	}
 }
