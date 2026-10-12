@@ -95,7 +95,7 @@ variables.
 | `terms [URL]` | no | `history_host` or URL | prints a host's terms document |
 | `payee key -out FILE` | yes | nothing | writes `BORG_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
 | `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `chain`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
-| `doctor` | optional | nothing | the home's state (trees, organization, transition in flight, outbox, rotation debt, grants expiring, rotations due, an epoch key not held, unmined payments), the chain view, broadcaster and fee policy in use, and whether the headers, hosts and priced host answer; reads only |
+| `doctor` | optional | nothing | the home's state (trees, organization, transition in flight, outbox, rotation debt, bindings that authorize nothing, grants expiring, rotations due, an epoch key not held, unmined payments), the chain view, broadcaster and fee policy in use, and whether the headers, hosts and priced host answer; reads only |
 | `version` | no | nothing | prints the version |
 
 A reader's settings are `hosts`, `header_url`, `hall` and `org` (the
@@ -269,6 +269,13 @@ current epoch's key (another home began the epoch), and on `epoch rotate`.
 A key change removes the old key, so it rotates too. Every group transition first removes the group's
 **rotation debt**: members whose grant is no longer current by the
 organization's own record (revoked in the roll, swept, or expired).
+
+**a binding that authorizes nothing**: a binding in the policy set naming
+a role the set does not define, bound to a key with no current membership
+grant or to a group this organization does not hold, or whose expiry has
+passed. The fold ignores it, so it grants nothing and is harmless; `doctor`
+names it because a reader of the set would otherwise take it for authority
+someone holds. `borg unbind <txid>` clears it.
 
 **Wraps.** Once a group token is mined (and one further block when
 `signers` is above one), the epoch key is wrapped to each member who has

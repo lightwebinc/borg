@@ -1461,3 +1461,34 @@ func TestBindingAnUndefinedRoleSaysSo(t *testing.T) {
 		t.Fatalf("the binding grants once the role is defined:\n%s", got)
 	}
 }
+
+// doctor names a binding that cannot authorize anything: the policy set's
+// analogue of rotation debt. The fold ignores such a binding, so it is
+// harmless, but whoever reads the set should not be misled by it.
+func TestDoctorNamesABindingThatAuthorizesNothing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "bind", "releaser", "-to", o.group)
+	// A live binding is not named.
+	if got := h.must("org", "doctor").stdout; strings.Contains(got, "AUTHORIZES NOTHING") {
+		t.Fatalf("a live binding:\n%s", got)
+	}
+	// One to a role nothing defines, and one to a key with no grant.
+	h.must("org", "bind", "auditor", "-to", o.group)
+	h.must("org", "grant", "revoke", o.alice)
+	h.must("org", "bind", "releaser", "-to", o.alice)
+	got := h.must("org", "doctor").stdout
+	for _, want := range []string{
+		"AUTHORIZES NOTHING, this set defines no role auditor",
+		"holds no current membership grant",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("doctor did not name %q:\n%s", want, got)
+		}
+	}
+	if n := strings.Count(got, "AUTHORIZES NOTHING"); n != 2 {
+		t.Fatalf("want two dead bindings, got %d:\n%s", n, got)
+	}
+}

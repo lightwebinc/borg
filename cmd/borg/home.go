@@ -979,6 +979,28 @@ func (g *global) doctorState(out interface{ Write([]byte) (int, error) }, st *st
 			fmt.Fprintf(out, "transition  %s %s persisted and not yet mined; the next command finishes it\n", field(p.What), p.Txid)
 		}
 		now := time.Now()
+		// A binding that cannot authorize anything: the policy set's
+		// analogue of rotation debt. It is harmless (the fold ignores
+		// it) but it misleads whoever reads the set, so name it.
+		for _, p := range current(o) {
+			if p.Kind != borgrec.PolicyBinding {
+				continue
+			}
+			var why string
+			switch {
+			case !definesRole(o, p.Role):
+				why = "this set defines no role " + p.Role
+			case p.Expiry != "" && !bindingLive(p.Expiry, now):
+				why = "its expiry " + p.Expiry + " has passed"
+			case len(p.To) == 2*borgrec.GroupIDLen && o.Group(p.To) == nil:
+				why = "this organisation holds no group " + p.To
+			case len(p.To) != 2*borgrec.GroupIDLen && currentAt(o, p.To, now) == nil:
+				why = p.To + " holds no current membership grant"
+			}
+			if why != "" {
+				fmt.Fprintf(out, "binding     %s %s -> %s: AUTHORIZES NOTHING, %s (borg unbind %s)\n", p.Txid, p.Role, p.To, why, p.Txid)
+			}
+		}
 		for i := range o.Groups {
 			gr := &o.Groups[i]
 			members, _, err := engine.Members(gr)
@@ -1142,4 +1164,24 @@ func plain(s string) string {
 		lines[i] = b.String()
 	}
 	return strings.Join(lines, "\n")
+}
+
+// definesRole reports whether this home's policy set defines the role.
+func definesRole(o *state.Org, role string) bool {
+	for _, p := range current(o) {
+		if p.Kind == borgrec.PolicyRole && p.Role == role {
+			return true
+		}
+	}
+	return false
+}
+
+// bindingLive reports whether an expiry has not passed, allowing the clock
+// the same skew a reader allows (spec section 5.2).
+func bindingLive(expiry string, now time.Time) bool {
+	t, err := borgrec.ParseExpiry(expiry)
+	if err != nil {
+		return false
+	}
+	return now.Before(t.Add(borgrec.ExpirySkew))
 }

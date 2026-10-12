@@ -907,8 +907,15 @@ tooling builds, signs, waits for the proof, and publishes in this order.
   their commitments, and a sweep of their revocation outpoints), and remove
   the member from every group that holds them, each removal with its new
   epoch.
-- **Change a role.** Revoke and reissue the grant in one organization token
-  (section 5.6); no group changes.
+- **Change a role.** Three changes answer to this, and which one is meant
+  decides the work. To change *what a role may do*, define the role again
+  with the permissions it should carry: one transition changes it for every
+  holder, and nothing a member holds is reissued (section 5A.1). To change
+  *who holds a role*, bind or unbind it to the group or the key: again one
+  transition, and the grant is untouched. Only to change the role *named in
+  a member's own grant* is the grant revoked and reissued in one
+  organization token (section 5.6); no group changes. The first two are the
+  ordinary case, and the reason the policy set exists.
 - **A member's key changes.** The new key is a new identity: a grant to the
   new key, the old one revoked, and in every group a transition that removes
   the old key and adds the new one. Because it removes a key, it begins a new
