@@ -79,8 +79,8 @@ variables.
 | `role list` | optional | nothing | the roles the policy set defines, with their permissions |
 | `bind <role> -to <group\|key>` | yes, the organization's | a publisher's | gives the role to a group identifier or to one identity key; `-only` keeps part of it and can never widen it, `-expiry` ends it |
 | `unbind <txid>` | yes, the organization's | a publisher's | retires one binding by its carrier's txid, the same two halves as a retire |
-| `policy [show]` | optional | nothing | the policy set this home published: its definitions and its bindings |
-| `policy check <key> <permission>` | optional | nothing | folds the set against what this home knows of the subject and says ALLOW or DENY, with the permissions it holds. It is this home's own state, not a host's answer |
+| `policy [show]` | optional | a reader's settings | the organization's policy set from the hosts, every record verified and each host's answer held to the root the latest token commits to. `-role R` asks for one role's definition and the bindings that give it, `-bound X` for the bindings naming one group or key, each answered with a path into the policy root. `-local` reads this home's own record instead |
+| `policy check <key> <permission>` | optional | a reader's settings | decides one permission as a service does (spec section 13): the subject's current grants, the groups that hold it and the policy set, each from the hosts and checked against this machine's own headers, folded and matched. It fails closed and prints the state it decided over. `-local` uses this home's own record |
 | `group create <name>` | yes, the organization's | a publisher's | a group of `-member` keys (each with a current grant), epoch 0 wrapped to each; `-rotate-on-join`, `-rotate-every` |
 | `group list` | optional | nothing, or a reader's settings with `-org` | the organization's groups: the home's own record, or another organization's from the hosts |
 | `group show <group>` | optional | a reader's settings | the group's chain folded from seq 0, and its members enumerated from the current epoch's wraps; stray and incomplete wraps reported |

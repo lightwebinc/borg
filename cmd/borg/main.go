@@ -76,8 +76,10 @@ the organization (this home's identity key is the organization):
   role retire <name> | role list
   bind <role> -to <group|key>   give the role to a group or to one key (-only, -expiry)
   unbind <txid>                 retire one binding
-  policy [show]                 the policy set this organization published
-  policy check <key> <perm>     what the organization's own state says a key may do
+  policy [show] [-role|-bound]  the organization's policy set, read from the hosts;
+                                -role or -bound asks for part of it, with a path
+  policy check <key> <perm>     decide one permission as a service does: from the
+                                hosts, against this machine's own block headers
   group create <name>           a group with a fresh epoch key, wrapped to each member
   group list                    the organization's groups
   epoch rotate <group>          begin a new epoch with the same members

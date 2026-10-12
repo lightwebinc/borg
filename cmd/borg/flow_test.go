@@ -1196,8 +1196,40 @@ func TestRolesDecide(t *testing.T) {
 	// A subject of no organisation holds nothing, whatever the set says.
 	dave := h.identity("dave", false)
 	r = h.must("org", "policy", "check", dave, "bsecret/release/payroll")
-	if !strings.HasPrefix(r.stdout, "DENY") {
+	if !strings.HasPrefix(r.stdout, "DENY") || !strings.Contains(r.stdout, "why     not-member") {
 		t.Fatalf("a stranger was allowed:\n%s", r.stdout)
+	}
+
+	// The decision is read from the hosts and names the state it rested
+	// on, which is what a service writes into a receipt. A member of the
+	// organisation who is not its owner reaches the same verdict.
+	r = h.must("alice", "policy", "check", o.alice, "bsecret/release/payroll")
+	if !strings.HasPrefix(r.stdout, "ALLOW") {
+		t.Fatalf("a member's own read of the hosts:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "1 grant(s), 3 policy record(s), 1 group(s)") {
+		t.Fatalf("the decision does not name what it rested on:\n%s", r.stdout)
+	}
+	// The same question answered from the home's own record, which only
+	// the organisation holds.
+	r = h.must("org", "policy", "check", o.alice, "bsecret/release/payroll", "-local")
+	if !strings.HasPrefix(r.stdout, "ALLOW") {
+		t.Fatalf("the local read:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// The whole set is answered without a path: a reader checks it by
+	// computing the root, which show does for every host before it prints.
+	r = h.must("alice", "policy", "show")
+	if strings.Count(r.stdout, "checked against the set") != 3 {
+		t.Fatalf("policy show from the hosts:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// One role's records are answered with a path into the policy root.
+	r = h.must("alice", "policy", "show", "-role", "releaser")
+	if strings.Count(r.stdout, "path INTO THE POLICY ROOT verified") != 3 {
+		t.Fatalf("policy show -role:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("alice", "policy", "show", "-bound", o.alice)
+	if strings.Count(r.stdout, "path INTO THE POLICY ROOT verified") != 1 {
+		t.Fatalf("policy show -bound:\n%s\n%s", r.stdout, r.stderr)
 	}
 
 	// Retiring the definition takes the permissions away from everyone,

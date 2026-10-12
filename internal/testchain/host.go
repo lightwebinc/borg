@@ -78,14 +78,15 @@ type tokRow struct {
 }
 
 type carRow struct {
-	txid  string
-	hall  string
-	org   string
-	beef  []byte
-	c     [32]byte
-	op    string
-	grant *borgrec.Grant
-	wrap  *borgrec.WrapRecord
+	txid   string
+	hall   string
+	org    string
+	beef   []byte
+	c      [32]byte
+	op     string
+	grant  *borgrec.Grant
+	policy *borgrec.Policy
+	wrap   *borgrec.WrapRecord
 }
 
 type sweepRow struct {
@@ -224,10 +225,10 @@ func (h *Host) submit(w http.ResponseWriter, r *http.Request) {
 		h.coins[transaction.Outpoint{Txid: *txid, Index: uint32(i)}] = topic //nolint:gosec // an output index
 	}
 	switch a.Kind {
-	case borgrec.TxGrant, borgrec.TxWrap:
+	case borgrec.TxGrant, borgrec.TxPolicy, borgrec.TxWrap:
 		c := a.Carrier
 		h.carriers[id] = &carRow{txid: id, hall: hall, org: hex.EncodeToString(c.Owner), beef: body, c: c.Commitment,
-			op: c.Funding.String(), grant: c.Grant, wrap: c.Wrap}
+			op: c.Funding.String(), grant: c.Grant, policy: c.Policy, wrap: c.Wrap}
 	case borgrec.TxOrgToken, borgrec.TxGroupToken:
 		alone := cloneTx(tx)
 		stored, err := alone.AtomicBEEF(false)
@@ -384,6 +385,22 @@ func (h *Host) roll(hall, org string) ([][32]byte, uint64, bool) {
 		roll, seq, ok = f.Roll(), t.seq, true
 	}
 	return roll, seq, ok
+}
+
+// policySet is the policy set after the highest token whose fold holds,
+// with that token's seq.
+func (h *Host) policySet(hall, org string) ([][32]byte, uint64, bool) {
+	f := borgrec.NewOrgFold()
+	var set [][32]byte
+	var seq uint64
+	ok := false
+	for _, t := range h.fold(hall, org, "org") {
+		if f.Apply(t.tok.Org) != borgrec.StatusConsistent {
+			break
+		}
+		set, seq, ok = f.Policy(), t.seq, true
+	}
+	return set, seq, ok
 }
 
 // members are a group's members after the highest token whose fold holds.
@@ -555,6 +572,52 @@ func (h *Host) Answer(q *borgrec.Question) ([]Output, error) {
 			rs = append(rs, c)
 		}
 		return cars(rs), nil
+	case "policy", "policy-after", "role", "role-after", "bound", "bound-after":
+		org := m["org"]
+		if strings.HasPrefix(q.Class.Name, "policy") {
+			org = m["policy"]
+		}
+		set, seq, ok := h.policySet(hall, org)
+		if !ok {
+			return []Output{}, nil
+		}
+		in := map[[32]byte]bool{}
+		for _, c := range set {
+			in[c] = true
+		}
+		var rs []*carRow
+		for _, c := range h.carriers {
+			if c.policy == nil || c.hall != hall || c.org != org || !in[c.c] {
+				continue
+			}
+			if r := m["role"]; r != "" && c.policy.Role != r {
+				continue
+			}
+			if to := m["boundTo"]; to != "" && hex.EncodeToString(c.policy.To) != to {
+				continue
+			}
+			rs = append(rs, c)
+		}
+		out := cars(rs)
+		if !strings.HasPrefix(q.Class.Name, "policy") {
+			for i := range out {
+				_, tx, _, _ := guard.ParseBEEF(out[i].Beef, 8<<20)
+				ic, err := borgrec.ProvePolicy(seq, set, [32]byte(*tx.TxID()))
+				if err == nil {
+					out[i].Context, _ = ic.Encode()
+				}
+			}
+		}
+		if a := m["after"]; a != "" {
+			var kept []Output
+			for _, o := range out {
+				if _, tx, _, err := guard.ParseBEEF(o.Beef, 8<<20); err == nil && tx.TxID().String() > a {
+					kept = append(kept, o)
+				}
+			}
+			out = kept
+		}
+		return limit(out, n), nil
 	case "sweep":
 		out := []Output{}
 		for _, s := range h.sweeps {
