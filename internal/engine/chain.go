@@ -1286,6 +1286,20 @@ func (e *Engine) ConfirmGrants(ctx context.Context, commitments []string) error 
 	return first
 }
 
+// policyQuery is the narrowest free class that answers one policy record:
+// the role class for a definition, the bound class for a binding. The whole
+// policy class would do, but one question reads one page (64 outputs), so a
+// set larger than a page would hide a record behind it.
+func (e *Engine) policyQuery(pr *state.Policy) reader.Query {
+	q := reader.Query{"hall": e.St.Org.Hall, "org": e.orgHex()}
+	if pr.Kind == borgrec.PolicyBinding {
+		q["boundTo"] = pr.To
+		return q
+	}
+	q["role"] = pr.Role
+	return q
+}
+
 // ConfirmPolicies is ConfirmGrants for the policy records a token defines.
 // It matters more than it does for a grant: a reader holds the whole set to
 // the root the latest token commits to, so one record a host lacks makes
@@ -1296,13 +1310,13 @@ func (e *Engine) ConfirmPolicies(ctx context.Context, commitments []string) erro
 	if rd == nil || o == nil {
 		return nil
 	}
-	q := reader.Query{"hall": o.Hall, "policy": e.orgHex()}
 	var first error
 	for _, c := range commitments {
 		pr := o.PolicyByCommitment(c)
 		if pr == nil {
 			continue
 		}
+		q := e.policyQuery(pr)
 		held := 0
 		var missing []string
 		for _, host := range rd.Hosts {

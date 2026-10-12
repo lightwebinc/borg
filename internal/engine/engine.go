@@ -767,7 +767,12 @@ func (e *Engine) confirm(p state.Pending) unicast.Confirm {
 		// the token that defines it: the policy classes answer the set a
 		// token commits to. So an answer that holds nothing for it counts
 		// here, and ConfirmPolicies settles it once the token is published.
-		q = reader.Query{"hall": p.Hall, "policy": p.Org}
+		// The class is the narrow one for the record's kind (policyQuery).
+		pr := e.policy(p.Txid)
+		if pr == nil {
+			return nil
+		}
+		q = e.policyQuery(pr)
 		return func(ctx context.Context, host string) (bool, error) {
 			ok, err := e.Legs.Reader.Held(ctx, host, q, p.Txid)
 			if ok || err != nil {
