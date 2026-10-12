@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -191,16 +192,44 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 	if !sub.Member {
 		return d
 	}
-	groups, gerrs := c.GroupsOf(ctx, ov.Hall, ov.Org, subject)
+	// The hosts' member-of answer names candidate groups; it is not
+	// evidence. Each one's chain is established and folded here, and the
+	// subject counts as a member only where this reader's own fold of
+	// verified tokens says so. A group that cannot be established, or whose
+	// chain breaks its fold, contributes nothing: leaving a group out can
+	// only take permissions away, so this fails closed.
+	candidates, gerrs := c.GroupsOf(ctx, ov.Hall, ov.Org, subject)
 	for h, err := range gerrs {
 		d.HostErr[h] = err
 	}
-	d.Groups = groups
-	for _, g := range groups {
+	for _, g := range candidates {
 		b, err := hex.DecodeString(g)
 		if err != nil || len(b) != borgrec.GroupIDLen {
 			continue
 		}
+		gv, err := c.Group(ctx, ov.Hall, ov.Org, g)
+		if err != nil {
+			d.Refused = append(d.Refused, Refusal{Txid: g, Reason: "group", Err: err})
+			continue
+		}
+		if u := gv.Usable(); u < len(gv.Tokens) {
+			d.Refused = append(d.Refused, Refusal{Txid: g, Reason: "group",
+				Err: fmt.Errorf("the group's chain folds to %s at seq %d, so its membership is not taken", gv.Statuses[u], u)})
+			continue
+		}
+		holds := false
+		for _, m := range gv.Members {
+			if bytes.Equal(m, subject) {
+				holds = true
+				break
+			}
+		}
+		if !holds {
+			d.Refused = append(d.Refused, Refusal{Txid: g, Reason: "group",
+				Err: errors.New("a host named this group, and its own chain does not hold the subject")})
+			continue
+		}
+		d.Groups = append(d.Groups, g)
 		sub.Groups = append(sub.Groups, [borgrec.GroupIDLen]byte(b))
 	}
 	// The set the latest token commits to, taken from the hosts and held to

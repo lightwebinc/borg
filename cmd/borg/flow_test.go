@@ -1312,3 +1312,61 @@ func TestSyncRebuildsThePolicySet(t *testing.T) {
 		}
 	}
 }
+
+// A host that answers member-of with a group the group's own chain does
+// not hold grants nothing: the decision folds every candidate group itself,
+// so a host cannot hand a subject a role by naming a group.
+func TestALyingHostCannotGrantThroughAGroup(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	// A second group holding alice alone, bound to a role.
+	r := h.must("org", "group", "create", "secrets", "-member", o.alice)
+	m := groupLine.FindStringSubmatch(r.stdout)
+	if m == nil {
+		t.Fatalf("group create:\n%s\n%s", r.stdout, r.stderr)
+	}
+	secrets := m[1]
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "bind", "releaser", "-to", secrets)
+
+	// Alice is in it and holds the role; bob is in the other group only.
+	if got := h.must("alice", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "ALLOW") {
+		t.Fatalf("alice is in the bound group:\n%s", got)
+	}
+	got := h.must("bob", "policy", "check", o.bob, "bsecret/release/payroll").stdout
+	if !strings.HasPrefix(got, "DENY") || !strings.Contains(got, "1 group(s)") {
+		t.Fatalf("bob is in one group, which is not the bound one:\n%s", got)
+	}
+
+	// Now both hosts answer member-of for bob with every group of the
+	// organisation, the bound one included. The decision establishes each
+	// group's chain itself, finds bob in neither, and still denies.
+	// member-of for bob is answered with every group of the organisation.
+	all := func(q *borgrec.Question, outs []testOutput) []testOutput {
+		if q.Class.Name != "member-of" && q.Class.Name != "member-of-after" {
+			return outs
+		}
+		var groups *borgrec.Class
+		for i := range borgrec.Classes {
+			if borgrec.Classes[i].Name == "groups" {
+				groups = &borgrec.Classes[i]
+			}
+		}
+		out, err := h.a.Answer(&borgrec.Question{Class: *groups, Members: map[string]string{
+			"hall": q.Members["hall"], "groupsOf": q.Members["org"],
+		}})
+		if err != nil {
+			return outs
+		}
+		return out
+	}
+	h.a.Rewrite, h.b.Rewrite = all, all
+	r = h.run("bob", "", "policy", "check", o.bob, "bsecret/release/payroll")
+	if !strings.HasPrefix(r.stdout, "DENY") {
+		t.Fatalf("a host naming a group granted a role:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "does not hold the subject") {
+		t.Fatalf("the decision does not say it refused the group:\n%s", r.stderr)
+	}
+}

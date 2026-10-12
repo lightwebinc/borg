@@ -64,7 +64,9 @@ any tag.
   procedure of spec section 13 for one subject, and `Decision`, which
   carries the verdict, the permissions held, and the token, grants, policy
   records and groups it rested on. Both fail closed: a read that could not
-  be completed is `incomplete` and denies.
+  be completed is `incomplete` and denies, and a group a host names counts
+  only where that group's own chain, folded here from verified tokens,
+  holds the subject.
 - `Latest`, `Fresh`, `Spends`. `Latest` takes unspent only on a spend
   source's `""` with a nil error; with bcommon's `nodeapi.Asset` that is
   the node's status `OK`, and every other answer is an error wrapping
