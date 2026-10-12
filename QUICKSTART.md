@@ -78,7 +78,6 @@ image>`), or set `BORG_IMAGE`, `BORG_HOST_IMAGE` and `DEVCHAIN_IMAGE` to
 published ones.
 
 ```mermaid
-%%{init: {"flowchart": {"diagramPadding": 48}}}%%
 flowchart LR
   O["borg (the organization)"] -->|"submit, each host"| HA["host-a"]
   O -->|"submit, each host"| HB["host-b"]
@@ -91,6 +90,11 @@ flowchart LR
   O -->|"settle, proofs, headers"| C["chain (local)"]
   HA -->|headers| C
   HB -->|headers| C
+  %% The last node is an invisible spacer in the rightmost rank: the rendered
+  %% viewer places its zoom and pan controls over the bottom-right corner.
+  HA ~~~ pad
+  pad["&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;"]:::pad
+  classDef pad fill:none,stroke:none,color:transparent
 ```
 
 ### 1. Start the local chain

@@ -6,7 +6,6 @@ cannot change once published is [frozen.md](frozen.md).
 ## The parts
 
 ```mermaid
-%%{init: {"flowchart": {"diagramPadding": 48}}}%%
 flowchart LR
   subgraph org["organization's machine"]
     OB["borg command"] --- OH[("home<br/>key, pool, state")]
@@ -29,6 +28,11 @@ flowchart LR
   MB -->|headers| HS
   BSV -.-> N
   BSV -.-> HS
+  %% The last node is an invisible spacer in the rightmost rank: the rendered
+  %% viewer places its zoom and pan controls over the bottom-right corner.
+  BSV ~~~ pad
+  pad["&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;"]:::pad
+  classDef pad fill:none,stroke:none,color:transparent
 ```
 
 | Part | What it is | Where |

@@ -20,7 +20,6 @@ whose key the removed member never receives.
 ## How it works
 
 ```mermaid
-%%{init: {"flowchart": {"diagramPadding": 48}}}%%
 flowchart LR
   O["borg (organization)"] -->|"grants, policy records, tokens, wraps"| H["overlay hosts<br/>tm_borg_&lt;name&gt;_&lt;suffix&gt;, ls_borg"]
   O -->|"one small tx per change"| B[("BSV blockchain")]
@@ -28,6 +27,11 @@ flowchart LR
   M -->|headers| S["header source<br/>woc:main"]
   B -.-> S
   H -. "records + proofs" .-> M
+  %% The last node is an invisible spacer in the rightmost rank: the rendered
+  %% viewer places its zoom and pan controls over the bottom-right corner.
+  B ~~~ pad
+  pad["&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;"]:::pad
+  classDef pad fill:none,stroke:none,color:transparent
 ```
 
 - **Membership is a certificate.** Each member holds a BRC-52 certificate
