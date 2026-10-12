@@ -131,8 +131,9 @@ func (o *OrgView) PolicyPathHolds(car *Car) bool {
 type Decision struct {
 	// Allow is the answer. It is false whenever the read was incomplete.
 	Allow bool
-	// Reason is a short label when Allow is false: not-member, no-match,
-	// incomplete, or stale.
+	// Reason is a short label when Allow is false: not-member, incomplete
+	// or no-match. Effective leaves it empty when the subject is a current
+	// member and the read completed, because it answers no question.
 	Reason string
 	// Effective is the permission set the subject holds.
 	Effective []string
@@ -275,7 +276,9 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 	sortCommitments(d.Grants)
 	sortCommitments(d.Policies)
 	d.Effective = borgrec.Effective(sub, set, now)
-	d.Allow, d.Reason = false, "no-match"
+	// Effective answers no permission question, so it leaves no reason: a
+	// caller that asks one gets its reason from Allows.
+	d.Reason = ""
 	return d
 }
 
@@ -284,15 +287,16 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 // could not be completed, or a permission no record grants.
 func (c *Client) Allows(ctx context.Context, ov *OrgView, subject []byte, permission string, spends Spends, now time.Time) (Decision, error) {
 	d := c.Effective(ctx, ov, subject, spends, now)
-	if d.Reason == "incomplete" || d.Reason == "not-member" {
+	if d.Reason != "" {
 		return d, nil
 	}
 	ok, err := borgrec.Allows(d.Effective, permission)
 	if err != nil {
 		return d, err
 	}
-	if ok {
-		d.Allow, d.Reason = true, ""
+	d.Allow = ok
+	if !ok {
+		d.Reason = "no-match"
 	}
 	return d, nil
 }
