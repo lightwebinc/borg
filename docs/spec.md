@@ -664,7 +664,13 @@ a subject `K` in an organization `O`, at the reader's clock:
    defines it, contributes that definition's permissions, unattenuated.
 3. **Group bindings.** For each group of `O` whose canonical latest token's
    members include `K`, every current binding whose `to` is that group's
-   identifier contributes its role's permissions, attenuated.
+   identifier contributes its role's permissions, attenuated. Which groups
+   hold `K` is settled by folding each group's own chain (section 4.3), not
+   by what a host answers the `member-of` class: that answer names
+   candidates, and a reader that took it as evidence would let one host hand
+   a subject a role by naming a group. Leaving a group out can only take
+   permissions away, so a group a reader cannot establish contributes
+   nothing.
 4. **Subject bindings.** Every current binding whose `to` is `K` contributes
    its role's permissions, attenuated.
 
