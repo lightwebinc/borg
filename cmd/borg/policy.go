@@ -248,15 +248,38 @@ func (g *global) publishPolicy(ctx context.Context, req engine.PolicyReq, what s
 		return err
 	}
 	defer r.close(ctx, g)
+	// Two definitions of one role in the set are equivocation, which a
+	// reader reads as the intersection of their permissions. The tooling
+	// never leaves one: it retires the definition it replaces in the same
+	// transition that defines the new one (spec section 5A.1).
+	var replaced []*state.Policy
+	defined := false
+	for _, old := range current(r.h.st.Org) {
+		if old.Kind == borgrec.PolicyRole && old.Role == req.Role {
+			defined = true
+			if req.To == nil {
+				replaced = append(replaced, old)
+			}
+		}
+	}
+	// A binding names a role; it does not carry its permissions. Bound to a
+	// role this set does not define, it authorizes nothing (spec 5A.4).
+	if req.To != nil && !defined {
+		g.say("this set defines no role %s; the binding authorizes nothing until it does", req.Role)
+	}
 	p, err := r.eng.PublishPolicy(ctx, req)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(g.stdout, "%-7s %s %s %s\n", what, p.Txid, p.Role, strings.Join(p.Permissions, " "))
-	if err := r.eng.OrgTransitionWith(ctx, nil, nil, []*state.Policy{r.h.st.Org.PolicyByTxid(p.Txid)}, nil, "organisation token (define)"); err != nil {
+	if err := r.eng.OrgTransitionWith(ctx, nil, nil, []*state.Policy{r.h.st.Org.PolicyByTxid(p.Txid)}, replaced, "organisation token (define)"); err != nil {
 		return lost(err)
 	}
 	t := state.Latest(r.h.st.Org.Tokens)
+	if len(replaced) > 0 {
+		fmt.Fprintf(g.stdout, "org     seq %d %s defines it and retires %d it replaces\n", t.Seq, t.Txid, len(replaced))
+		return g.sweepPolicies(ctx, r, replaced)
+	}
 	fmt.Fprintf(g.stdout, "org     seq %d %s defines it\n", t.Seq, t.Txid)
 	return nil
 }
@@ -276,6 +299,12 @@ func (g *global) retirePolicy(ctx context.Context, r *orgRun, ps []*state.Policy
 		g.say("the records are out of the set; their carriers are not retracted (borg unbind -by sweep)")
 		return nil
 	}
+	return g.sweepPolicies(ctx, r, ps)
+}
+
+// sweepPolicies retracts the carriers of records already out of the set.
+func (g *global) sweepPolicies(ctx context.Context, r *orgRun, ps []*state.Policy) error {
+	o := r.h.st.Org
 	trees := map[string][]uint32{}
 	var order []string
 	for _, p := range ps {

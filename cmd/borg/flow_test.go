@@ -1404,3 +1404,60 @@ func TestASweptPolicyRecordGrantsNothing(t *testing.T) {
 		t.Fatalf("the record is still in the set:\n%s", got)
 	}
 }
+
+// Redefining a role replaces the definition it supersedes in the same
+// transition, so the set never holds two definitions of one role and the
+// decision follows the new permissions rather than their intersection
+// (spec section 5A.1).
+func TestRedefiningARoleReplacesIt(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "bind", "releaser", "-to", o.group)
+	if got := h.must("org", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "ALLOW") {
+		t.Fatalf("the first definition:\n%s", got)
+	}
+	r := h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/wages")
+	if !strings.Contains(r.stdout, "retires 1 it replaces") {
+		t.Fatalf("role define did not retire the definition it replaces:\n%s", r.stdout)
+	}
+	// One definition in the set, and it is the new one.
+	if got := h.must("org", "role", "list").stdout; strings.Count(got, "releaser") != 1 || !strings.Contains(got, "wages") {
+		t.Fatalf("the set holds one definition of the role:\n%s", got)
+	}
+	// Were both live, the reader would read their intersection, which is
+	// empty, and deny both permissions. One is live, so the new one holds.
+	for ask, want := range map[string]string{
+		"bsecret/release/wages":   "ALLOW",
+		"bsecret/release/payroll": "DENY",
+	} {
+		if got := h.must("org", "policy", "check", o.alice, ask).stdout; !strings.HasPrefix(got, want) {
+			t.Fatalf("%s: want %s, got:\n%s", ask, want, got)
+		}
+	}
+	// The hosts agree: the replaced record's carrier was retracted too.
+	if got := h.must("org", "policy", "show").stdout; strings.Count(got, "releaser") != 2 || strings.Contains(got, "payroll") {
+		t.Fatalf("the hosts' set:\n%s", got)
+	}
+}
+
+// A binding names a role; it does not carry the permissions. Bound to a
+// role the set does not define, it says so and authorizes nothing.
+func TestBindingAnUndefinedRoleSaysSo(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	r := h.must("org", "bind", "releaser", "-to", o.group)
+	if !strings.Contains(r.stdout+r.stderr, "defines no role releaser") {
+		t.Fatalf("bind to an undefined role:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if got := h.must("org", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "DENY") {
+		t.Fatalf("the binding authorizes nothing:\n%s", got)
+	}
+	// Defining the role afterwards makes the standing binding grant it.
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	if got := h.must("org", "policy", "check", o.alice, "bsecret/release/payroll").stdout; !strings.HasPrefix(got, "ALLOW") {
+		t.Fatalf("the binding grants once the role is defined:\n%s", got)
+	}
+}
