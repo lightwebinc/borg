@@ -255,18 +255,20 @@ test('evidence: 64 superseded grants are kept on an outpoint, the 65th dropped',
   const sorted = [...many].sort((a, b) => (cHex(a) < cHex(b) ? -1 : 1))
   assert.equal(s.ls.status(cHex(sorted[0]!)), 'held')
   assert.equal(s.ls.grantCount, 65)
-  assert.ok(s.ls.dropped(cHex(sorted[65]!)))
   assert.equal(s.host.count('borg_dropped_total', { why: 'evidence' }), 1)
-  // O16: the row keeps a line for what it answers and forgets the rest, so
-  // a line is not held for every carrier ever admitted.
+  // O16: the row keeps a line for what it answers and nothing for the rest,
+  // so neither memory nor journal grows with what is offered on an outpoint.
   assert.equal(s.ls.lineCount, 65, 'a line for each carrier the row keeps')
-  assert.equal(s.ls.forgottenLines, 1, 'and none for the one it dropped')
-  // Re-offering a dropped carrier is refused and costs no journal line.
-  const before = s.ls.lineCount
+  assert.equal(s.ls.status(cHex(sorted[65]!)), undefined, 'and none for the 66th')
+  // Offered again it meets the same row and is refused again, which is why
+  // forgetting it is safe and why the refusal costs no journal line.
+  const lines = s.ls.lineCount
   assert.deepEqual(await submit(s.engine, sorted[65]!.toAtomicBEEF()), [])
-  assert.equal(s.ls.lineCount, before, 'a refused re-offer adds no line')
-  assert.equal(s.ls.status(cHex(sorted[65]!)), 'superseded')
-  assert.equal(s.ls.grantCount, 65, 'and is not answered again')
+  assert.equal(s.ls.lineCount, lines, 'a refused carrier adds no line')
+  assert.equal(s.ls.grantCount, 65, 'and is not answered')
+  // The engine turns the re-offer away as a duplicate before the module is
+  // asked, so the module's own refusal is not reached a second time.
+  assert.equal(s.host.count('borg_dropped_total', { why: 'evidence' }), 1)
 })
 
 test('retention: a revoked or retracted grant and an ended epoch\'s wraps go after the floor; the roll, the current epoch and an unadmitted grant stay', async () => {
@@ -499,4 +501,33 @@ test('the roll is decided before the policy set: a token that breaks both is rol
   })
   assert.deepEqual(await submit(s.engine, both.beef), [0])
   assert.equal(s.ls.tokenStatus(id(both.tx)), 'roll-mismatch')
+})
+
+test('evidence: a carrier refused on arrival costs no journal line, and the journal is bounded by what the rows keep', async () => {
+  const chain = new Chain(85500)
+  const s = await setup({ chain })
+  const org = new OrgSim(hall, 'journal bound org', chain, { trees: 2 })
+  const subject = new Party('journal bound subject')
+  const g = await issueGrant(hall, org.party, subject, org.grantTree, 0)
+  const rec = encodeGrant(g)
+  const many: Transaction[] = []
+  for (let i = 0; i < 70; i++) many.push(await carrier(org.grantTree, 0, org.party, KeyGrant, rec, 4102444800 + i))
+  // Offered lowest commitment first, every carrier past the bound is beyond
+  // it the moment it arrives, so the row refuses it before anything is
+  // written: no line in the journal, nothing to forget later.
+  const sorted = [...many].sort((a, b) => (cHex(a) < cHex(b) ? -1 : 1))
+  for (const x of sorted) await submit(s.engine, x.toAtomicBEEF())
+  assert.equal(s.ls.status(cHex(sorted[0]!)), 'held')
+  assert.equal(s.ls.grantCount, 65, 'the winner and the bound')
+  assert.equal(s.ls.lineCount, 65)
+  assert.equal(s.ls.forgottenLines, 5, 'the five past the bound')
+  const carrierLines = s.journal.lines.filter((l) => l.k === 'c').length
+  assert.equal(carrierLines, 65, 'the journal holds a line only for what the rows keep')
+  assert.equal(s.journal.lines.filter((l) => l.k === 'd').length, 0, 'and no drop line: nothing was written to drop')
+  // A fresh module over the same journal and storage reaches the same row.
+  const again = borgModule(new FakeHost(), config, [topic], s.journal, chain.tracker).ls
+  await again.restore(await s.storage.findUTXOsForTopic(topic, undefined, undefined, true), s.storage)
+  assert.equal(again.grantCount, 65)
+  assert.equal(again.lineCount, 65)
+  assert.equal(again.forgottenLines, 0, 'nothing to re-forget: the journal never held them')
 })

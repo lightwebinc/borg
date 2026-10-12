@@ -276,5 +276,17 @@ test('engine answers are hydrated from storage, and a dropped carrier is deleted
   const again = borgModule(new FakeHost(), config, [topic], s.journal, chain.tracker).ls
   await again.restore(await s.storage.findUTXOsForTopic(topic, undefined, undefined, true), s.storage)
   assert.equal(again.wrapCount, 9)
-  assert.ok(again.dropped(cHex(sorted[9]!)))
+  // A carrier past the evidence bound leaves nothing behind: its output was
+  // deleted, so a restore does not bring it back, and no journal line names
+  // it, so the fresh module has no record of it at all. The refusal does not
+  // need one: the row it meets is the same row, so it is refused again
+  // (asserted above, before the restore).
+  assert.equal(again.status(cHex(sorted[9]!)), undefined, 'not kept, and so not answered')
+  assert.equal(again.lineCount, 9, 'a line for each carrier the row keeps')
+  // This carrier was kept when it arrived and pushed out later by a lower
+  // one, so its `c` line is in the journal: the journal is append-only and
+  // is not compacted, so a restart replays the line, rebuilds the row and
+  // applies the bound again. Memory is bounded either way; the journal is
+  // spared only for a carrier refused on arrival.
+  assert.equal(again.forgottenLines, 1, 'the bound is applied again on the rebuilt row')
 })

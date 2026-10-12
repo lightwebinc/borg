@@ -691,10 +691,17 @@ export class BorgLookupService implements LookupService {
       const w = decodeWrap(record)
       e = { kind: 'w', c, txid, hall, org: toHex(w.org), op, group: toHex(w.group), epoch: w.epoch, recipients: recipients(w).map(toHex) }
     }
-    // Refuse before writing: a dropped carrier re-offered must not add a
-    // line to the journal each time it is offered.
+    // Refuse before writing, for both reasons a carrier is not kept: a
+    // dropped carrier re-offered must not add a line each time it is
+    // offered, and one the row will not keep must not be written only to
+    // be forgotten.
     if (this.rows.get(op)?.dropped.has(c) === true) {
       this.queueDelete(txid, 0, hall)
+      return false
+    }
+    if (this.beyondBound(op, c, e.kind).includes(c)) {
+      this.host.log('ls_borg refused a carrier past the evidence bound', { txid, outpoint: op })
+      this.forgetForEvidence(op, c, txid, hall)
       return false
     }
     if (!this.lines.has(c)) {
@@ -874,7 +881,12 @@ export class BorgLookupService implements LookupService {
 
   // ---- drops and retention (spec section 11.3)
 
-  /** Drops the carrier with commitment c: marks its row, takes it out of every answer, and queues its output for deletion. */
+  /**
+   * Drops the carrier with commitment c for a reason that must stick: the
+   * journal records it, so the carrier is never admitted again after a
+   * restart. Retention is such a reason, because re-admitting a grant 31
+   * days after it left the roll would undo retention.
+   */
   private drop(c: string, why: string): void {
     const l = this.lines.get(c)!
     const r = this.rows.get(l.op)!
@@ -887,6 +899,44 @@ export class BorgLookupService implements LookupService {
   }
 
   /**
+   * Forgets a carrier the evidence bound does not keep: the output is
+   * deleted and the line is not kept, and **nothing is written**, because
+   * the refusal is decided by the row and not by memory of this carrier.
+   * Offered again, it meets the same row and is refused again, so a
+   * journal line would buy nothing and the journal does not grow with
+   * what an equivocating organisation offers (O16).
+   */
+  private forgetForEvidence(op: string, c: string, txid: string, hall: string): void {
+    const r = this.row(op)
+    if (r.carriers.delete(c)) {
+      this.lines.delete(c)
+      this.forget(txid, 0)
+    }
+    r.more++
+    this.queueDelete(txid, 0, hall)
+    this.host.metrics.inc('borg_dropped_total', { why: 'evidence' })
+  }
+
+  /**
+   * The commitments an outpoint's row would stop keeping once c is on it,
+   * highest first: the superseded carriers past the kind's bound. It is a
+   * pure read of the row, so the same answer is reached before a line is
+   * written and after, and so a carrier the row will not keep is refused
+   * without being written at all.
+   */
+  private beyondBound(op: string, c: string, kind: 'g' | 'p' | 'w'): string[] {
+    const r = this.rows.get(op)
+    const all = [...(r?.carriers.keys() ?? [])]
+    if (!all.includes(c)) all.push(c)
+    all.sort(cmp)
+    // The winner is held, not superseded, unless the row is closed: then
+    // every carrier on it is superseded (status).
+    const superseded = r?.closed === true ? all : all.slice(1)
+    const cap = kind === 'w' ? EvidenceWraps : EvidenceGrants
+    return superseded.slice(cap).reverse()
+  }
+
+  /**
    * Keeps at most 8 superseded wraps, or 64 superseded grants, on an
    * outpoint, and drops the rest, highest commitment first.
    */
@@ -896,7 +946,11 @@ export class BorgLookupService implements LookupService {
     if (kept.length === 0) return
     const cap = kept[0]!.kind === 'w' ? EvidenceWraps : EvidenceGrants
     const order = kept.map((l) => l.c).sort(cmp)
-    for (const c of order.slice(cap).reverse()) this.drop(c, 'evidence')
+    for (const c of order.slice(cap).reverse()) {
+      const l = this.lines.get(c)!
+      this.host.log('ls_borg forgot a carrier past the evidence bound', { txid: l.txid, outpoint: op })
+      this.forgetForEvidence(op, c, l.txid, l.hall)
+    }
   }
 
   /**

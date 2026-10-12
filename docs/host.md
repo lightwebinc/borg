@@ -206,10 +206,22 @@ carries at most 65 lines however many carriers are offered on it.
 `borg_carrier_lines` counts the lines held and
 `borg_carrier_lines_forgotten` those the rows stopped keeping. At about
 1 KB a line, a host's carrier memory is bounded by its outpoints rather
-than by its admissions. The journal is still append-only, so
-`borg-rows.jsonl` grows with what was admitted; tokens cost a line each as
-well. Give Node the heap for the outpoints the host expects
-(`--max-old-space-size`), and watch the gauges.
+than by its admissions.
+
+The journal is bounded with it, but only partly, and the difference is
+worth knowing. A carrier already past its row's bound when it arrives is
+refused **before** anything is written, so it costs no line at all. A
+carrier that was within the bound and is pushed out later by a lower
+commitment keeps the line it already has: the journal is append-only and
+is not compacted, so a restart replays that line, rebuilds the row and
+applies the bound again (`borg_carrier_lines_forgotten` rises again from
+zero). An organization that offers its carriers lowest commitment first
+therefore costs the journal nothing past the bound, and one that offers
+them highest first costs a line each. Bounding that case needs journal
+compaction, which this version does not do.
+
+Tokens cost a line each as well. Give Node the heap for the outpoints the
+host expects (`--max-old-space-size`), and watch the gauges.
 
 A state directory written by an earlier build loads unchanged: the lines it
 holds are the lines this build writes, and a `payments.jsonl` line without

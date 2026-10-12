@@ -243,7 +243,8 @@ test('an admission that meets a restore in flight waits for it, and is decided a
   await admitted
   assert.equal(ls.status(cHex(many[0]!)), 'held', 'the lowest ever admitted is the winner')
   assert.equal(ls.status(cHex(many[1]!)), 'superseded')
-  assert.ok(ls.dropped(cHex(many[9]!)), 'the row keeps eight superseded: the highest went')
+  assert.equal(ls.status(cHex(many[9]!)), undefined, 'the row keeps eight superseded: the highest is not kept')
   assert.equal(ls.wrapCount, 9)
+  assert.equal(ls.lineCount, 9, 'one line per carrier the row keeps')
   assert.deepEqual([ls.tokenStatus(id(o0.tx)), ls.tokenStatus(id(o1.tx))], ['consistent', 'consistent'])
 })
