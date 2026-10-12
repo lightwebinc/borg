@@ -258,10 +258,10 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 			// is, and nothing is current without a positive answer.
 			switch spent, err := spentBy(ctx, spends, car); {
 			case err != nil:
-				d.Refused = append(d.Refused, Refusal{Txid: car.Txid, Reason: "policy", Err: err})
+				d.Refused = append(d.Refused, Refusal{Host: pa.Host, Txid: car.Txid, Reason: "policy", Err: err})
 				continue
 			case spent != "":
-				d.Refused = append(d.Refused, Refusal{Txid: car.Txid, Reason: "policy",
+				d.Refused = append(d.Refused, Refusal{Host: pa.Host, Txid: car.Txid, Reason: "policy",
 					Err: fmt.Errorf("retracted: its funding outpoint is spent by %s", spent)})
 				continue
 			}

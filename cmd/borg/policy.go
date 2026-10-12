@@ -399,7 +399,7 @@ func (g *global) showPolicy(ctx context.Context) error {
 			continue
 		}
 		for _, r := range pa.Refused {
-			g.say("host %s: REFUSED policy record %s (%s): it is not shown: %v", r.Host, r.Txid, r.Reason, r.Err)
+			g.say("%sREFUSED policy record %s (%s): it is not shown: %v", by(r.Host), r.Txid, r.Reason, r.Err)
 			problem = incomplete("a host answered a policy record that does not verify; it is not shown")
 		}
 		if !pa.Matches {
@@ -463,7 +463,7 @@ func (g *global) checkFromHosts(ctx context.Context, key, permission string) err
 		g.say("host %s: NOT ASKED: %s", h, firstLine(e.Error()))
 	}
 	for _, r := range d.Refused {
-		g.say("host %s: REFUSED %s (%s): %v", r.Host, r.Txid, r.Reason, r.Err)
+		g.say("%sREFUSED %s (%s): %v", by(r.Host), r.Txid, r.Reason, r.Err)
 	}
 	verdict := "DENY "
 	if d.Allow {
@@ -520,7 +520,7 @@ func (g *global) showPolicyOf(ctx context.Context, role, bound string) error {
 		}
 	}
 	for _, r := range refused {
-		g.say("host %s: REFUSED %s (%s): it is not shown: %v", r.Host, r.Txid, r.Reason, r.Err)
+		g.say("%sREFUSED %s (%s): it is not shown: %v", by(r.Host), r.Txid, r.Reason, r.Err)
 		problem = incomplete("a host answered a policy record that does not verify; it is not shown")
 	}
 	for _, car := range cars {
@@ -540,4 +540,14 @@ func (g *global) showPolicyOf(ctx context.Context, role, bound string) error {
 		g.say("no host answered a record for that question")
 	}
 	return problem
+}
+
+// by names the host an answer came from, for a refusal that has one. A
+// refusal the reader raised itself (a group its own fold does not hold)
+// names no host, and must not read as though a host were at fault.
+func by(host string) string {
+	if host == "" {
+		return ""
+	}
+	return "host " + host + ": "
 }
