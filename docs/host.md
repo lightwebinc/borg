@@ -242,7 +242,7 @@ What is borg's own:
 | `borg_retractions_total` | spends of a carrier's funding outpoint |
 | `borg_dropped_total{why}` | carriers dropped as `evidence` or by `retention`, and sweeps dropped from the `table` |
 | `borg_lookups_total{class}` | questions answered |
-| `borg_halls`, `borg_tokens`, `borg_tokens_pending`, `borg_grants`, `borg_wraps`, `borg_sweeps`, `borg_outpoint_rows`, `borg_spend_table` | what the index holds |
+|  `borg_halls`, `borg_tokens`, `borg_tokens_pending`, `borg_grants`, `borg_policies`, `borg_wraps`, `borg_sweeps`, `borg_outpoint_rows`, `borg_spend_table` | what the index holds |
 | `borg_carrier_lines` | carriers ever admitted, each a journal line held in memory for the host's life |
 | `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}` | the terms route |
 | `borg_payments_total{decision,reason}` | paid questions by what the host did: `requested` (`no-payment`, a 402 with the price); `fast` (`at-or-below-threshold`, `mined`); `hold` (`above-threshold`, `payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`, `broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`, `spend-view-unknown`); `refuse` (`malformed`, `wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`, `network-refused`, `double-spent`, `replayed`, `conflict`) |
