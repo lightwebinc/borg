@@ -79,7 +79,13 @@ Ordered by what unblocks the most.
 
 - No deny rules: a permission is held or it is not, and the fold is
   provable because nothing subtracts.
-- Nothing decides offline: a role is not a token its holder presents.
+- Nothing decides from what a holder presents, and nothing decides
+  freshly offline. SPV verifies offline that a state existed and was mined:
+  a record's path into a root, the root in a token, the token in a block.
+  It cannot show that the state is current, that no later token exists and
+  no revocation outpoint is spent, and a decision rests on currency. A
+  service may reuse a decision at a staleness it states, which its receipt
+  names; a holder cannot carry its permissions as a token.
 - Hosts never decide: they replicate, and a reader holds them to the root.
 - Membership and policy are public metadata; what a certificate says can be
   hidden, and nothing else.
