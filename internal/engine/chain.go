@@ -48,7 +48,7 @@ func (e *LostError) Error() string {
 	if e.Fee {
 		return fmt.Sprintf("%s %s lost: its fee coin is spent by %s, a transaction of another instance of the tooling that held the same coin; the epoch key it sampled is discarded and nothing was released; run the command again", e.What, Short(e.Txid), Short(e.By))
 	}
-	return fmt.Sprintf("%s %s lost: its predecessor is spent by %s, another transition; the epoch key it sampled is discarded and nothing was released; the command reads the new tip when run again", e.What, Short(e.Txid), Short(e.By))
+	return fmt.Sprintf("%s %s lost: its predecessor is spent by %s, another transition; the epoch key it sampled is discarded and nothing was released; run the command again once this home holds the new tip (borg org sync; with signers above one the command catches up by itself)", e.What, Short(e.Txid), Short(e.By))
 }
 
 // GrantReq is a grant to issue.

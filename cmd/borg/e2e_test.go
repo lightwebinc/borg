@@ -20,6 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bsv-blockchain/go-sdk/transaction"
+
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/testchain"
 )
 
@@ -397,5 +400,48 @@ func TestClientE2E(t *testing.T) {
 		t.Fatalf("the first home catches up:\n%s\n%s", r.stdout, r.stderr)
 	}
 	step("org signer, then a second home made around the identity key: org sync rebuilds chains, roll and the epoch key from the real hosts; it rotates, and the first home catches up")
+
+	// The two homes race one transition: the second's is sent and held
+	// unmined while the first builds on the same tip. The first loses at
+	// the settlement leg, the second's token is admitted at both real
+	// hosts, and the first catches up from them (org sync: signers is one
+	// here) and rotates on its tip.
+	h.chain.SetHoldIf(func(tx *transaction.Transaction) bool {
+		tok, err := borgrec.ReadToken(tx)
+		return err == nil && tok.Group != nil
+	})
+	done := make(chan result, 1)
+	go func() { done <- h.run("org2", "", "epoch", "rotate", o.group) }()
+	for deadline := time.Now().Add(30 * time.Second); h.chain.Waiting() == 0; {
+		if time.Now().After(deadline) {
+			t.Fatal("race: the second home sent no transition")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	h.want(h.run("org", "", "epoch", "rotate", o.group), exitRefused, "lost: its predecessor is spent by")
+	h.chain.SetHoldIf(nil)
+	h.chain.Mine()
+	if wr := <-done; wr.code != 0 || !strings.Contains(wr.stdout, "epoch 7 (a new epoch") {
+		t.Fatalf("race: the winner: exit %d\n%s\n%s", wr.code, wr.stdout, wr.stderr)
+	}
+	h.block()
+	r = h.must("org", "org", "sync")
+	if !strings.Contains(r.stdout, "took 0 organization token(s), 1 group token(s)") || !strings.Contains(r.stdout, " 1 epoch key(s)") {
+		t.Fatalf("race: the loser did not catch up:\n%s\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "epoch", "rotate", o.group)
+	if !strings.Contains(r.stdout, "epoch 8 (a new epoch") {
+		t.Fatalf("race: the loser did not rotate on the new tip:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.block()
+	h.must("org2", "org", "sync")
+	r = h.must("alice", "open", o.group)
+	if !strings.Contains(r.stdout, "epoch   7 OPENED") || !strings.Contains(r.stdout, "epoch   8 OPENED") || strings.Contains(r.stderr, "DISAGREES") {
+		t.Fatalf("alice after the race:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if got, want := sorted(h.must("org2", "org", "show").stdout), sorted(h.must("org", "org", "show").stdout); got != want {
+		t.Fatalf("the homes differ after the race:\n%s\n---\n%s", got, want)
+	}
+	step("two homes race one transition against the real hosts: the loser is refused (lost), the winner's token is admitted at both, the loser catches up and rotates on it; both homes and both hosts agree")
 	t.Logf("e2e client: PASS (%d steps)", n)
 }
