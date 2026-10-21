@@ -245,3 +245,27 @@ func TestAHostFloodingAnAnswerIsNamed(t *testing.T) {
 	h.a.Rewrite, h.b.Rewrite = nil, nil
 	h.must("carol", "open", o.group)
 }
+
+// A service's decision (policy check) is read from what verified: a host
+// that substitutes bytes in a grant or a policy record beside an honest one
+// is named, the answer still rests on the honest host, and the command is
+// incomplete (exit 3), as for a token or a wrap. A record left out by rule
+// (retracted) is not a host's fault and leaves the command complete.
+func TestAHostSubstitutingAGrantOrAPolicyRecordInACheckIsNamed(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "bind", "releaser", "-to", o.group)
+	h.must("alice", "policy", "check", o.alice, "bsecret/release/payroll")
+
+	for _, class := range []string{"member", "policy"} {
+		h.b.Rewrite = lie(class)
+		r := h.run("alice", "", "policy", "check", o.alice, "bsecret/release/payroll")
+		h.b.Rewrite = nil
+		if r.code != exitIncomplete || !strings.HasPrefix(r.stdout, "ALLOW") || !strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED") {
+			t.Fatalf("policy check, one host substituting its %s answer: exit %d\n%s\n%s", class, r.code, r.stdout, r.stderr)
+		}
+	}
+	h.must("alice", "policy", "check", o.alice, "bsecret/release/payroll")
+}

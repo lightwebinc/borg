@@ -1392,8 +1392,8 @@ func TestASweptPolicyRecordGrantsNothing(t *testing.T) {
 	// names the record, so every host still answers it.
 	h.must("org", "unbind", m[1], "-by", "sweep")
 	r = h.run("alice", "", "policy", "check", o.alice, "bsecret/release/payroll")
-	if !strings.HasPrefix(r.stdout, "DENY") {
-		t.Fatalf("a swept binding still granted:\n%s\n%s", r.stdout, r.stderr)
+	if !strings.HasPrefix(r.stdout, "DENY") || r.code != 0 {
+		t.Fatalf("a swept binding still granted, or its retraction read as a host at fault: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
 	}
 	if !strings.Contains(r.stderr, "retracted") {
 		t.Fatalf("the decision does not say the record was retracted:\n%s", r.stderr)

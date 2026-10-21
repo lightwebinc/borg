@@ -150,6 +150,15 @@ type Decision struct {
 	// cares about completeness denies on them.
 	Refused []Refusal
 	HostErr map[string]error
+	// Faults are the entries of Refused that are a host's fault: a grant
+	// or a policy record a host answered that does not verify, or an
+	// answer cut short. Each names its host. What a host answered at fault
+	// is not used, and the decision rests on what verified; a caller names
+	// each host and treats the read as incomplete, as for a token or a
+	// wrap (docs/packages.md). A record left out by rule (retracted, or
+	// one no spend source vouches for) and a group whose chain does not
+	// hold the subject are in Refused only.
+	Faults []Refusal
 	// Hosts are the hosts the policy set was taken from: one, or several
 	// when no single host answered the whole set and it was assembled
 	// (Assembled). The receipt names commitments and the token, not hosts,
@@ -246,6 +255,7 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 	}
 	grants, refused, errs := c.GrantsOf(ctx, ov, subject)
 	d.Refused = append(d.Refused, refused...)
+	d.Faults = append(d.Faults, refused...)
 	for h, err := range errs {
 		d.HostErr[h] = err
 	}
@@ -314,6 +324,7 @@ func (c *Client) Effective(ctx context.Context, ov *OrgView, subject []byte, spe
 	cs := c.CommittedSet(ctx, ov)
 	for _, pa := range cs.Answers {
 		d.Refused = append(d.Refused, pa.Refused...)
+		d.Faults = append(d.Faults, pa.Refused...)
 		if pa.Err != nil {
 			d.HostErr[pa.Host] = pa.Err
 		}

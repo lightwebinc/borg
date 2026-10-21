@@ -451,13 +451,14 @@ state. A chain that folds to a mismatch is
 unusable from that token on (fail closed); `commitment-reuse` and
 `rejoin-unrotated` are shown as inconsistent.
 
-A host that answers a token, a grant or a wrap that does not verify (bytes
-substituted or damaged on the way, an object that breaks the host rules,
-a wrap of another epoch than the one asked, more outputs to one question
-than a page holds) is named (`REFUSED`), what it
-answered is not used, and the command is incomplete (exit 3): what is read
-comes from what verified, and one host at fault does not make a check
-fail. When every token the hosts answered is refused, the command names
+A host that answers a token, a grant, a policy record or a wrap that does
+not verify (bytes substituted or damaged on the way, an object that breaks
+the host rules, a wrap of another epoch than the one asked, more outputs to
+one question than a page holds) is named (`REFUSED`), what it answered is
+not used, and the command is incomplete (exit 3): what is read comes from
+what verified, and one host at fault does not make a check fail. `policy
+check` too prints the verdict it reached from what verified, and is
+incomplete when a host was at fault or could not be asked. When every token the hosts answered is refused, the command names
 each one and the header source it was checked against, since a header
 source that does not answer fails every answer the same way; it never
 says that no host answers.

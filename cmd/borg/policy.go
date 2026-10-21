@@ -466,9 +466,19 @@ func (g *global) checkFromHosts(ctx context.Context, key, permission string) err
 	}
 	for h, e := range d.HostErr {
 		g.say("host %s: NOT ASKED: %s", h, firstLine(e.Error()))
+		if problem == nil {
+			problem = incomplete("a host could not be asked")
+		}
 	}
 	for _, r := range d.Refused {
 		g.say("%sREFUSED %s (%s): %v", by(r.Host), r.Txid, r.Reason, r.Err)
+	}
+	if len(d.Faults) > 0 {
+		// A host that answered a grant or a policy record that does not
+		// verify is at fault: it is named above, what it answered is not
+		// used, and the decision rests on what verified. One host at fault
+		// does not turn the answer, and the command is incomplete.
+		problem = incomplete("a host answered a grant or a policy record that does not verify; it is not used")
 	}
 	verdict := "DENY "
 	if d.Allow {

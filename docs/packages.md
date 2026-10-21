@@ -67,7 +67,11 @@ any tag.
   records and groups it rested on. Both fail closed: a read that could not
   be completed is `incomplete` and denies, and a group a host names counts
   only where that group's own chain, folded here from verified tokens,
-  holds the subject.
+  holds the subject. `Decision.Faults` are the refusals that are a host's
+  fault (a grant or a policy record that does not verify, an answer cut
+  short), each naming its host: the decision rests on what verified, and
+  a caller names each host and treats the read as incomplete. A record
+  left out by rule (retracted) is in `Decision.Refused` only.
 - `Latest`, `Fresh`, `Spends`. `Latest` takes unspent only on a spend
   source's `""` with a nil error; with bcommon's `nodeapi.Asset` that is
   the node's status `OK`, and every other answer is an error wrapping
