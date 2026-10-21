@@ -17,6 +17,8 @@ organization issues each member a certificate; a group's membership is a
 chain of mined tokens; and every removal from a group begins a new epoch
 whose key the removed member never receives.
 
+> **Maintenance.** `host/src` is in maintenance: bug fixes only. A Go implementation is planned.
+
 ## How it works
 
 ```mermaid
