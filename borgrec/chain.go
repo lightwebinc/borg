@@ -113,6 +113,24 @@ func (f *OrgFold) Roll() [][32]byte {
 	return out
 }
 
+// Holds reports whether the roll after the last token folded holds the
+// commitment c.
+func (f *OrgFold) Holds(c [32]byte) bool { return f.roll[c] }
+
+// Clone is a copy of the fold, to fold a second successor on: a host's
+// index keeps the fold after a token while a successor of it may still
+// arrive.
+func (f *OrgFold) Clone() *OrgFold {
+	out := &OrgFold{roll: make(map[[32]byte]bool, len(f.roll)), policy: make(map[[32]byte]bool, len(f.policy)), broken: f.broken, policyBroken: f.policyBroken}
+	for c := range f.roll {
+		out.roll[c] = true
+	}
+	for c := range f.policy {
+		out.policy[c] = true
+	}
+	return out
+}
+
 // GroupFold folds a group's chain from seq 0: the members after each token,
 // every key any token removed, and every epoch's commitment.
 type GroupFold struct {
@@ -164,6 +182,25 @@ func (f *GroupFold) Members() [][]byte {
 		out = append(out, []byte(k))
 	}
 	sort.Slice(out, func(i, j int) bool { return bytes.Compare(out[i], out[j]) < 0 })
+	return out
+}
+
+// Holds reports whether key is a member after the last token folded.
+func (f *GroupFold) Holds(key []byte) bool { return f.members[string(key)] }
+
+// Clone is a copy of the fold, to fold a second successor on.
+func (f *GroupFold) Clone() *GroupFold {
+	out := &GroupFold{members: make(map[string]bool, len(f.members)), removed: make(map[string]bool, len(f.removed)),
+		commitments: make(map[[32]byte]bool, len(f.commitments)), broken: f.broken}
+	for k := range f.members {
+		out.members[k] = true
+	}
+	for k := range f.removed {
+		out.removed[k] = true
+	}
+	for c := range f.commitments {
+		out.commitments[c] = true
+	}
 	return out
 }
 

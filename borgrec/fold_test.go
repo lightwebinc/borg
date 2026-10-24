@@ -147,3 +147,51 @@ func TestFoldGroupFailsClosedOnAMismatch(t *testing.T) {
 		t.Errorf("a mismatched first token: %+v", c)
 	}
 }
+
+// TestFoldCloneIsIndependent: a clone folds a second successor without
+// touching the fold it was taken from, and Holds reads the members and the
+// roll after the last token folded.
+func TestFoldCloneIsIndependent(t *testing.T) {
+	recs := []string{"group-create.hex", "group-add.hex", "group-remove.hex"}
+	f := NewGroupFold()
+	var gs []*Group
+	for _, n := range recs {
+		g, err := DecodeGroup(golden(t, n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		gs = append(gs, g)
+	}
+	if s := f.Apply(gs[0]); s != StatusConsistent {
+		t.Fatal(s)
+	}
+	c := f.Clone()
+	if s := c.Apply(gs[1]); s != StatusConsistent {
+		t.Fatal(s)
+	}
+	for _, k := range gs[1].Add {
+		if f.Holds(k) || !c.Holds(k) {
+			t.Fatal("the clone's member reached the fold it was taken from")
+		}
+	}
+	for _, k := range gs[0].Add {
+		if !f.Holds(k) || !c.Holds(k) {
+			t.Fatal("a member of seq 0 is not held")
+		}
+	}
+	o := NewOrgFold()
+	var a, b [32]byte
+	a[0], b[0] = 1, 2
+	roll := [][32]byte{a}
+	if s := o.Apply(&Org{Admit: roll, Count: 1, Roll: RollRoot(roll), Policy: PolicyRoot(nil)}); s != StatusConsistent {
+		t.Fatal(s)
+	}
+	oc := o.Clone()
+	both := [][32]byte{a, b}
+	if s := oc.Apply(&Org{Admit: [][32]byte{b}, Count: 2, Roll: RollRoot(both), Policy: PolicyRoot(nil)}); s != StatusConsistent {
+		t.Fatal(s)
+	}
+	if !o.Holds(a) || o.Holds(b) || !oc.Holds(b) {
+		t.Fatal("the organization's clone is not independent")
+	}
+}

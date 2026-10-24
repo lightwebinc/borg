@@ -514,6 +514,18 @@ func wellFormedToken(o *transaction.TransactionOutput, vout uint32, k Kind) (*Ch
 	return readTokenOutput(o, vout)
 }
 
+// ReadTokenOutput reads one output as a well-formed chain token, without
+// its parent: a token's tag, two fields and a signature, 1 satoshi, a
+// record that decodes, the canonical lock under the record's organization
+// and a field signature that verifies. It is how a host's index reads an
+// output its topic admitted.
+func ReadTokenOutput(o *transaction.TransactionOutput, vout uint32) (*ChainToken, error) {
+	if o == nil || o.LockingScript == nil {
+		return nil, errNoPredRead
+	}
+	return readTokenOutput(o, vout)
+}
+
 // readTokenOutput is the well-formed reading of one token output.
 func readTokenOutput(o *transaction.TransactionOutput, vout uint32) (*ChainToken, error) {
 	k := Classify(*o.LockingScript)

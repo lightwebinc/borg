@@ -2,14 +2,17 @@
 
 borg is a command and a host module. Two of its Go packages are also public,
 so that another application can read borg's chains by borg's own code instead
-of a copy of it. Everything else stays under `internal/` and cannot be
-imported.
+of a copy of it, and a third decides on a requester's behalf. A fourth,
+`module`, is the host module in Go, for a Go overlay host to mount
+([host.md](host.md), "The Go module"). Everything else stays under
+`internal/` and cannot be imported.
 
 | Package | What it is |
 | --- | --- |
 | `github.com/lightwebinc/borg/borgrec` | The byte-level contract ([spec.md](spec.md)): records, tokens, wraps, the folds, the registry values and the bounds. No network. |
 | `github.com/lightwebinc/borg/reader` | A client that asks overlay hosts the `ls_borg` questions and verifies every answer against the caller's own headers. |
 | `github.com/lightwebinc/borg/enforce` | The decision procedure of [spec.md](spec.md) section 13 behind one call, for a service deciding on a requester's behalf: fail-closed, with the signed receipt returned. |
+| `github.com/lightwebinc/borg/module` | The host module in Go, on bcommon's engine-neutral module contract: `tm_borg_` managers, `ls_borg` (also an ordered replayer), the terms route. A host calls `New` with its environment and runs `Mounted.Start`. |
 
 ## Supported surface
 
@@ -157,6 +160,19 @@ default), and at most 16 tokens are taken from one answer to a seq.
 
 A service keeps an interface of its own in front of `Enforcer`, so that
 this package, and with it borg, is a dependency of one file.
+
+**`module`**
+
+- `New` (the factory: the configuration read through a `getenv`, checked
+  against `OVERLAY_TOPICS`), `Name`, `Build` (the version the host logs).
+- `Mounted`: `Module` (bcommon's `module.Module`: the managers and
+  `ls_borg`, whose `Service.Replay` is bcommon's `module.Replayer`),
+  `Mounted.Start` (the terms route, the payment watch and retention, until
+  its context ends) and `Mounted.Close`.
+- `ParseConfig`, `Config`, `Mount` (a configuration built in code).
+
+A host mounts it as it mounts any module on bcommon's contract, and hands
+the managers the submission's bytes (`module.WithSubmission`).
 
 ## Versions
 

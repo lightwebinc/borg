@@ -249,6 +249,81 @@ What is borg's own:
   30 seconds) and ask once more;
 - `borg payee settle` reads the ledger's `decision` and `reason`.
 
+## The Go module
+
+The same module exists in Go, `module/` in this repository, written to
+bcommon's engine-neutral contract (`github.com/lightwebinc/bcommon/module`)
+for a Go overlay host that carries the adapter: `tm_borg_<name>_<suffix>`
+for each hall `BORG_HALLS` names and `ls_borg` for all of them, with the
+same admissions and refusals (the rules are `borgrec.Admit`, and every
+refusal is raised), the same folds and statuses, outpoint rows, spend
+table, evidence bounds, retention, restore and question classes (a
+`member`, `role` or `bound` answer carries its inclusion path as context),
+the same terms route (bcommon's Go `termsroute`: the same paths, status
+codes, budgets, metric names and ledger lines as the route above) and the
+same metrics. It reads the same variables and refuses the same mistakes,
+and has one of its own:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BORG_JOURNAL_SYNC_MS` | 100 | the rows journal's group commit window: lines are written to `borg-rows.jsonl` at once and fsynced together this often, off the admission's path. 0 fsyncs each line before the admission completes, as the module above does. At most 60000 |
+
+The state directory is the same: `borg-rows.jsonl` holds the same lines,
+byte for byte, so a host can move between the two modules with its
+journal, and `payments.jsonl` has the same layout, which `borg payee
+settle` reads as before. With a window, a process that dies loses no line
+(each is written before the admission completes) and a power loss loses at
+most the last window's, as a store that syncs its write-ahead log on a
+timer does.
+
+On the Go host the topic manager reads the submission's bytes exactly as
+they arrived (`module.WithSubmission`), as the module above reads the
+submitted BEEF: the beef rule counts what the wire declares. `ls_borg`
+answers the host's `/lookup` with outputs it hydrates from the host's
+storage, each with its context, and the terms route hydrates its answers
+the same way. A dropped carrier's output is deleted through `DeleteOutput`
+on the storage a restore is handed; the host keeps its record that the
+transaction was applied. The host logs `borg module mounted` with the
+topics, the header source, the terms route, the priced classes, the
+budgets, the payment acceptance, the journal's window, whether a chain
+source is configured for replay, and the build.
+
+**Ordered replay.** The Go module's lookup service is also a replayer
+(bcommon `module.Replayer`): a Go host that missed part of a hall is given
+it by replay from a sibling host (spec section 11.6), never by an
+unordered synchronization of unspent outputs. For each organization the
+host knows in the hall (it holds a token or a carrier of it), a walk asks
+the sibling's `ls_borg` free classes, in this order: the organization's
+groups (`groups`); the tokens of the organization's chain and of each
+group's chain at each `seq` the host lacks (`org`, `org-seq`, `group`,
+`group-seq`), each submitted in the BEEF of the token and its parent,
+parents first, and held to section 11.1 before it is submitted, a chain's
+first token with its chain tree read with its proof from the chain source
+(`BORG_ASSET_URL`, or WhatsOnChain with `BORG_CHAIN`); then the roll's
+grants (`roll`), the policy set's records (`policy`), the held wraps of
+each group's current epoch and of an earlier epoch whose ending token the
+host first saw within the retention floor less a day (`wraps`), and the
+sweeps of each held carrier's funding outpoint (`sweep`). Everything is
+admitted through the host's ordinary path, so every rule of section 11.1
+holds. What no free class leads to is not replayed: an organization the
+host knows nothing of, a grant that left the roll, a retired policy
+record, a superseded or retracted wrap, a sweep of an outpoint no held
+carrier spends, and a chain's first token once the chain source no longer
+serves its chain tree with a proof. The organization's `fill` repairs
+those.
+
+The differences from the module above, each deliberate: the journal's
+sync window; a refused question's words (both refuse the same questions;
+the texts differ in detail); a restore that runs a second time in one
+process clears the policy index too; and replay, which the module above
+does not do.
+
+Its tests drive it with the transaction, refusal and query vectors and
+this module's own cases, ported from the module above case for case,
+through a stand-in for an engine's admission path and a restart, the terms
+route over HTTP with go-sdk's BRC-104 client paying its 402, and replay
+between two hosts.
+
 ## Metrics
 
 | Metric | What |
@@ -267,6 +342,8 @@ What is borg's own:
 | `borg_payment_events_total{kind}` | fast payments the watch resolved: `confirmed`, `double-spent`, `refused`, `unmined` (all but the first flag the payer) |
 | `borg_payments_unmined` | fast payments being watched |
 | `borg_requests_total{result}` | authenticated requests refused before any signature: `replayed`, or `limited` by the session's budget |
+| `borg_journal_lines_total`, `borg_journal_wait_seconds_total` | the Go module: journal lines written, and the time admissions spent writing them |
+| `borg_journal_syncs_total{result}`, `borg_journal_sync_seconds_total` | the Go module: the journal's timed fsyncs (`ok`, `error`), and their time |
 
 ## Testing against a reference host
 
