@@ -1923,7 +1923,7 @@ a client MUST respect it.
 | The release and its derivation | BRC-369 section 5.2 (`[2, "keyed content release"]`, key id `SHA-256(content id \|\| epoch)`); BRC-78 serialization; BRC-2 symmetric form; BRC-42 and BRC-43 | the wraps ride the plane in a record of up to 16, not one message per recipient to a messagebox; version bytes as both SDKs write them, not as BRC-369's vector writes them |
 | Checking a released key | BRC-369 section 5.3 (check 2, the commitment) | check 1 (ciphertext hash) and 3 (the tag) belong to each application's content |
 | Releaser | BRC-369 section 6.2 (the publisher as its own releaser) | delegated releasers (section 6.1) are not in this version |
-| Group key agreement | BRC-369 section 11 ("Tree-based rekeying ... needs a group key agreement specification"); RFC 9420 | linear, as BRC-369 section 8.3; the group chain settles which change applies at each step, the ordering RFC 9420 leaves to its delivery service, without a server |
+| Group key agreement | BRC-369 section 11 ("Tree-based rekeying ... needs a group key agreement specification"); RFC 9420; RFC 9750 sections 5.2 and 5.2.1 | linear, as BRC-369 section 8.3; the group chain settles which change applies at each step, the ordering RFC 9750 leaves its delivery service trusted to decide, without a server |
 | Ordered membership on a chain of mined tokens; a fork is a double spend | BRC-48 Pay to Push Drop tokens spent forward; BRC-22 topic managers retaining previous coins | no coordinator: each group and each organization is its own serialization point; the predecessor is read from the token's BEEF, never from what a host holds |
 | Records never mined, kept off chain | BRC-60's non-final transaction, which it keeps open to update before mining | turned the other way round: a far-future lock time keeps the record off the chain for good |
 | Canonical CBOR records with integer keys; unknown keys preserved | RFC 8949 section 4.2.1 for the encoding; BRC-174 section 3.2 for preserving unrecognized fields | one codec with every application on the same library |
@@ -1972,8 +1972,8 @@ key (`keyed`). borg pins bcommon v0.24.0 in both languages.
    tree-based construction.
 5. **Leaks name nobody.** Every member of an epoch holds the same key.
 6. **The organization's key is everything.** Whoever holds it can grant,
-   remove, re-add and read every epoch. A compromised organization key is a new
-   organization; this version has no succession.
+   remove, re-add and read every epoch. A key compromised before it names a
+   successor is a new organization: succession needs both keys (section 3.4).
 7. **Revocation is as fresh as the index asked.** SPV cannot prove an output
    unspent; a reader learns that an output is unspent only from a node or an
    index, with its lag and honesty, and a reader with no such source cannot
