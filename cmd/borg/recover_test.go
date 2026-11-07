@@ -251,8 +251,12 @@ func TestARunStoppedBeforeTheTreeWasSent(t *testing.T) {
 	before := h.poolCoins("org")
 	_, group := h.stoppedGroup(o, false)
 	coin := h.trees("stopped").coin()
-	if !before[coin] || h.poolCoins("stopped")[coin] {
-		t.Fatalf("the coin %s: in the pool before %v, after the run stopped %v", coin, before[coin], h.poolCoins("stopped")[coin])
+	// The coin is one the home held: a pool coin from before the run, or
+	// the mined change of a transaction the run sent first (the pool
+	// takes the smallest coin that fits).
+	held := before[coin] || h.chain.Mined(strings.SplitN(coin, ".", 2)[0])
+	if !held || h.poolCoins("stopped")[coin] {
+		t.Fatalf("the coin %s: held by the home %v, in the pool after the run stopped %v", coin, held, h.poolCoins("stopped")[coin])
 	}
 	if r := h.must("stopped", "doctor"); !strings.Contains(r.stdout, "signed for coin "+coin+" and not recorded as minted") {
 		t.Fatalf("doctor:\n%s", r.stdout)
