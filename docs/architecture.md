@@ -39,7 +39,7 @@ flowchart LR
 | --- | --- | --- |
 | `borg` command | the organization's tooling and the member's client, one static binary | `cmd/borg` |
 | home | one identity's directory: `identity.json`, `wallet.json`, `state.json`, mode 0700 | `~/.borg` |
-| host module | the topic manager `tm_borg_<hall>` and the lookup service `ls_borg`, loaded by a reference overlay host | `host/` (TypeScript), [host.md](host.md) |
+| host module | the topic manager `tm_borg_<hall>` and the lookup service `ls_borg`, loaded by a reference overlay host, or by a Go overlay host | `host/` (TypeScript), `module/` (Go), [host.md](host.md) |
 | header source | the block headers every proof is checked against | `header_url` |
 | chain view | raw transactions, proofs, and which outputs are spent: WhatsOnChain by default on mainnet and testnet, or a node's asset API | `chain` |
 | settlement leg | where mined transactions are broadcast: GorillaPool's public arcade by default on mainnet and testnet | `settle` |

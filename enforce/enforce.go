@@ -3,7 +3,7 @@
 // behalf: the organization's latest token and the subject's grants, groups
 // and policy records, each verified against the service's own headers,
 // folded into a verdict, signed into a receipt and handed back. A service
-// adds authorisation in one file and keeps its own interface in front of
+// adds authorization in one file and keeps its own interface in front of
 // this one, so the dependency on borg lives here and nowhere else in it.
 //
 // It fails closed. Any read it cannot complete is a deny with a reason, and

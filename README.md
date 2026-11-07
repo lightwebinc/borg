@@ -17,7 +17,7 @@ organization issues each member a certificate; a group's membership is a
 chain of mined tokens; and every removal from a group begins a new epoch
 whose key the removed member never receives.
 
-> **Maintenance.** `host/src` is in maintenance: bug fixes only. A Go implementation is planned.
+> **Maintenance.** The TypeScript host module under `host/src` is in maintenance: bug fixes only. New behavior goes to its Go twin under `module/`, for Go overlay hosts ([docs/host.md](docs/host.md#the-go-module)). The `borg-host` image runs the TypeScript module.
 
 ## How it works
 

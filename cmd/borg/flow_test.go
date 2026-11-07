@@ -1237,13 +1237,13 @@ func TestRolesDecide(t *testing.T) {
 	h.must("org", "role", "retire", "releaser")
 	r = h.must("org", "policy", "check", o.alice, "bsecret/release/payroll")
 	if !strings.HasPrefix(r.stdout, "DENY") {
-		t.Fatalf("a retired role still authorised:\n%s", r.stdout)
+		t.Fatalf("a retired role still authorized:\n%s", r.stdout)
 	}
 	r = h.must("org", "policy", "show")
 	if strings.Contains(r.stdout, "role    ") {
 		t.Fatalf("the retired definition is still in the set:\n%s", r.stdout)
 	}
-	// The bindings that named it stay in the set and authorise nothing.
+	// The bindings that named it stay in the set and authorize nothing.
 	if strings.Count(r.stdout, "bind    ") != 2 {
 		t.Fatalf("the bindings left the set:\n%s", r.stdout)
 	}

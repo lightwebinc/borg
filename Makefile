@@ -71,7 +71,7 @@ deps-check:
 	if [ "$$sdk" != "$(DEPS_SDK)" ]; then echo "deps-check: go-sdk must resolve to exactly $(lastword $(DEPS_SDK)), found: $$sdk"; exit 1; fi
 
 # LICENSE-THIRD-PARTY is generated from what the binaries link, so a new
-# dependency brings its licence obligation into the file rather than
+# dependency brings its license obligation into the file rather than
 # leaving it undischarged. licences fails when the file is stale.
 licences:
 	python3 scripts/gen-third-party-licenses.py . --check
@@ -102,7 +102,7 @@ ts-test: ts-build
 
 # The module end to end on a local reference overlay host loading the
 # bundle, staged beside the host's node_modules as a deployment places it:
-# an organisation created, members granted and added to a group, epoch keys
+# an organization created, members granted and added to a group, epoch keys
 # wrapped and opened, a member removed and the epoch rotated, a suppression
 # attempt, a priced question paid through its 402, a restart and the
 # restored index. Not part of verify: it needs Docker (for MySQL) and a
@@ -116,13 +116,13 @@ e2e: ts-build
 
 # The borg command end to end against two local reference hosts loading
 # the bundle, over a local chain (internal/testchain) serving the node's API
-# and the header source: an organisation, three members and a group with
+# and the header source: an organization, three members and a group with
 # wraps on a stand-in plane, every member opening the key, a removal and a
 # rotation the removed member cannot open, a revocation by sweep, both
 # hosts agreeing, a paid history question and the payee settling it, one
 # coin paying three priced questions inside one block, a host restarted and
 # restored, unicast with a host down and the persisted token published by
-# the next command, then a second home of the organisation rebuilt from
+# the next command, then a second home of the organization rebuilt from
 # the hosts (org signer, init -from, org sync), which rotates the group. Not part of verify: it
 # needs Docker (for MySQL) and a reference host directory holding its
 # compiled dist/index.js and its node_modules.
