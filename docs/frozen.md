@@ -10,8 +10,7 @@ the groups, the grants and the wraps were signed earlier. The rows added for
 the policy record (section 5A), the organization record's policy keys, the
 succession rules of both chain records, the six policy lookup classes and
 the policy floors of section 8 were signed on 2026-10-12, against the
-vectors and against the lab, which ran the whole policy drill on the devnet
-plane with them. The contract is released at v0.7.2; the policy keys were
+vectors and against an end-to-end policy drill on a test plane. The contract is released at v0.7.2; the policy keys were
 added to the records as they stood, before any release, rather than as a
 second record version.
 

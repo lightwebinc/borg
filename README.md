@@ -17,7 +17,7 @@ organization issues each member a certificate; a group's membership is a
 chain of mined tokens; and every removal from a group begins a new epoch
 whose key the removed member never receives.
 
-> **Maintenance.** The TypeScript host module under `host/src` is in maintenance: bug fixes only. New behavior goes to its Go twin under `module/`, for Go overlay hosts ([docs/host.md](docs/host.md#the-go-module)). The `borg-host` image runs the TypeScript module.
+> The TypeScript host module under `host/` is frozen: bug fixes only. New behavior goes to its Go twin under `module/`, written to bcommon's `module` contract and mounted by a Go overlay engine ([docs/host.md](docs/host.md#the-go-module)). The `borg-host` image runs the TypeScript module.
 
 ## How it works
 
@@ -137,6 +137,10 @@ only the codec files (`admit`, `beef`, `borgrec`, `chain`, `epoch`,
 `@lightwebinc/borg-host/codec/<file>.js`. bcommon's TypeScript package is
 its peer. A consumer vendors the tarball and pins it by its hash in its
 lockfile, as with bcommon's.
+
+## Security
+
+Report a vulnerability privately: [SECURITY.md](SECURITY.md).
 
 ## License
 
