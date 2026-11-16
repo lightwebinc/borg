@@ -46,8 +46,8 @@ func genTransaction(s *Scenario, files map[string][]byte) error {
 			in := c.tx.Inputs[i]
 			j.Coins = append(j.Coins, coinJSON{InputIndex: i, Txid: in.SourceTXID.String(), Vout: in.SourceTxOutIndex})
 		}
-		if !j.Scripts {
-			return fmt.Errorf("%s: its own scripts do not verify", c.name)
+		if j.Scripts == c.interpRefuses {
+			return fmt.Errorf("%s: scriptsVerify is %v, want %v", c.name, j.Scripts, !c.interpRefuses)
 		}
 		switch {
 		case c.reason == "" && err != nil:
@@ -136,7 +136,7 @@ func genTransaction(s *Scenario, files map[string][]byte) error {
 			"and the previous coins it is admitted with: the inputs that spend an output the topic holds once the admitted cases are admitted (inputIndex), each with the outpoint it spends (txid in display order). " +
 			"Admission runs against the hall and the headers below, with a BEEF bound of maxBeef bytes and a sweep input bound of maxSweepInputs unless a case names its own. " +
 			"A refusal is raised, never answered with empty instructions. admits lists the admittance instructions (outputsToAdmit, coinsToRetain) and what the lookup service records: a carrier's commitment (hash byte order), record, owner and funding outpoint; a token's seq, record, parent txid (display order) and its predecessor's seq; a sweep's spent outpoints. " +
-			"scriptsVerify says every input of the transaction passes the script interpreter against the output it spends, so each refusal is made by the rule the case names and by no earlier one. rule names the frozen-list row a refusal exercises. Signatures are deterministic (RFC 6979). " +
+			"scriptsVerify says every input of the transaction passes the script interpreter against the output it spends, so each refusal is made by the rule the case names and by no earlier one; a case where it is false says why in its note. rule names the frozen-list row a refusal exercises. Signatures are deterministic (RFC 6979). " +
 			"stored is each admitted token as the engine stores it, the token alone with its proof; a replayer assembles replayBeef from two stored tokens (at seq 0, the token and its chain tree), byte for byte the BEEF the token was first admitted in.",
 		"hall":           Hall,
 		"topic":          borgrec.Topic(Hall),

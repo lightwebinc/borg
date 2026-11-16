@@ -31,13 +31,13 @@ import (
 	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
-	"github.com/bsv-blockchain/go-sdk/spv"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
 
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/hostset"
 	"github.com/lightwebinc/bcommon/lookup"
+	"github.com/lightwebinc/bcommon/verify"
 
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/internal/limits"
@@ -316,7 +316,9 @@ func VerifyCarrier(ctx context.Context, beef []byte, hall string, want borgrec.T
 	if a.Kind != want || a.Carrier == nil {
 		return nil, fmt.Errorf("reader: the answer is a %s, not a %s", a.Kind, want)
 	}
-	if ok, err := spv.Verify(ctx, tx, headers, nil); err != nil || !ok {
+	// verify.Check, not spv.Verify: a carrier is not final by design, and
+	// go-sdk's spv.Verify refuses every transaction that is not.
+	if k, err := verify.Check(ctx, tx, headers); k != verify.Passed {
 		return nil, fmt.Errorf("reader: SPV of the carrier through its funding parent: %v", err)
 	}
 	return &Car{Txid: txid.String(), Beef: beef, Tx: tx, Carrier: a.Carrier, Kind: a.Kind}, nil
