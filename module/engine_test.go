@@ -19,8 +19,8 @@ import (
 // while the host's headers lag and admitted once they catch up, every
 // golden transaction, answers hydrated from storage, restore from the
 // engine's own storage in any order, and a sibling host filled by replay
-// from what the first one stores. overlay-engine's integration test runs
-// the module in the real engine.
+// from what the first one stores. A Go host that mounts the module runs it
+// in its real engine in its own tests.
 
 func TestSuppressionNaiveManagerLosesAGenuineObject(t *testing.T) {
 	v := loadTxVectors(t)
