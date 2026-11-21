@@ -133,7 +133,8 @@ pages and helpers (bchat's verifies groups and opens epochs with it): `npm
 pack` in `host/`, from a clean clone at a tag, writes
 `lightwebinc-borg-host-<version>.tgz` (the version equals the tag), holding
 only the codec files (`admit`, `beef`, `borgrec`, `chain`, `epoch`,
-`merkle`, `query`, `scope`, `script`, `util`), imported as
+`merkle`, `permission`, `query`, `refusal`, `scope`, `script`, `util`),
+imported as
 `@lightwebinc/borg-host/codec/<file>.js`. bcommon's TypeScript package is
 its peer. A consumer vendors the tarball and pins it by its hash in its
 lockfile, as with bcommon's.

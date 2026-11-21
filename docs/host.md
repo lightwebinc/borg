@@ -63,7 +63,9 @@ synchronization of unspent outputs for `tm_borg_` topics (spec sections
 | `BORG_RESPONSES_PER_SEC` | 5 | signed responses a second one BRC-104 session is given; decimals allowed |
 | `BORG_RESPONSE_BURST` | 20 | the most signed responses one session is given at once |
 | `BORG_ARCADE_URL` | none | arcade, which the host broadcasts each payment through before it answers (`POST /tx`, `GET /tx/<txid>`) |
-| `BORG_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without both URLs every payment is held until it mines |
+| `BORG_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without arcade and a spend view (this, or `BORG_CHAIN`) every payment is held until it mines |
+| `BORG_CHAIN` | none | `woc:main` or `woc:test`: WhatsOnChain as that spend view and proof source, for a host with no node; refused beside `BORG_ASSET_URL` |
+| `BORG_WOC_KEY` | none | a WhatsOnChain API key for `BORG_CHAIN` |
 | `BORG_ACCEPT_THRESHOLD_SATS` | 25000000 | the largest payment answered on the network's acceptance; above it a payment is held until it mines |
 | `BORG_ACCEPT_PAYER_LIMIT` | the threshold | satoshis one payer may have answered fast and not yet mined; past it, held |
 | `BORG_ACCEPT_TOTAL_LIMIT` | ten thresholds | the same across every payer |
@@ -338,7 +340,7 @@ between two hosts.
 | `borg_carrier_lines` | carrier lines held in memory: each outpoint's winner and the superseded carriers within its evidence bound |
 | `borg_carrier_lines_forgotten` | carrier lines the rows stopped keeping, because the carrier was dropped |
 | `borg_sessions`, `borg_sessions_evicted_total{why}`, `borg_handshakes_total{result}` | the terms route |
-| `borg_payments_total{decision,reason}` | paid questions by what the host did: `requested` (`no-payment`, a 402 with the price); `fast` (`at-or-below-threshold`, `mined`); `hold` (`above-threshold`, `payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`, `broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`, `spend-view-unknown`); `refuse` (`malformed`, `wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`, `network-refused`, `double-spent`, `replayed`, `conflict`) |
+| `borg_payments_total{decision,reason}` | paid questions by what the host did: `requested` (`no-payment`, a 402 with the price); `fast` (`at-or-below-threshold`, `mined`); `hold` (`above-threshold`, `payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`, `broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`, `spend-view-unknown`, `already-charged`, `payer-asked-hold`, `price-unknown`, `price-stale`, `no-txid`, `watch-limit`); `refuse` (`pays-nothing`, `malformed`, `wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`, `network-refused`, `double-spent`, `replayed`, `conflict`) |
 | `borg_payment_events_total{kind}` | fast payments the watch resolved: `confirmed`, `double-spent`, `refused`, `unmined` (all but the first flag the payer) |
 | `borg_payments_unmined` | fast payments being watched |
 | `borg_requests_total{result}` | authenticated requests refused before any signature: `replayed`, or `limited` by the session's budget |
