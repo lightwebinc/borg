@@ -184,7 +184,7 @@ bytes the packages read and write are the
 contract of [spec.md](spec.md) and [frozen.md](frozen.md), held by the
 golden vectors under `testdata/vectors`; a tag never changes those.
 
-borg pins go-sdk at exactly v1.7.5 and bcommon at the version in its
+borg pins go-sdk at exactly v1.7.8 and bcommon at the version in its
 `go.mod`. Go's minimal version selection gives an importer the higher of
 its own pin and borg's, so an importer that needs the same bytes pins the
 same versions and asserts them, as borg's `make deps-check` does.
