@@ -96,10 +96,10 @@ linked only into the devchain and vectors commands. go-sdk brings the
 others with it, and a statically linked binary contains them whether
 they were asked for directly or not.
 
-go-sdk is under the Apache License 2.0 from v1.7.5, the version borg
-builds on. Earlier versions were under the Open BSV License Version 5,
+go-sdk is under the Apache License 2.0 from v1.7.5; borg builds on
+v1.7.8. Versions before v1.7.5 were under the Open BSV License Version 5,
 whose grant was revocable and limited to the BSV Blockchains; those terms
-do not apply to v1.7.5.
+do not apply from v1.7.5.
 
 The overlay host module under host/ is a separate npm package, and what
 is deployed from it is one file, host/bundle/borg-module.js. That file
