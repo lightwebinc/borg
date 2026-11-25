@@ -264,8 +264,12 @@ test('engine answers are hydrated from storage, and a dropped carrier is deleted
     const rec = encodeWrap({ hall, org: org.party.id, group: grp.id, epoch: 0, epochId: ep.epochId, entries: [wrapEntry(org.party, grp.members[0]!, ep.epochId, 0, ep.key)], extra: [] })
     many.push(await carrier(org.recordTree, vout, org.party, KeyRecord, rec))
   }
-  for (const x of many) assert.deepEqual(await submit(s.engine, x.toAtomicBEEF()), [0])
   const sorted = [...many].sort((a, b) => (cHex(a) < cHex(b) ? -1 : 1))
+  // Highest first, so the carrier the bound drops (sorted[9]) is kept on
+  // arrival and pushed out later, which is what the journal assertion at
+  // the end depends on. In creation order it arrived last one run in ten,
+  // was refused on arrival and left no line.
+  for (const x of [...sorted].reverse()) assert.deepEqual(await submit(s.engine, x.toAtomicBEEF()), [0])
   assert.deepEqual(await answer(s.engine, { hall, org: org.hex, group: grp.idHex, epoch: '0' }), [sorted[0]!.id('hex')], 'one answered carrier per funding output')
   // The winner and eight superseded are kept; the tenth was dropped and deleted.
   await s.ls.flush()
