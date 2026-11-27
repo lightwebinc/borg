@@ -3,6 +3,7 @@ package reader
 import (
 	"encoding/hex"
 	"fmt"
+	"sync"
 )
 
 // A reader with no memory believes whatever the hosts it asks agree on: a
@@ -54,4 +55,41 @@ func (v *ChainView) hold(f Floor) error {
 	t := v.Latest()
 	f.See(v.Hall, org, v.Chain, t.Seq(), t.Txid)
 	return nil
+}
+
+// MemFloor is a Floor kept in memory: a process's record of the chains it
+// verified while it runs. It persists nothing, so a restart forgets, and a
+// host set that withholds the latest tokens of a chain from a process just
+// started is believed as a reader with no Floor believes it. It never
+// lowers a seq. The zero value is ready to use and safe for concurrent use.
+type MemFloor struct {
+	mu   sync.Mutex
+	seen map[string]floorMark
+}
+
+type floorMark struct {
+	seq  uint64
+	txid string
+}
+
+// Seen is the latest token remembered of the chain.
+func (f *MemFloor) Seen(hall, org, chain string) (uint64, string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	m, ok := f.seen[hall+"|"+org+"|"+chain]
+	return m.seq, m.txid, ok
+}
+
+// See remembers the latest token of the chain, unless it remembers a
+// higher seq.
+func (f *MemFloor) See(hall, org, chain string, seq uint64, txid string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.seen == nil {
+		f.seen = map[string]floorMark{}
+	}
+	k := hall + "|" + org + "|" + chain
+	if m, ok := f.seen[k]; !ok || seq >= m.seq {
+		f.seen[k] = floorMark{seq: seq, txid: txid}
+	}
 }
