@@ -164,18 +164,9 @@ func (g *global) chainView() (*nodeapi.Sources, error) {
 
 // spendSource is a chain view's answer to which outputs are spent, with
 // what the source named left out of an error's text and a spender in lower
-// case: what a source names is printed, compared and asked for again, and
-// a source is somebody else's server.
-type spendSource struct{ nodeapi.SpendSource }
-
-// Spender is the source's answer.
-func (s spendSource) Spender(ctx context.Context, txid string, vout uint32) (string, error) {
-	by, err := s.SpendSource.Spender(ctx, txid, vout)
-	if err != nil {
-		return "", reader.QuietSpend(err)
-	}
-	return strings.ToLower(by), nil
-}
+// case (reader.QuietSpends): what a source names is printed, compared and
+// asked for again, and a source is somebody else's server.
+func spendSource(s nodeapi.SpendSource) reader.Spends { return reader.QuietSpends(s) }
 
 // spends is the configured spend source, or nil: the chain view's answer
 // to which outputs are spent.
@@ -184,17 +175,16 @@ func (g *global) spends() reader.Spends {
 	if err != nil {
 		return nil
 	}
-	return spendSource{c}
+	return spendSource(c)
 }
 
 // proofSource is a chain view as a reader's source of a mined
 // transaction's current proof.
-type proofSource struct{ nodeapi.ProofSource }
-
-// MerkleProof is the source's proof.
-func (p proofSource) MerkleProof(ctx context.Context, txid string) (*transaction.MerklePath, error) {
-	mp, _, err := p.Proof(ctx, txid)
-	return mp, err
+func proofSource(p nodeapi.ProofSource) reader.ChainSource {
+	return reader.ProofFunc(func(ctx context.Context, txid string) (*transaction.MerklePath, error) {
+		mp, _, err := p.Proof(ctx, txid)
+		return mp, err
+	})
 }
 
 // settler is the configured settlement leg (config key settle), with an
@@ -205,7 +195,7 @@ func (g *global) settler() (publish.Settler, *publish.Arcade, error) {
 	}
 	opt := publish.SettleOptions{Key: g.cfg.ArcadeKey, RPCUser: g.cfg.RPCUser, RPCPass: g.cfg.RPCPass, RPCID: "borg", Note: g.say}
 	if c, err := g.chainView(); err == nil {
-		opt.Spends = spendSource{c}
+		opt.Spends = spendSource(c)
 	}
 	s, a, err := publish.ParseSettler(g.cfg.Settle, opt)
 	if err != nil {
@@ -268,7 +258,7 @@ func (g *global) reader() (*reader.Client, error) {
 	if c, err := g.chainView(); err == nil {
 		// A proof a host stored that a reorganization left stale is
 		// replaced by the chain view's current one (spec section 11.5).
-		rd.Source = proofSource{c}
+		rd.Source = proofSource(c)
 	}
 	return rd, nil
 }

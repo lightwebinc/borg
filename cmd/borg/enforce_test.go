@@ -35,7 +35,7 @@ func (h *harness) enforcer(t *testing.T, org string) *enforce.Enforcer {
 	}
 	return &enforce.Enforcer{
 		Reader:    &reader.Client{Hosts: []string{h.aS.URL, h.bS.URL}, Headers: h.chain, HTTP: http.DefaultClient, Timeout: 5 * time.Second},
-		Spends:    spendSource{c},
+		Spends:    spendSource(c),
 		Wallet:    w.Signer(),
 		Hall:      h.hall,
 		Org:       raw,
@@ -122,5 +122,42 @@ func TestEnforceDeniesWithoutASpendSource(t *testing.T) {
 	v, err := e.Allow(context.Background(), alice, "bsecret/release/payroll")
 	if err == nil || v.Allow || v.Reason != "not-ready" {
 		t.Fatalf("allow=%v reason=%q err=%v", v.Allow, v.Reason, err)
+	}
+}
+
+// A Decider over the same hosts decides as the Enforcer does, with no
+// wallet and no receipt: an allow, a deny reused for DenyFor, a stranger,
+// and a role retired on the chain seen once the allow is AllowFor old.
+func TestDeciderDecides(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	o := h.orgWithGroup()
+	h.must("org", "role", "define", "releaser", "-permission", "bsecret/release/payroll")
+	h.must("org", "bind", "releaser", "-to", o.group)
+	e := h.enforcer(t, o.key)
+	clock := time.Now()
+	e.Reader.Floor = &reader.MemFloor{}
+	d := &enforce.Decider{Reader: e.Reader, Spends: e.Spends, AllowFor: 30 * time.Second, DenyFor: 10 * time.Second,
+		StaleFor: time.Minute, Now: func() time.Time { return clock }}
+	org, _ := hex.DecodeString(o.key)
+	alice, _ := hex.DecodeString(o.alice)
+	stranger, _ := hex.DecodeString(h.identity("stranger", false))
+	ctx := context.Background()
+	if ok, err := d.Allows(ctx, h.hall, org, alice, "bsecret/release/payroll"); !ok || err != nil {
+		t.Fatalf("alice: %v %v", ok, err)
+	}
+	if ok, err := d.Allows(ctx, h.hall, org, alice, "bstore/put/photos/a.jpg"); ok || err != nil {
+		t.Fatalf("alice, a permission the role does not carry: %v %v", ok, err)
+	}
+	if ok, err := d.Allows(ctx, h.hall, org, stranger, "bsecret/release/payroll"); ok || err != nil {
+		t.Fatalf("a stranger: %v %v", ok, err)
+	}
+	h.must("org", "role", "retire", "releaser")
+	if ok, _ := d.Allows(ctx, h.hall, org, alice, "bsecret/release/payroll"); !ok {
+		t.Fatal("within AllowFor the earlier allow is reused")
+	}
+	clock = clock.Add(31 * time.Second)
+	if ok, err := d.Allows(ctx, h.hall, org, alice, "bsecret/release/payroll"); ok || err != nil {
+		t.Fatalf("after the retire, AllowFor on: %v %v", ok, err)
 	}
 }

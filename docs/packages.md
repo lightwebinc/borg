@@ -11,7 +11,7 @@ of a copy of it, and a third decides on a requester's behalf. A fourth,
 | --- | --- |
 | `github.com/lightwebinc/borg/borgrec` | The byte-level contract ([spec.md](spec.md)): records, tokens, wraps, the folds, the registry values and the bounds. No network. |
 | `github.com/lightwebinc/borg/reader` | A client that asks overlay hosts the `ls_borg` questions and verifies every answer against the caller's own headers. |
-| `github.com/lightwebinc/borg/enforce` | The decision procedure of [spec.md](spec.md) section 13 behind one call, for a service deciding on a requester's behalf: fail-closed, with the signed receipt returned. |
+| `github.com/lightwebinc/borg/enforce` | The decision procedure of [spec.md](spec.md) section 13 behind one call: `Enforcer` for a service deciding on a requester's behalf, fail-closed, with the signed receipt returned; `Decider` for a service that decides for itself, with no wallet and no receipt, for any organization. |
 | `github.com/lightwebinc/borg/module` | The host module in Go, on bcommon's engine-neutral module contract: `tm_borg_` managers, `ls_borg` (also an ordered replayer), the terms route. A host calls `New` with its environment and runs `Mounted.Start`. |
 
 ## Supported surface
@@ -61,6 +61,11 @@ any tag.
   `Client.Source` (a `ChainSource`; bcommon's `nodeapi.Asset` is one).
 - `ChainView` (with `Beyond`: the verified tokens above the chain read),
   `GroupView`, `NewGroupView`.
+- `MemFloor`: a `Floor` kept in memory for as long as the process runs.
+- `QuietSpends`: a node's or an index's spend answer as a `Spends`, its
+  errors through `QuietSpend` and the spender in lower case.
+  `ProofFunc`: a function answering a mined transaction's proof as a
+  `ChainSource`.
 - The policy set: `Client.PolicySet` (every host, all pages, each answer
   held to the root the latest token commits to), `Client.RoleOf`,
   `Client.BoundTo`, `OrgView.PolicyPathHolds`.
@@ -158,8 +163,29 @@ default), and at most 16 tokens are taken from one answer to a seq.
   most that stale, which is the staleness the service states.
 - The cache holds at most `MaxCached` allows and is cleared past that.
 
-A service keeps an interface of its own in front of `Enforcer`, so that
-this package, and with it borg, is a dependency of one file.
+- `Decider`, made once and kept, for a service that decides for itself
+  and keeps no receipt (a DNS renderer admitting writers by a permission,
+  say): a `reader.Client` (give it a `Floor`), a `reader.Spends`, and
+  `AllowFor`, `DenyFor`, `StaleFor`. `Decider.Allows(ctx, hall, org,
+  subject, permission)` answers for any organization named.
+- An allow is reused for `AllowFor` (zero is `DefaultFreshness`) and a deny
+  for `DenyFor` (zero is `DefaultDenyFor`, held to `AllowFor`), each only
+  at the seq it was read at. The organization's latest token is read again
+  at `AllowFor`, and at `DenyFor` while the subject asked about is denied,
+  so a subject just granted waits `DenyFor` once the hosts hold the token.
+- It fails closed. A read it cannot complete is an error and a deny. A
+  failed read of an organization is reused for `DenyFor`, unless the
+  caller's own context ended it. A policy set that cannot be read whole
+  (`reader.Decision.Reason` `incomplete`) is a failed read, not a deny. An
+  allow read before a failure stands for `StaleFor` from that read, and is
+  answered true with an error that wraps `ErrStale`; zero keeps none. A
+  grant the spend source cannot show unspent is not current: a deny at
+  once, as for a revoked one.
+- `Decider.Forget` drops everything reused.
+
+A service keeps an interface of its own in front of `Enforcer` or
+`Decider`, so that this package, and with it borg, is a dependency of one
+file.
 
 **`module`**
 
