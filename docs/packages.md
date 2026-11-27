@@ -221,7 +221,7 @@ same versions and asserts them, as borg's `make deps-check` does.
 ## Importing the module
 
 ```console
-$ go get github.com/lightwebinc/borg@v0.8.2
+$ go get github.com/lightwebinc/borg@v0.9.0
 ```
 
 The module is fetched through the public Go proxy and checked against the
