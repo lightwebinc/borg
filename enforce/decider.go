@@ -28,7 +28,8 @@ type Decider struct {
 	// Reader asks the hosts and verifies what they answer against the
 	// service's own headers. Give it a Floor (reader.MemFloor at least), so
 	// a host set that answers an older organization token than one already
-	// verified is refused.
+	// verified is refused; without one a Decider still never goes back to
+	// an earlier seq itself, but a restart, or a second Decider, can.
 	Reader *reader.Client
 	// Spends says whether an outpoint is spent. Without one nothing is
 	// current and every call denies.
@@ -45,7 +46,8 @@ type Decider struct {
 	// hold the token. Zero is DefaultDenyFor; it is held to AllowFor.
 	DenyFor time.Duration
 	// StaleFor is how long an allow stands through failed reads, from the
-	// read that allowed it. Zero keeps none: a failed read denies.
+	// read that allowed it, and only while no later token is verified.
+	// Zero keeps none: a failed read denies.
 	StaleFor time.Duration
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
@@ -118,8 +120,12 @@ func (d *Decider) Allows(ctx context.Context, hall string, org, subject []byte, 
 	v, f := d.views[vk], d.failed[vk]
 	a, seen := d.answers[ak]
 	d.mu.Unlock()
+	// fail is a read that failed. An allow read within StaleFor stands,
+	// but only at the seq it was read at: once a later token is verified,
+	// an allow of an earlier one is never answered, so a host set that
+	// withholds a revoking policy set cannot keep it.
 	fail := func(err error) (bool, error) {
-		if seen && a.allow && now.Sub(a.at) <= d.StaleFor {
+		if d.StaleFor > 0 && seen && a.allow && now.Sub(a.at) <= d.StaleFor && (v.view == nil || a.seq == v.view.Token.Seq) {
 			return true, fmt.Errorf("%w: %v", ErrStale, err)
 		}
 		return false, err
@@ -139,14 +145,26 @@ func (d *Decider) Allows(ctx context.Context, hall string, org, subject []byte, 
 			// the hosts, so it is not kept for other callers.
 			if ctx.Err() == nil {
 				d.mu.Lock()
+				if len(d.failed) >= MaxCached {
+					d.failed = nil
+				}
 				d.failed = setIn(d.failed, vk, deciderFailure{err: err, at: now})
 				d.mu.Unlock()
 			}
 			return fail(err)
 		}
-		v = deciderView{view: ov, at: now}
 		d.mu.Lock()
-		d.views = setIn(d.views, vk, v)
+		// A read that lands after a later one keeps the later view: a
+		// view never goes back to an earlier seq.
+		if cur, ok := d.views[vk]; ok && cur.view.Token.Seq > ov.Token.Seq {
+			v = cur
+		} else {
+			v = deciderView{view: ov, at: now}
+			if len(d.views) >= MaxCached {
+				d.views = nil
+			}
+			d.views = setIn(d.views, vk, v)
+		}
 		delete(d.failed, vk)
 		d.mu.Unlock()
 	}
@@ -161,6 +179,12 @@ func (d *Decider) Allows(ctx context.Context, hall string, org, subject []byte, 
 		// The policy set the token commits to could not be read whole: a
 		// failed read, not a deny, and not kept as an answer.
 		return fail(errors.New("enforce: the organization's policy set could not be read whole"))
+	}
+	if !dec.Allow && (ctx.Err() != nil || len(dec.HostErr) >= len(d.Reader.Hosts) && len(dec.Grants) == 0) {
+		// No host answered the subject's grants (or the caller's context
+		// ended the read): the reader folds that into "not-member" with
+		// no error, and it is a failed read, not a deny, and not kept.
+		return fail(fmt.Errorf("enforce: no host answered the subject's grants (%d host errors)", len(dec.HostErr)))
 	}
 	d.mu.Lock()
 	if len(d.answers) >= MaxCached {

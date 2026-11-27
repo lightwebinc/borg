@@ -74,7 +74,7 @@ func TestDeciderOutage(t *testing.T) {
 
 	// A view read 11 s ago: kept for a subject allowed, read again for one
 	// denied, so a subject just granted waits DenyFor.
-	d.views = setIn(d.views, vk, deciderView{view: &reader.OrgView{Token: &borgrec.Org{Seq: 4}}, at: clock.Add(-11 * time.Second)})
+	d.views = setIn(d.views, vk, deciderView{view: &reader.OrgView{ChainView: &reader.ChainView{Hall: hall, Org: org}, Token: &borgrec.Org{Seq: 4}}, at: clock.Add(-11 * time.Second)})
 	d.failed = nil
 	d.answers = setIn(d.answers, vk+"|0206|"+perm, deciderAnswer{allow: true, seq: 4, at: clock.Add(-11 * time.Second)})
 	d.answers = setIn(d.answers, vk+"|0205|"+perm, deciderAnswer{allow: false, seq: 4, at: clock.Add(-11 * time.Second)})
@@ -86,6 +86,22 @@ func TestDeciderOutage(t *testing.T) {
 		t.Fatalf("a deny past DenyFor reads the token again: %v %v, %d asks", ok, err, asks-n)
 	}
 
+	// No host answers the grants: a failed read, not a deny. An allow of
+	// the same seq stands; one of an earlier seq, once a later token is
+	// verified, never does; with StaleFor zero none does.
+	d.views = setIn(d.views, vk, deciderView{view: &reader.OrgView{ChainView: &reader.ChainView{Hall: hall, Org: org}, Token: &borgrec.Org{Seq: 4}}, at: clock})
+	d.answers = setIn(d.answers, vk+"|0204|"+perm, deciderAnswer{allow: true, seq: 4, at: clock.Add(-31 * time.Second)})
+	d.answers = setIn(d.answers, vk+"|0203|"+perm, deciderAnswer{allow: true, seq: 3, at: clock.Add(-31 * time.Second)})
+	if ok, err = d.Allows(ctx, hall, org, []byte{0x02, 4}, perm); !ok || !errors.Is(err, ErrStale) {
+		t.Fatalf("grants unanswered, same seq: %v %v", ok, err)
+	}
+	if ok, err = d.Allows(ctx, hall, org, []byte{0x02, 3}, perm); ok || err == nil || errors.Is(err, ErrStale) {
+		t.Fatalf("an allow of an earlier seq: %v %v", ok, err)
+	}
+	d.StaleFor = 0
+	if ok, err = d.Allows(ctx, hall, org, []byte{0x02, 4}, perm); ok || err == nil {
+		t.Fatalf("StaleFor zero: %v %v", ok, err)
+	}
 	if ok, err = d.Allows(ctx, hall, org, []byte{0x02, 6}, "bdns/write/*"); ok || err == nil {
 		t.Fatalf("a wildcard asked: %v %v", ok, err)
 	}

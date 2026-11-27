@@ -176,9 +176,12 @@ default), and at most 16 tokens are taken from one answer to a seq.
 - It fails closed. A read it cannot complete is an error and a deny. A
   failed read of an organization is reused for `DenyFor`, unless the
   caller's own context ended it. A policy set that cannot be read whole
-  (`reader.Decision.Reason` `incomplete`) is a failed read, not a deny. An
-  allow read before a failure stands for `StaleFor` from that read, and is
-  answered true with an error that wraps `ErrStale`; zero keeps none. A
+  (`reader.Decision.Reason` `incomplete`) is a failed read, not a deny, and
+  so is a subject's grants answered by no host. An allow read before a
+  failure stands for `StaleFor` from that read, only while no later token
+  of the organization is verified, and is answered true with an error that
+  wraps `ErrStale`; zero keeps none. A view never goes back to an earlier
+  seq. A
   grant the spend source cannot show unspent is not current: a deny at
   once, as for a revoked one.
 - `Decider.Forget` drops everything reused.
